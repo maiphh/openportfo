@@ -1,0 +1,27 @@
+# Secrets / local env
+.env
+**/.env
+backend/.env
+
+# Python
+**/__pycache__/
+**/*.pyc
+.venv/
+backend/.venv/
+*.egg-info/
+
+# Deploy artifacts
+*.zip
+openportfo-jobs.zip
+openportfo-api.zip
+lambda-out-*.json
+
+# Node
+node_modules/
+frontend-temp/node_modules/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

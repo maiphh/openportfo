@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenPortfo — Temp Viewer</title>
+    <script type="module" crossorigin src="/assets/index-CFXPXykf.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CScQHvaO.css">
+  </head>
+  <body>
+    <header class="top">
+      <h1>OpenPortfo <span class="muted">temp UI</span></h1>
+      <div class="auth-bar">
+        <label>
+          API
+          <input id="apiUrl" type="text" size="28" />
+        </label>
+        <label>
+          Bearer token
+          <input id="token" type="text" size="36" placeholder="fake:alice" />
+        </label>
+        <button id="btnSaveAuth" type="button">Save</button>
+        <span id="authStatus" class="pill">no token</span>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="health" class="active">Health</button>
+      <button data-tab="me">Me</button>
+      <button data-tab="holdings">Holdings</button>
+      <button data-tab="watchlist">Watchlist</button>
+      <button data-tab="portfolio">Portfolio</button>
+      <button data-tab="market">Market</button>
+      <button data-tab="fx">FX</button>
+      <button data-tab="news">News</button>
+      <button data-tab="history">History</button>
+      <button data-tab="dynamodb">DynamoDB</button>
+      <button data-tab="admin">Admin</button>
+    </nav>
+
+    <main>
+      <section id="tab-health" class="panel active">
+        <h2>Health</h2>
+        <button id="btnHealth" type="button">GET /health</button>
+        <pre id="outHealth" class="out"></pre>
+      </section>
+
+      <section id="tab-me" class="panel">
+        <h2>Auth / Me</h2>
+        <button id="btnMe" type="button">GET /api/auth/me</button>
+        <pre id="outMe" class="out"></pre>
+        <h3>Settings</h3>
+        <div class="row">
+          <input id="setKeywords" placeholder="keywords comma-separated" />
+          <input id="setCurrency" placeholder="preferredCurrency" size="8" />
+          <label><input id="setEmailOptIn" type="checkbox" /> emailOptIn</label>
+          <button id="btnSettings" type="button">PUT /api/settings</button>
+        </div>
+        <pre id="outSettings" class="out"></pre>
+      </section>
+
+      <section id="tab-holdings" class="panel">
+        <h2>Holdings</h2>
+        <button id="btnHoldingsList" type="button">List</button>
+        <div class="row form">
+          <select id="hType"><option>crypto</option><option>stock</option></select>
+          <input id="hSymbol" placeholder="symbol" size="8" />
+          <input id="hAssetId" placeholder="assetId" size="10" />
+          <input id="hQty" placeholder="qty" size="6" />
+          <input id="hAvg" placeholder="avgCost" size="8" />
+          <input id="hCur" placeholder="currency" size="5" value="USD" />
+          <button id="btnHoldingAdd" type="button">Add</button>
+          <button id="btnHoldingDel" type="button">Delete</button>
+        </div>
+        <pre id="outHoldings" class="out"></pre>
+      </section>
+
+      <section id="tab-watchlist" class="panel">
+        <h2>Watchlist</h2>
+        <button id="btnWatchList" type="button">List</button>
+        <div class="row form">
+          <select id="wType"><option>crypto</option><option>stock</option></select>
+          <input id="wSymbol" placeholder="symbol" size="8" />
+          <input id="wAssetId" placeholder="assetId" size="10" />
+          <button id="btnWatchAdd" type="button">Add</button>
+          <button id="btnWatchDel" type="button">Delete</button>
+        </div>
+        <pre id="outWatch" class="out"></pre>
+      </section>
+
+      <section id="tab-portfolio" class="panel">
+        <h2>Portfolio</h2>
+        <div class="row">
+          <input id="pDisplay" placeholder="displayCurrency" size="8" />
+          <select id="pType">
+            <option value="">all</option>
+            <option>crypto</option>
+            <option>stock</option>
+          </select>
+          <button id="btnPortfolio" type="button">GET portfolio</button>
+          <button id="btnPortfolioRefresh" type="button">POST refresh</button>
+        </div>
+        <div id="portfolioTable"></div>
+        <pre id="outPortfolio" class="out"></pre>
+      </section>
+
+      <section id="tab-fx" class="panel">
+        <h2>FX</h2>
+        <div class="row">
+          <button id="btnFxGet" type="button">Load stored rates</button>
+          <button id="btnFxRefresh" type="button">Refresh rates (admin)</button>
+        </div>
+        <h3>Conversion test</h3>
+        <div class="row form">
+          <label>Amount<input id="fxAmount" type="number" min="0" step="any" value="1" /></label>
+          <label>From<select id="fxSource"><option>USD</option><option>VND</option></select></label>
+          <button id="btnFxSwap" class="secondary" type="button" aria-label="Swap currencies">⇄</button>
+          <label>To<select id="fxTarget"><option>VND</option><option>USD</option></select></label>
+          <button id="btnFxConvert" type="button">Convert</button>
+        </div>
+        <div id="fxResult" class="result-card muted">Load or refresh rates, then test a conversion.</div>
+        <pre id="outFx" class="out"></pre>
+      </section>
+
+      <section id="tab-market" class="panel">
+        <h2>Market prices</h2>
+        <p class="muted">Choose a popular asset or search the configured crypto/stock provider.</p>
+        <div class="row form">
+          <label>
+            Popular assets
+            <select id="marketPopular">
+              <optgroup label="Crypto · USD">
+                <option value="crypto|BTC|bitcoin">Bitcoin (BTC)</option>
+                <option value="crypto|ETH|ethereum">Ethereum (ETH)</option>
+                <option value="crypto|SOL|solana">Solana (SOL)</option>
+              </optgroup>
+              <optgroup label="Vietnam stocks · VND">
+                <option value="stock|VNM|VNM">Vinamilk (VNM)</option>
+                <option value="stock|FPT|FPT">FPT Corporation (FPT)</option>
+                <option value="stock|HPG|HPG">Hoa Phat Group (HPG)</option>
+              </optgroup>
+            </select>
+          </label>
+          <button id="btnMarketPrice" type="button">Get price</button>
+          <button id="btnMarketRefresh" type="button">Refresh price</button>
+        </div>
+        <h3>Asset search</h3>
+        <div class="row form">
+          <label>Type<select id="marketType"><option>crypto</option><option>stock</option></select></label>
+          <label>Symbol or name<input id="marketQuery" placeholder="Bitcoin or FPT" /></label>
+          <button id="btnMarketSearch" type="button">Search</button>
+          <label>Results<select id="marketResults"><option value="">No result selected</option></select></label>
+        </div>
+        <div id="marketPriceCard" class="result-card muted" aria-live="polite">Select an asset to view its price.</div>
+        <pre id="outMarket" class="out"></pre>
+      </section>
+
+      <section id="tab-news" class="panel">
+        <h2>News</h2>
+        <button id="btnNews" type="button">GET /api/news</button>
+        <ul id="newsList"></ul>
+        <pre id="outNews" class="out"></pre>
+      </section>
+
+      <section id="tab-history" class="panel">
+        <h2>History</h2>
+        <div class="row">
+          <input id="histId" placeholder="assetId" value="bitcoin" />
+          <select id="histType"><option>crypto</option><option>stock</option></select>
+          <select id="histRange">
+            <option>7d</option>
+            <option selected>30d</option>
+            <option>90d</option>
+            <option>1y</option>
+          </select>
+          <button id="btnHistory" type="button">Load</button>
+        </div>
+        <pre id="outHistory" class="out"></pre>
+      </section>
+
+      <section id="tab-admin" class="panel">
+        <h2>Admin</h2>
+        <p class="muted">Requires profile role=admin (tests: set_role after me).</p>
+        <button id="btnAdminSettings" type="button">GET settings</button>
+        <button id="btnAdminRss" type="button">GET rss-sources</button>
+        <button id="btnAdminJobs" type="button">GET job-runs</button>
+        <pre id="outAdmin" class="out"></pre>
+      </section>
+
+      <section id="tab-dynamodb" class="panel">
+        <h2>Local DynamoDB</h2>
+        <p class="muted">Read-only view of the configured LocalStack tables. Requires a bearer token.</p>
+        <div class="row">
+          <button id="btnDynamoRefresh" type="button">Refresh tables</button>
+          <select id="dynamoTable"><option value="">Select a table</option></select>
+          <label>
+            Item limit
+            <input id="dynamoLimit" type="number" value="25" min="1" max="100" size="5" />
+          </label>
+          <button id="btnDynamoScan" type="button">View items</button>
+        </div>
+        <div id="dynamoSummary"></div>
+        <pre id="outDynamo" class="out"></pre>
+      </section>
+    </main>
+
+    <footer class="muted">
+      Token format (S02): <code>fake:&lt;userId&gt;</code> · paste only; no Cognito Hosted UI
+    </footer>
+  </body>
+</html>
