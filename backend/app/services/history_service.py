@@ -130,11 +130,17 @@ class HistoryService:
             raw = self._stock.get_history(aid, rng)
 
         if not raw:
-            # Fixture fallback when adapters still stub empty lists
+            # Demo fallback only — never persist synthetic series as live cache.
             series = _synthetic_series(asset_type=at, asset_id=aid, range_=rng)
-        else:
-            series = normalize_series(raw)
+            return {
+                "assetId": aid,
+                "range": rng,
+                "type": at,
+                "points": series,
+                "source": "synthetic",
+            }
 
+        series = normalize_series(raw)
         payload = {
             "assetId": aid,
             "range": rng,

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.adapters.dynamodb.base import deep_from_dynamo, get_dynamodb_resource
 from app.core.config import Settings, get_settings
-from app.core.deps import get_current_user
+from app.core.deps import require_admin
 from app.ports.users import UserProfile
 
 
@@ -46,7 +46,7 @@ def _local_resource(settings: Settings):
 
 @router.get("")
 def list_tables(
-    _user: UserProfile = Depends(get_current_user),
+    _user: UserProfile = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     dynamodb = _local_resource(settings)
@@ -79,7 +79,7 @@ def list_tables(
 def scan_table(
     table_name: str,
     limit: int = Query(default=25, ge=1, le=100),
-    _user: UserProfile = Depends(get_current_user),
+    _user: UserProfile = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     if table_name not in _configured_tables(settings):

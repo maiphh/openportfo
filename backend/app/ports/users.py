@@ -23,7 +23,7 @@ class UserProfile:
     role: Role = "user"
     news_keywords: list[str] = field(default_factory=list)
     email_opt_in: bool = False
-    preferred_currency: str = "USD"
+    preferred_currency: Optional[str] = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -57,4 +57,8 @@ class UserProfileRepo(Protocol):
 
     def set_role(self, user_id: str, role: Role) -> UserProfile:
         """Set role (admin bootstrap in tests/ops). Raises KeyError if missing."""
+        ...
+
+    def list_all(self) -> list[UserProfile]:
+        """Return all profiles (jobs: news keywords / snapshots)."""
         ...

@@ -83,6 +83,52 @@ def _reset_deps() -> Any:
 # ---------------------------------------------------------------------------
 
 
+def test_list_stocks_returns_catalog() -> None:
+    client, _, stock, _, _ = _make_client()
+    r = client.get(
+        "/api/assets",
+        params={"type": "stock", "limit": 250},
+        headers=_auth("alice"),
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) > 3
+    symbols = {x["symbol"] for x in data}
+    assert {"VNM", "FPT", "HPG", "VCB"}.issubset(symbols)
+    assert all(x["assetType"] == "stock" for x in data)
+
+
+def test_list_crypto_returns_catalog() -> None:
+    client, _, _, _, _ = _make_client()
+    r = client.get(
+        "/api/assets",
+        params={"type": "crypto", "limit": 50},
+        headers=_auth("alice"),
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) > 3
+    ids = {x["assetId"] for x in data}
+    assert {"bitcoin", "ethereum", "solana"}.issubset(ids)
+
+
+def test_list_assets_invalid_type_400() -> None:
+    client, _, _, _, _ = _make_client()
+    r = client.get(
+        "/api/assets",
+        params={"type": "forex"},
+        headers=_auth("alice"),
+    )
+    assert r.status_code == 400
+
+
+def test_list_assets_unauthorized_401() -> None:
+    client, _, _, _, _ = _make_client()
+    r = client.get("/api/assets", params={"type": "stock"})
+    assert r.status_code == 401
+
+
 def test_search_crypto_maps_dto() -> None:
     client, crypto, _, _, _ = _make_client()
     r = client.get(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
@@ -23,6 +24,7 @@ class InMemoryExchangeRateRepo:
         )
         self.get_latest_calls = 0
         self.save_calls = 0
+        self.mark_refresh_failure_calls = 0
 
     def get_latest(self) -> Optional[StoredRates]:
         self.get_latest_calls += 1
@@ -49,6 +51,25 @@ class InMemoryExchangeRateRepo:
         self._latest = deepcopy(stored)
         return deepcopy(stored)
 
+    def mark_refresh_failure(self, error: str) -> Optional[StoredRates]:
+        self.mark_refresh_failure_calls += 1
+        if self._latest is None:
+            stored = StoredRates(
+                base="USD",
+                rates={},
+                status="missing",
+                last_refresh_status="error",
+                last_refresh_error=error,
+            )
+        else:
+            stored = replace(
+                self._latest,
+                last_refresh_status="error",
+                last_refresh_error=error,
+            )
+        self._latest = deepcopy(stored)
+        return deepcopy(stored)
+
     def seed(self, rates: Optional[StoredRates]) -> None:
         """Test helper: set or clear stored rates without HTTP."""
         self._latest = deepcopy(rates) if rates is not None else None
@@ -57,6 +78,7 @@ class InMemoryExchangeRateRepo:
         self._latest = None
         self.get_latest_calls = 0
         self.save_calls = 0
+        self.mark_refresh_failure_calls = 0
 
 
 class FakeExchangeRateClient:

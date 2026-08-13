@@ -61,6 +61,10 @@ class HoldingsRepo(Protocol):
         """Return all holdings for ``user_id`` (empty list if none)."""
         ...
 
+    def list_all_users(self) -> list[str]:
+        """Return distinct user ids that have holdings (jobs)."""
+        ...
+
     def get(
         self,
         user_id: str,

@@ -118,12 +118,12 @@ Resources:
       TableName: !Sub "${ProjectPrefix}-news"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: date
+        - AttributeName: pk
           AttributeType: S
         - AttributeName: sk
           AttributeType: S
       KeySchema:
-        - AttributeName: date
+        - AttributeName: pk
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE

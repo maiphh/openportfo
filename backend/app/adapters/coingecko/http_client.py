@@ -57,6 +57,36 @@ class HttpCoinGeckoClient:
             raise MarketDataError(f"CoinGecko HTTP {resp.status_code}")
         return resp.json()
 
+    def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
+        cap = max(1, min(int(limit), 250))
+        data = self._get(
+            "/coins/markets",
+            {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": cap,
+                "page": 1,
+                "sparkline": "false",
+            },
+        )
+        out: list[AssetSearchResult] = []
+        for c in data or []:
+            if not isinstance(c, dict):
+                continue
+            coin_id = str(c.get("id") or "").strip()
+            if not coin_id:
+                continue
+            out.append(
+                AssetSearchResult(
+                    symbol=str(c.get("symbol") or "").upper(),
+                    name=str(c.get("name") or coin_id),
+                    asset_id=coin_id,
+                    asset_type="crypto",
+                    currency="USD",
+                )
+            )
+        return out
+
     def search(self, q: str) -> list[AssetSearchResult]:
         needle = (q or "").strip()
         if not needle:
@@ -101,6 +131,7 @@ class HttpCoinGeckoClient:
             out.append(
                 PriceQuote(
                     asset_type="crypto",
+                    # simple/price has no ticker; leave coin id (MarketService matches asset_id)
                     symbol=key.upper(),
                     price=Decimal(str(price)),
                     currency=currency,

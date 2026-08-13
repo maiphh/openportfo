@@ -51,7 +51,6 @@ class InMemoryUserProfileRepo:
             role="user",
             news_keywords=[],
             email_opt_in=False,
-            preferred_currency="USD",
             created_at=now,
             updated_at=now,
         )
@@ -79,7 +78,7 @@ class InMemoryUserProfileRepo:
         return deepcopy(profile)
 
     def list_all(self) -> list[UserProfile]:
-        """Test/job helper: all profiles (not on Protocol; used by jobs via getattr)."""
+        """All profiles (jobs: news keywords / snapshots)."""
         return [deepcopy(p) for p in self._profiles.values()]
 
     def set_role(self, user_id: str, role: Role) -> UserProfile:

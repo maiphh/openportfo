@@ -42,6 +42,25 @@ def _quote_response(asset_type: str, symbol: str, asset_id: str, svc: MarketServ
     }
 
 
+@router.get("/api/assets")
+def list_assets(
+    type: str = Query(default=""),  # noqa: A002 — API query name
+    limit: int = Query(default=500, ge=1, le=2000),
+    user: UserProfile = Depends(get_current_user),
+    svc: MarketService = Depends(get_market_service),
+) -> list[dict[str, Any]]:
+    """List crypto or VN stocks for browse / later search. Auth required."""
+    _ = user
+    try:
+        results = svc.list_assets(type, limit=limit)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.detail,
+        ) from exc
+    return [search_result_to_dict(r) for r in results]
+
+
 @router.get("/api/assets/search")
 def search_assets(
     q: str = Query(default=""),

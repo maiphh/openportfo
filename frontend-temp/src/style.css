@@ -78,6 +78,11 @@ button.secondary {
   border-color: #475569;
 }
 
+button.debug-button {
+  background: #92400e;
+  border-color: #d97706;
+}
+
 .result-card {
   display: flex;
   flex-wrap: wrap;

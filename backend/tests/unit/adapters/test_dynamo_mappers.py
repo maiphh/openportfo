@@ -80,6 +80,12 @@ def test_user_profile_roundtrip() -> None:
     assert back.news_keywords == ["btc", "vnm"]
     assert back.preferred_currency == "VND"
 
+    unset = UserProfile(user_id="sub-2")
+    unset_item = profile_to_item(unset)
+    assert not unset_item.get("preferredCurrency")
+    assert not item_to_profile(unset_item).preferred_currency
+    assert not item_to_profile({"userId": "sub-2", "preferredCurrency": ""}).preferred_currency
+
 
 def test_price_cache_pk_and_roundtrip() -> None:
     assert cache_pk("crypto", "btc") == "crypto#BTC"

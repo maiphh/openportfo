@@ -21,6 +21,11 @@ from app.core.config import get_settings
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    env = (settings.app_env or "").strip().lower()
+    auth_mode = (settings.auth_mode or "").strip().lower()
+    if env == "prod" and auth_mode != "cognito":
+        raise RuntimeError("AUTH_MODE must be cognito when APP_ENV=prod")
+
     app = FastAPI(title=settings.app_name, version="0.1.0")
 
     app.add_middleware(
@@ -41,7 +46,8 @@ def create_app() -> FastAPI:
     app.include_router(history_router)
     app.include_router(news_router)
     app.include_router(admin_router)
-    app.include_router(dynamodb_viewer_router)
+    if env in {"local", "test"} and (settings.dynamodb_endpoint_url or "").strip():
+        app.include_router(dynamodb_viewer_router)
     return app
 
 

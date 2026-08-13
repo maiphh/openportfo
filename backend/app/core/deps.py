@@ -260,7 +260,9 @@ def get_stock_market_client() -> StockMarketClient:
             try:
                 from app.adapters.vnstock.http_client import HttpVnstockClient
 
-                _stock_market_client = HttpVnstockClient()
+                _stock_market_client = HttpVnstockClient(
+                    api_key=settings.vnstock_api_key or None,
+                )
             except Exception:
                 from app.adapters.vnstock.client import FixtureVnstockClient
 
@@ -310,11 +312,16 @@ def get_market_service(
     if _market_service is None:
         if not isinstance(settings, Settings):
             settings = get_settings()
+        admin_ttl_minutes = get_settings_repo().get().price_cache_ttl_minutes
+        if isinstance(admin_ttl_minutes, int) and admin_ttl_minutes > 0:
+            ttl_seconds = admin_ttl_minutes * 60
+        else:
+            ttl_seconds = settings.price_cache_ttl_seconds
         _market_service = MarketService(
             get_crypto_market_client(),
             get_stock_market_client(),
             get_price_cache_repo(),
-            default_ttl_seconds=settings.price_cache_ttl_seconds,
+            default_ttl_seconds=ttl_seconds,
         )
     return _market_service
 
@@ -369,7 +376,8 @@ def get_exchange_rate_client(
         return None
     from app.adapters.exchangerate.client import HttpExchangeRateClient
 
-    return HttpExchangeRateClient(api_key=key)
+    _exchange_rate_client = HttpExchangeRateClient(api_key=key)
+    return _exchange_rate_client
 
 
 def set_exchange_rate_client(client: Optional[ExchangeRateClient]) -> None:
@@ -539,8 +547,10 @@ def get_settings_repo() -> SettingsRepo:
 
 
 def set_settings_repo(repo: Optional[SettingsRepo]) -> None:
-    global _settings_repo
+    global _settings_repo, _market_service, _portfolio_service
     _settings_repo = repo
+    _market_service = None
+    _portfolio_service = None
 
 
 def get_rss_sources_repo() -> RssSourcesRepo:

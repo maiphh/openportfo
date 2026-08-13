@@ -26,15 +26,18 @@ from app.core.deps import (
     set_market_service,
     set_portfolio_service,
     set_price_cache_repo,
+    set_settings_repo,
     set_stock_market_client,
     set_user_profile_repo,
 )
 from app.domain.models import PriceQuote
 from app.main import create_app
+from app.ports.admin import SystemSettings
 from app.ports.fx import StoredRates
 from app.ports.holdings import HoldingRecord
 from app.services.market_service import MarketService
 from app.services.portfolio_service import PortfolioService
+from tests.fakes.admin import InMemorySettingsRepo
 from tests.fakes.fx import InMemoryExchangeRateRepo
 from tests.fakes.holdings import InMemoryHoldingsRepo
 from tests.fakes.market import FixtureCryptoMarketClient, FixtureStockMarketClient
@@ -128,6 +131,7 @@ def _reset_deps() -> Any:
     set_market_service(None)
     set_portfolio_service(None)
     set_user_profile_repo(None)
+    set_settings_repo(None)
     yield
     set_holdings_repo(None)
     set_crypto_market_client(None)
@@ -137,6 +141,7 @@ def _reset_deps() -> Any:
     set_market_service(None)
     set_portfolio_service(None)
     set_user_profile_repo(None)
+    set_settings_repo(None)
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +322,39 @@ def test_portfolio_with_stored_fx_display_currency() -> None:
     assert data["totalsDisplay"]["currency"] == "VND"
     assert data["totalsDisplay"]["marketValue"] == "1000000000"
     assert data["displayCurrency"] == "VND"
+
+
+def test_admin_default_display_currency_when_user_pref_empty() -> None:
+    """Query override → user pref → admin default_display_currency."""
+    fx = InMemoryExchangeRateRepo()
+    fx.seed(
+        StoredRates(
+            base="USD",
+            rates={"USD_VND": Decimal("25000")},
+            as_of=_now(),
+            status="fresh",
+            provider="seed",
+        )
+    )
+    set_settings_repo(
+        InMemorySettingsRepo(SystemSettings(default_display_currency="VND"))
+    )
+    client, holdings, *_rest, profiles = _make_client(fx=fx)
+    _seed_btc(holdings)
+    profiles.get_or_create("alice")
+    profiles.update_settings("alice", preferred_currency="")
+
+    r = client.get("/api/portfolio", headers=_auth("alice"))
+    assert r.status_code == 200
+    data = r.json()
+    assert data["displayCurrency"] == "VND"
+    assert data["totalsDisplay"] is not None
+    assert data["totalsDisplay"]["currency"] == "VND"
+    assert data["totalsDisplay"]["marketValue"] == "1000000000"
+
+    r2 = client.post("/api/portfolio/refresh", headers=_auth("alice"))
+    assert r2.status_code == 200
+    assert r2.json()["displayCurrency"] == "VND"
 
 
 # ---------------------------------------------------------------------------

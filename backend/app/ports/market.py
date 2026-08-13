@@ -37,6 +37,10 @@ class AssetSearchResult:
 class CryptoMarketClient(Protocol):
     """Port: CoinGecko (or fixture). Prices keyed by provider coin id."""
 
+    def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
+        """Return a catalog of coins for browse/search (cap with ``limit``)."""
+        ...
+
     def search(self, q: str) -> list[AssetSearchResult]:
         """Search coins by name/symbol; ``asset_type`` is always ``crypto``."""
         ...
@@ -60,6 +64,10 @@ class CryptoMarketClient(Protocol):
 
 class StockMarketClient(Protocol):
     """Port: vnstock (or fixture). Prices keyed by ticker symbol."""
+
+    def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
+        """Return a catalog of VN stocks for browse/search (cap with ``limit``)."""
+        ...
 
     def search(self, q: str) -> list[AssetSearchResult]:
         """Search VN stocks by ticker/name; ``asset_type`` is always ``stock``."""

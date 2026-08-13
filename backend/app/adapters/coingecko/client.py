@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Sequence
 
+from app.adapters.coingecko.catalog import crypto_catalog, crypto_prices
 from app.domain.models import PriceQuote
 from app.ports.market import AssetSearchResult, MarketDataError
 
@@ -31,43 +32,15 @@ class FixtureCoinGeckoClient:
         self.price_calls = 0
         self.last_price_ids: list[str] = []
         self.fail_prices = fail_prices
-        self._search_index = list(
-            search_index
-            or [
-                AssetSearchResult(
-                    symbol="BTC",
-                    name="Bitcoin",
-                    asset_id="bitcoin",
-                    asset_type="crypto",
-                    currency="USD",
-                ),
-                AssetSearchResult(
-                    symbol="ETH",
-                    name="Ethereum",
-                    asset_id="ethereum",
-                    asset_type="crypto",
-                    currency="USD",
-                ),
-                AssetSearchResult(
-                    symbol="SOL",
-                    name="Solana",
-                    asset_id="solana",
-                    asset_type="crypto",
-                    currency="USD",
-                ),
-            ]
-        )
-        self._prices: dict[str, tuple[Decimal, str]] = dict(
-            prices
-            or {
-                "bitcoin": (Decimal("65000"), "USD"),
-                "ethereum": (Decimal("3500"), "USD"),
-                "solana": (Decimal("150"), "USD"),
-            }
-        )
+        self._search_index = list(search_index or crypto_catalog())
+        self._prices: dict[str, tuple[Decimal, str]] = dict(prices or crypto_prices())
         self._id_to_symbol: dict[str, str] = {
             r.asset_id: r.symbol for r in self._search_index
         }
+
+    def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
+        cap = max(1, min(int(limit), 500))
+        return list(self._search_index[:cap])
 
     def search(self, q: str) -> list[AssetSearchResult]:
         self.search_calls += 1

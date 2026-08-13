@@ -58,61 +58,78 @@ def snapshot_storage_key(user_id: str, date: str) -> str:
 
 def run_snapshot_job(ctx: JobContext) -> JobRun:
     started = datetime.now(timezone.utc)
-    settings = ctx.settings_repo.get()
     run_id = str(uuid4())
     date = started.date().isoformat()
+    try:
+        settings = ctx.settings_repo.get()
 
-    if not settings.jobs_snapshot:
+        if not settings.jobs_snapshot:
+            run = JobRun(
+                run_id=run_id,
+                job_type="snapshot",
+                status="skipped",
+                started_at=started,
+                finished_at=datetime.now(timezone.utc),
+                message="jobs.snapshot disabled",
+                counts={"users": 0},
+            )
+            ctx.job_runs_repo.put(run)
+            return run
+
+        profiles = ctx.user_profile_repo.list_all()
+        users_snapshotted = 0
+
+        for profile in profiles:
+            holdings = ctx.holdings_repo.list(profile.user_id)
+            if not holdings:
+                continue
+            preferred = (
+                profile.preferred_currency
+                or settings.default_display_currency
+                or "USD"
+            )
+            view = ctx.portfolio_service.get_portfolio(
+                profile.user_id,
+                preferred_currency=preferred,
+                force_refresh=False,
+            )
+            payload = _view_to_payload(view)
+            payload["userId"] = profile.user_id
+            payload["date"] = date
+            record = SnapshotRecord(
+                user_id=profile.user_id,
+                date=date,
+                payload=payload,
+                created_at=datetime.now(timezone.utc),
+            )
+            ctx.snapshot_repo.put(record)
+            key = snapshot_storage_key(profile.user_id, date)
+            ctx.object_storage.put_json(key, payload)
+            users_snapshotted += 1
+
         run = JobRun(
             run_id=run_id,
             job_type="snapshot",
-            status="skipped",
+            status="success",
             started_at=started,
             finished_at=datetime.now(timezone.utc),
-            message="jobs.snapshot disabled",
-            counts={"users": 0},
+            message=None,
+            counts={"users": users_snapshotted, "date": date},
         )
         ctx.job_runs_repo.put(run)
         return run
-
-    list_all = getattr(ctx.user_profile_repo, "list_all", None)
-    profiles = list(list_all()) if callable(list_all) else []
-    users_snapshotted = 0
-
-    for profile in profiles:
-        holdings = ctx.holdings_repo.list(profile.user_id)
-        if not holdings:
-            continue
-        view = ctx.portfolio_service.get_portfolio(
-            profile.user_id,
-            preferred_currency=profile.preferred_currency,
-            force_refresh=False,
+    except Exception as exc:
+        run = JobRun(
+            run_id=run_id,
+            job_type="snapshot",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            message=str(exc),
+            counts={"date": date},
         )
-        payload = _view_to_payload(view)
-        payload["userId"] = profile.user_id
-        payload["date"] = date
-        record = SnapshotRecord(
-            user_id=profile.user_id,
-            date=date,
-            payload=payload,
-            created_at=datetime.now(timezone.utc),
-        )
-        ctx.snapshot_repo.put(record)
-        key = snapshot_storage_key(profile.user_id, date)
-        ctx.object_storage.put_json(key, payload)
-        users_snapshotted += 1
-
-    run = JobRun(
-        run_id=run_id,
-        job_type="snapshot",
-        status="success",
-        started_at=started,
-        finished_at=datetime.now(timezone.utc),
-        message=None,
-        counts={"users": users_snapshotted, "date": date},
-    )
-    ctx.job_runs_repo.put(run)
-    return run
+        ctx.job_runs_repo.put(run)
+        return run
 
 
 __all__ = ["run_snapshot_job", "snapshot_storage_key"]

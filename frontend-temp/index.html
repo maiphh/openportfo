@@ -47,6 +47,8 @@
       <section id="tab-me" class="panel">
         <h2>Auth / Me</h2>
         <button id="btnMe" type="button">GET /api/auth/me</button>
+        <button id="btnMakeAdmin" class="debug-button" type="button">Debug: make me admin</button>
+        <p class="muted">The debug action is available only when the backend runs in local/test mode.</p>
         <pre id="outMe" class="out"></pre>
         <h3>Settings</h3>
         <div class="row">
@@ -123,7 +125,7 @@
 
       <section id="tab-market" class="panel">
         <h2>Market prices</h2>
-        <p class="muted">Choose a popular asset or search the configured crypto/stock provider.</p>
+        <p class="muted">List the full catalog, then search by symbol or name. Popular shortcuts stay below.</p>
         <div class="row form">
           <label>
             Popular assets
@@ -148,7 +150,8 @@
           <label>Type<select id="marketType"><option>crypto</option><option>stock</option></select></label>
           <label>Symbol or name<input id="marketQuery" placeholder="Bitcoin or FPT" /></label>
           <button id="btnMarketSearch" type="button">Search</button>
-          <label>Results<select id="marketResults"><option value="">No result selected</option></select></label>
+          <button id="btnMarketList" class="secondary" type="button">List all</button>
+          <label>Results<select id="marketResults" size="8"><option value="">No result selected</option></select></label>
         </div>
         <div id="marketPriceCard" class="result-card muted" aria-live="polite">Select an asset to view its price.</div>
         <pre id="outMarket" class="out"></pre>

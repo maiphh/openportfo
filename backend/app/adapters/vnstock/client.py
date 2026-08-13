@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Sequence
 
+from app.adapters.vnstock.catalog import stock_catalog, stock_prices
 from app.domain.models import PriceQuote
 from app.ports.market import AssetSearchResult, MarketDataError
 
@@ -31,40 +32,12 @@ class FixtureVnstockClient:
         self.price_calls = 0
         self.last_price_symbols: list[str] = []
         self.fail_prices = fail_prices
-        self._search_index = list(
-            search_index
-            or [
-                AssetSearchResult(
-                    symbol="VNM",
-                    name="Vinamilk",
-                    asset_id="VNM",
-                    asset_type="stock",
-                    currency="VND",
-                ),
-                AssetSearchResult(
-                    symbol="FPT",
-                    name="FPT Corporation",
-                    asset_id="FPT",
-                    asset_type="stock",
-                    currency="VND",
-                ),
-                AssetSearchResult(
-                    symbol="HPG",
-                    name="Hoa Phat Group",
-                    asset_id="HPG",
-                    asset_type="stock",
-                    currency="VND",
-                ),
-            ]
-        )
-        self._prices: dict[str, tuple[Decimal, str]] = dict(
-            prices
-            or {
-                "VNM": (Decimal("65000"), "VND"),
-                "FPT": (Decimal("120000"), "VND"),
-                "HPG": (Decimal("28000"), "VND"),
-            }
-        )
+        self._search_index = list(search_index or stock_catalog())
+        self._prices: dict[str, tuple[Decimal, str]] = dict(prices or stock_prices())
+
+    def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
+        cap = max(1, min(int(limit), 500))
+        return list(self._search_index[:cap])
 
     def search(self, q: str) -> list[AssetSearchResult]:
         self.search_calls += 1

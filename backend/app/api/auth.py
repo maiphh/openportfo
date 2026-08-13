@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.deps import get_current_user, get_user_profile_repo
+from app.core.config import Settings, get_settings
 from app.ports.users import UserProfile, UserProfileRepo
 
 router = APIRouter(tags=["auth"])
@@ -49,6 +50,20 @@ class SettingsUpdate(BaseModel):
 def get_me(user: UserProfile = Depends(get_current_user)) -> dict[str, Any]:
     """Return current user profile; bootstrap on first call."""
     return profile_to_response(user)
+
+
+@router.post("/api/debug/auth/make-admin")
+def debug_make_current_user_admin(
+    user: UserProfile = Depends(get_current_user),
+    repo: UserProfileRepo = Depends(get_user_profile_repo),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """Promote the authenticated profile for local UI testing only."""
+    if settings.app_env.strip().lower() not in {"local", "test"}:
+        # Hide the debug capability entirely in deployed environments.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    updated = repo.set_role(user.user_id, "admin")
+    return profile_to_response(updated)
 
 
 @router.put("/api/settings")

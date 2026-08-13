@@ -113,7 +113,7 @@ def test_inmemory_get_or_create_defaults() -> None:
     assert p.role == "user"
     assert p.news_keywords == []
     assert p.email_opt_in is False
-    assert p.preferred_currency == "USD"
+    assert not p.preferred_currency
     assert repo.get("u1") is not None
 
 
@@ -195,7 +195,7 @@ def test_me_creates_profile() -> None:
     assert body["role"] == "user"
     assert body["newsKeywords"] == []
     assert body["emailOptIn"] is False
-    assert body["preferredCurrency"] == "USD"
+    assert not body["preferredCurrency"]
     assert "createdAt" in body
     assert "updatedAt" in body
     assert repo.get("alice") is not None
@@ -250,6 +250,35 @@ def test_put_settings_requires_auth() -> None:
     client, _ = _make_client()
     r = client.put("/api/settings", json={"emailOptIn": True})
     assert r.status_code == 401
+
+
+def test_debug_make_current_user_admin_in_local_mode() -> None:
+    client, repo = _make_client()
+    response = client.post(
+        "/api/debug/auth/make-admin",
+        headers=_auth_header("local-admin"),
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "admin"
+    assert repo.get("local-admin").role == "admin"
+
+
+def test_debug_make_admin_hidden_in_production() -> None:
+    client, repo = _make_client()
+    from app.core.config import Settings, get_settings
+
+    client.app.dependency_overrides[get_settings] = lambda: Settings(
+        APP_ENV="prod",
+        STORAGE_BACKEND="memory",
+        USE_AWS_ADAPTERS=False,
+        _env_file=None,
+    )
+    response = client.post(
+        "/api/debug/auth/make-admin",
+        headers=_auth_header("prod-user"),
+    )
+    assert response.status_code == 404
+    assert repo.get("prod-user").role == "user"
 
 
 # ---------------------------------------------------------------------------

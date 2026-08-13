@@ -89,13 +89,13 @@ function renderPortfolio(data) {
   const rows = lines
     .map(
       (l) => `<tr>
-      <td>${l.assetType || ""}</td>
-      <td>${l.symbol || ""}</td>
-      <td>${l.qty ?? ""}</td>
-      <td>${l.price ?? "—"}</td>
-      <td>${l.marketValue ?? "—"}</td>
-      <td>${l.pnl ?? "—"}</td>
-      <td>${l.currency || ""}</td>
+      <td>${escapeHtml(l.assetType || "")}</td>
+      <td>${escapeHtml(l.symbol || "")}</td>
+      <td>${escapeHtml(l.qty ?? "")}</td>
+      <td>${escapeHtml(l.price ?? "—")}</td>
+      <td>${escapeHtml(l.marketValue ?? "—")}</td>
+      <td>${escapeHtml(l.pnl ?? "—")}</td>
+      <td>${escapeHtml(l.currency || "")}</td>
       <td>${l.missingPrice ? "yes" : ""}</td>
     </tr>`
     )
@@ -107,7 +107,7 @@ function renderPortfolio(data) {
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="muted">totalsDisplay: ${JSON.stringify(data.totalsDisplay)} · fx: ${data.fx?.status}</p>`;
+  <p class="muted">totalsDisplay: ${escapeHtml(JSON.stringify(data.totalsDisplay))} · fx: ${escapeHtml(data.fx?.status)}</p>`;
 }
 
 function renderNews(items) {
@@ -225,6 +225,18 @@ $("btnMe").onclick = async () => {
     if (me.newsKeywords) $("setKeywords").value = (me.newsKeywords || []).join(", ");
     if (me.preferredCurrency) $("setCurrency").value = me.preferredCurrency;
     $("setEmailOptIn").checked = !!me.emailOptIn;
+  } catch (e) {
+    show($("outMe"), { error: e.message, body: e.body });
+  }
+};
+
+$("btnMakeAdmin").onclick = async () => {
+  try {
+    const me = await api("/api/debug/auth/make-admin", { method: "POST" });
+    show($("outMe"), me);
+    const el = $("authStatus");
+    el.textContent = `${getToken().startsWith("fake:") ? getToken() : "token set"} · admin`;
+    el.classList.add("ok");
   } catch (e) {
     show($("outMe"), { error: e.message, body: e.body });
   }
@@ -403,19 +415,44 @@ $("marketResults").onchange = () => {
   if ($("marketResults").value) loadMarketQuote(false);
 };
 
+function renderMarketResults(results) {
+  const items = Array.isArray(results) ? results : [];
+  $("marketResults").innerHTML = `<option value="">${items.length ? `Select a result (${items.length})` : "No results"}</option>${items
+    .map(
+      (item) =>
+        `<option value="${escapeHtml(`${item.assetType}|${item.symbol}|${item.assetId || ""}`)}">${escapeHtml(
+          `${item.name} (${item.symbol})`
+        )}</option>`
+    )
+    .join("")}`;
+}
+
 $("btnMarketSearch").onclick = async () => {
   const query = $("marketQuery").value.trim();
   const type = $("marketType").value;
   if (!query) {
-    show($("outMarket"), { error: "Enter a symbol or asset name" });
+    show($("outMarket"), { error: "Enter a symbol or asset name, or use List all" });
     return;
   }
   try {
-    const results = await api(`/api/assets/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(type)}`);
-    $("marketResults").innerHTML = `<option value="">${results.length ? "Select a result" : "No results"}</option>${results
-      .map((item) => `<option value="${escapeHtml(`${item.assetType}|${item.symbol}|${item.assetId || ""}`)}">${escapeHtml(`${item.name} (${item.symbol})`)}</option>`)
-      .join("")}`;
+    let results = await api(`/api/assets/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(type)}`);
+    if ((!results || !results.length) && type === "crypto" && /^[A-Za-z]{2,4}$/.test(query)) {
+      results = await api(`/api/assets/search?q=${encodeURIComponent(query)}&type=stock`);
+      if (results && results.length) $("marketType").value = "stock";
+    }
+    renderMarketResults(results);
     show($("outMarket"), results);
+  } catch (e) {
+    show($("outMarket"), { error: e.message, body: e.body });
+  }
+};
+
+$("btnMarketList").onclick = async () => {
+  const type = $("marketType").value;
+  try {
+    const results = await api(`/api/assets?type=${encodeURIComponent(type)}&limit=2000`);
+    renderMarketResults(results);
+    show($("outMarket"), { listed: results.length, type, sample: results.slice(0, 8) });
   } catch (e) {
     show($("outMarket"), { error: e.message, body: e.body });
   }

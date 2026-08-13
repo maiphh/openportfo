@@ -28,7 +28,7 @@ def profile_to_item(profile: UserProfile) -> dict[str, Any]:
             "role": profile.role,
             "newsKeywords": list(profile.news_keywords or []),
             "emailOptIn": bool(profile.email_opt_in),
-            "preferredCurrency": profile.preferred_currency or "USD",
+            "preferredCurrency": (profile.preferred_currency or "").strip() or None,
             "createdAt": dt_to_iso(profile.created_at),
             "updatedAt": dt_to_iso(profile.updated_at),
         }
@@ -44,7 +44,7 @@ def item_to_profile(item: dict[str, Any]) -> UserProfile:
         role=item.get("role") or "user",  # type: ignore[arg-type]
         news_keywords=list(item.get("newsKeywords") or []),
         email_opt_in=bool(item.get("emailOptIn", False)),
-        preferred_currency=str(item.get("preferredCurrency") or "USD"),
+        preferred_currency=(str(item.get("preferredCurrency") or "").strip() or None),
         created_at=iso_to_dt(item.get("createdAt")) or utc_now(),
         updated_at=iso_to_dt(item.get("updatedAt")) or utc_now(),
     )
@@ -96,7 +96,6 @@ class DynamoUserProfileRepo:
             role="user",
             news_keywords=[],
             email_opt_in=False,
-            preferred_currency="USD",
             created_at=now,
             updated_at=now,
         )

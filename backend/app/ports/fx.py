@@ -66,6 +66,10 @@ class ExchangeRateRepo(Protocol):
         """Persist a successful snapshot; return stored row."""
         ...
 
+    def mark_refresh_failure(self, error: str) -> Optional[StoredRates]:
+        """Keep previous rates; persist lastRefreshStatus=error. Create missing row if none."""
+        ...
+
 
 class ExchangeRateClient(Protocol):
     """Port: fetch latest rates from external provider."""

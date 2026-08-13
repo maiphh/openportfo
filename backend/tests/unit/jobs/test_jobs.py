@@ -223,3 +223,123 @@ def test_handler_dispatches() -> None:
     out = handler({"job": "news"}, ctx)
     assert out["jobType"] == "news"
     assert out["status"] == "skipped"
+
+
+def test_news_job_skips_write_when_no_needles() -> None:
+    url = "https://example.com/feed.xml"
+    fetcher = FakeRssFetcher(
+        {url: [RssItem(title="Bitcoin hits ATH", url="https://ex/btc")]}
+    )
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    bag["users"].get_or_create("u1", email="u@t.com", name="U")
+
+    run = run_news_job(ctx)
+    assert run.status == "success"
+    assert run.counts["written"] == 0
+    assert bag["news"].list_recent(10) == []
+
+
+def test_news_job_matches_holding_symbol() -> None:
+    url = "https://example.com/feed.xml"
+    fetcher = FakeRssFetcher(
+        {
+            url: [
+                RssItem(title="ETH rally continues", url="https://ex/eth"),
+                RssItem(title="Weather today", url="https://ex/wx"),
+            ]
+        }
+    )
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    bag["users"].get_or_create("u1", email="u@t.com", name="U")
+    bag["holdings"].create(
+        HoldingRecord(
+            user_id="u1",
+            asset_type="crypto",
+            symbol="ETH",
+            qty=Decimal("1"),
+            avg_cost=Decimal("1000"),
+            currency="USD",
+            asset_id="ethereum",
+        )
+    )
+
+    run = run_news_job(ctx)
+    assert run.status == "success"
+    assert run.counts["written"] == 1
+    items = bag["news"].list_recent(10)
+    assert len(items) == 1
+    assert "ETH" in items[0].title
+
+
+def test_price_job_disabled_skips() -> None:
+    settings = SystemSettings(jobs_price=False)
+    ctx, bag = _ctx(settings=settings)
+    run = run_price_job(ctx)
+    assert run.status == "skipped"
+    assert "disabled" in (run.message or "")
+    assert bag["job_runs"].list_recent(job_type="price")[0].status == "skipped"
+
+
+class _RaisingRss:
+    def fetch(self, url: str) -> list[RssItem]:
+        raise RuntimeError("rss down")
+
+
+class _RaisingMarket:
+    def get_quotes(self, keys: Any, force: bool = False) -> list[Any]:
+        raise RuntimeError("market down")
+
+
+class _RaisingStorage:
+    def put_json(self, key: str, data: dict[str, Any]) -> None:
+        raise RuntimeError("storage down")
+
+
+def test_job_records_error_when_dependency_raises() -> None:
+    url = "https://example.com/feed.xml"
+    ctx, bag = _ctx(rss_fetcher=_RaisingRss())  # type: ignore[arg-type]
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    bag["users"].get_or_create("u1", email="u@t.com", name="U")
+    bag["users"].update_settings("u1", news_keywords=["bitcoin"])
+
+    news_run = run_news_job(ctx)
+    assert news_run.status == "error"
+    assert "rss down" in (news_run.message or "")
+    assert bag["job_runs"].list_recent(job_type="news")[0].status == "error"
+
+    bag["holdings"].create(
+        HoldingRecord(
+            user_id="u1",
+            asset_type="crypto",
+            symbol="BTC",
+            qty=Decimal("1"),
+            avg_cost=Decimal("30000"),
+            currency="USD",
+            asset_id="bitcoin",
+        )
+    )
+    ctx.market_service = _RaisingMarket()  # type: ignore[assignment]
+    price_run = run_price_job(ctx)
+    assert price_run.status == "error"
+    assert "market down" in (price_run.message or "")
+    assert bag["job_runs"].list_recent(job_type="price")[0].status == "error"
+
+    ctx.market_service = bag["market"]
+    ctx.object_storage = _RaisingStorage()  # type: ignore[assignment]
+    snap_run = run_snapshot_job(ctx)
+    assert snap_run.status == "error"
+    assert "storage down" in (snap_run.message or "")
+    assert bag["job_runs"].list_recent(job_type="snapshot")[0].status == "error"
+
+    ctx.market_service = _RaisingMarket()  # type: ignore[assignment]
+    out = handler({"job": "price"}, ctx)
+    assert out["status"] == "error"
+    assert "market down" in (out["message"] or "")

@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.deps import get_current_user, get_portfolio_service
+from app.core.deps import get_current_user, get_portfolio_service, get_settings_repo
 from app.domain.models import CurrencyTotals, PortfolioLine, PortfolioSummary
 from app.domain.portfolio_math import pnl_percent
 from app.ports.market import MarketDataError
@@ -110,11 +110,16 @@ def get_portfolio(
     svc: PortfolioService = Depends(get_portfolio_service),
 ) -> dict[str, Any]:
     """Aggregate holdings + cache-first prices; optional stored FX conversion."""
+    preferred = (
+        user.preferred_currency
+        or get_settings_repo().get().default_display_currency
+        or "USD"
+    )
     try:
         view = svc.get_portfolio(
             user.user_id,
             display_currency=displayCurrency,
-            preferred_currency=user.preferred_currency,
+            preferred_currency=preferred,
             asset_type=assetType,
             force_refresh=False,
         )
@@ -142,11 +147,16 @@ def refresh_portfolio(
 
     Does **not** call any FX HTTP provider — only MarketService with force=True.
     """
+    preferred = (
+        user.preferred_currency
+        or get_settings_repo().get().default_display_currency
+        or "USD"
+    )
     try:
         view = svc.get_portfolio(
             user.user_id,
             display_currency=displayCurrency,
-            preferred_currency=user.preferred_currency,
+            preferred_currency=preferred,
             asset_type=assetType,
             force_refresh=True,
         )

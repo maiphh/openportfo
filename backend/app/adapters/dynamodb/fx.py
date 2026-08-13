@@ -6,6 +6,7 @@ PK: FX  SK: LATEST
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Optional
 
 from app.adapters.dynamodb.base import (
@@ -89,6 +90,25 @@ class DynamoExchangeRateRepo:
             last_refresh_error=None,
             updated_by=updated_by,
         )
+        self._table.put_item(Item=rates_to_item(stored))
+        return stored
+
+    def mark_refresh_failure(self, error: str) -> Optional[StoredRates]:
+        previous = self.get_latest()
+        if previous is None:
+            stored = StoredRates(
+                base="USD",
+                rates={},
+                status="missing",
+                last_refresh_status="error",
+                last_refresh_error=error,
+            )
+        else:
+            stored = replace(
+                previous,
+                last_refresh_status="error",
+                last_refresh_error=error,
+            )
         self._table.put_item(Item=rates_to_item(stored))
         return stored
 

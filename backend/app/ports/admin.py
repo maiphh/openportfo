@@ -18,6 +18,7 @@ class SystemSettings:
     jobs_news: bool = True
     jobs_snapshot: bool = True
     jobs_email: bool = False
+    jobs_price: bool = True
     default_display_currency: str = "USD"
 
 

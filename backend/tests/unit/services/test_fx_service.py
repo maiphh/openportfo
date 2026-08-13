@@ -65,9 +65,40 @@ def test_refresh_failure_keeps_previous() -> None:
     assert result.stored is not None
     assert result.stored.rates["USD_VND"] == Decimal("24000")
     assert repo.save_calls == 0
+    assert repo.mark_refresh_failure_calls == 1
     assert client.fetch_calls == 1
     # still previous
     assert repo.get_latest().rates["USD_VND"] == Decimal("24000")
+
+
+def test_refresh_failure_persists_error_status() -> None:
+    old = StoredRates(
+        base="USD",
+        rates={"USD_VND": Decimal("24000"), "VND_USD": Decimal("1") / Decimal("24000")},
+        as_of=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        provider="exchangerate-api",
+        status="fresh",
+        last_refresh_status="success",
+        last_refresh_error=None,
+    )
+    repo = InMemoryExchangeRateRepo(initial=old)
+    client = FakeExchangeRateClient(fail=True, fail_message="upstream down")
+    svc = FxService(repo, client)
+    result = svc.refresh(admin_user_id="admin1")
+    assert result.ok is False
+    assert result.error == "upstream down"
+    assert result.stored is not None
+    assert result.stored.rates["USD_VND"] == Decimal("24000")
+    assert result.stored.last_refresh_status == "error"
+    assert result.stored.last_refresh_error == "upstream down"
+    got = repo.get_latest()
+    assert got is not None
+    assert got.rates["USD_VND"] == Decimal("24000")
+    assert got.status == "fresh"
+    assert got.last_refresh_status == "error"
+    assert got.last_refresh_error == "upstream down"
+    assert repo.save_calls == 0
+    assert repo.mark_refresh_failure_calls == 1
 
 
 def test_get_rates_never_calls_client() -> None:

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
-from typing import List
+from typing import List, Tuple
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+
+def _disable_env_file() -> bool:
+    """Skip .env so pytest (and explicit opt-out) see code defaults."""
+    if os.environ.get("OPENPORTFO_DISABLE_ENV_FILE") == "1":
+        return True
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    return False
 
 
 class Settings(BaseSettings):
@@ -20,6 +30,19 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        if _disable_env_file():
+            return (init_settings, env_settings, file_secret_settings)
+        return (init_settings, env_settings, dotenv_settings, file_secret_settings)
 
     app_name: str = Field(default="OpenPortfo", alias="APP_NAME")
     app_env: str = Field(default="local", alias="APP_ENV")  # local | test | prod
@@ -62,9 +85,9 @@ class Settings(BaseSettings):
     data_bucket: str = Field(default="", alias="DATA_BUCKET")
 
     # Third-party (never commit real secrets)
-    exchange_rate_api_key: str = Field(default="", alias="EXCHANGE_RATE_API_KEY")
-    coingecko_api_key: str = Field(default="", alias="COINGECKO_API_KEY")
-    vnstock_api_key: str = Field(default="", alias="VNSTOCK_API_KEY")
+    exchange_rate_api_key: str = Field(default="", alias="EXCHANGE_RATE_API_KEY", repr=False)
+    coingecko_api_key: str = Field(default="", alias="COINGECKO_API_KEY", repr=False)
+    vnstock_api_key: str = Field(default="", alias="VNSTOCK_API_KEY", repr=False)
 
     # Market client mode: fixture (default for tests) | http (live HTTP when aws/prod)
     market_client_mode: str = Field(default="fixture", alias="MARKET_CLIENT_MODE")

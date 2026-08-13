@@ -31,12 +31,25 @@ def pnl_percent(pnl: Decimal, cost: Decimal) -> Optional[Decimal]:
     return pnl / cost
 
 
+def _currency_mismatch(holding: Holding, quote: PriceQuote) -> bool:
+    """True when both sides have a currency and they differ (case-insensitive)."""
+    qc = (quote.currency or "").strip()
+    hc = (holding.currency or "").strip()
+    if not qc or not hc:
+        return False
+    return qc.upper() != hc.upper()
+
+
 def native_line(holding: Holding, quote: PriceQuote) -> PortfolioLine:
     """Value a single holding against a matching quote (native currency).
 
     Assumes quote is for the same asset; caller is responsible for matching.
-    Uses holding.currency as line currency (quote currency should match).
+    Uses holding.currency as line currency. If quote.currency differs,
+    treat as missing price (do not mix e.g. USD into a VND bucket).
     """
+    if _currency_mismatch(holding, quote):
+        return _missing_line(holding)
+
     market_value = holding.qty * quote.price
     cost_basis = holding.qty * holding.avg_cost
     pnl = market_value - cost_basis
@@ -91,8 +104,9 @@ def compute_native_portfolio(
 ) -> PortfolioSummary:
     """Compute per-line native valuation and totals grouped by currency.
 
-    Lines without a matching quote (asset_type + symbol) are flagged
-    ``missing_price`` and excluded from ``totals_by_currency``.
+    Lines without a matching quote (asset_type + symbol), or with a
+    quote/holding currency mismatch, are flagged ``missing_price`` and
+    excluded from ``totals_by_currency``.
     """
     quote_map: dict[tuple[str, str], PriceQuote] = {
         _quote_key(q.asset_type, q.symbol): q for q in quotes
@@ -111,6 +125,8 @@ def compute_native_portfolio(
 
         line = native_line(holding, quote)
         lines.append(line)
+        if line.missing_price:
+            continue
 
         assert line.market_value is not None and line.cost_basis is not None
         bucket = acc.setdefault(

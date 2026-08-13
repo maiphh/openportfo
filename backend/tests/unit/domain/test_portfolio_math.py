@@ -184,6 +184,31 @@ def test_missing_quote_excluded_from_totals_and_flagged() -> None:
     assert usd.cost_basis == Decimal("10000")
 
 
+def test_usd_quote_vnd_holding_is_missing_price() -> None:
+    """USD price must not be multiplied into a VND bucket."""
+    h = _holding(symbol="BTC", qty="1", avg_cost="10000", currency="VND")
+    q = _quote(symbol="BTC", price="20000", currency="USD")
+
+    line = native_line(h, q)
+    assert line.missing_price is True
+    assert line.market_value is None
+    assert line.cost_basis is None
+    assert line.pnl is None
+    assert line.price is None
+
+    summary = compute_native_portfolio([h], [q])
+    assert len(summary.lines) == 1
+    assert summary.lines[0].missing_price is True
+    assert summary.totals_by_currency == {}
+
+
+def test_currency_mismatch_case_insensitive() -> None:
+    h = _holding(symbol="BTC", qty="1", avg_cost="10000", currency="vnd")
+    q = _quote(symbol="BTC", price="20000", currency="usd")
+    line = native_line(h, q)
+    assert line.missing_price is True
+
+
 # ---------------------------------------------------------------------------
 # get_rate
 # ---------------------------------------------------------------------------

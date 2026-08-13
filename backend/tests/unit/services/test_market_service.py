@@ -74,6 +74,22 @@ def test_search_stock_by_ticker() -> None:
     assert any(r.symbol == "FPT" for r in results)
 
 
+def test_list_assets_stock_catalog() -> None:
+    svc, _, stock, _ = _svc()
+    results = svc.list_assets("stock", limit=250)
+    assert len(results) > 3
+    assert any(r.symbol == "VCB" for r in results)
+    assert all(r.asset_type == "stock" for r in results)
+    _ = stock
+
+
+def test_list_assets_crypto_catalog() -> None:
+    svc, _, _, _ = _svc()
+    results = svc.list_assets("crypto", limit=20)
+    assert len(results) == 20
+    assert results[0].asset_id == "bitcoin"
+
+
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
@@ -286,3 +302,138 @@ def test_get_quotes_empty_keys() -> None:
     svc, crypto, _, _ = _svc()
     assert svc.get_quotes([]) == []
     assert crypto.price_calls == 0
+
+
+class _IdAsSymbolCrypto:
+    """CoinGecko-like client: PriceQuote.symbol is the uppercased coin id."""
+
+    def __init__(self, prices: dict[str, Decimal]) -> None:
+        self.price_calls = 0
+        self.last_price_ids: list[str] = []
+        self._prices = prices
+
+    def search(self, q: str):
+        return []
+
+    def list_all(self, *, limit: int = 250):
+        return []
+
+    def get_simple_prices(self, ids, vs: str = "usd"):
+        self.price_calls += 1
+        self.last_price_ids = [str(i) for i in ids]
+        now = datetime.now(timezone.utc)
+        out: list[PriceQuote] = []
+        for coin_id in ids:
+            key = str(coin_id).lower()
+            if key not in self._prices:
+                continue
+            out.append(
+                PriceQuote(
+                    asset_type="crypto",
+                    symbol=key.upper(),
+                    price=self._prices[key],
+                    currency="USD",
+                    as_of=now,
+                )
+            )
+        return out
+
+    def get_market_chart(self, id: str, range: str) -> list:
+        return []
+
+
+def test_get_quotes_matches_coingecko_id_as_symbol() -> None:
+    """HTTP client returns symbol=BITCOIN; match by requested asset_id."""
+    crypto = _IdAsSymbolCrypto({"bitcoin": Decimal("65000")})
+    svc, _, _, cache = _svc(crypto=crypto)
+
+    quotes = svc.get_quotes([("crypto", "BTC", "bitcoin")])
+
+    assert len(quotes) == 1
+    assert quotes[0].symbol == "BTC"
+    assert quotes[0].price == Decimal("65000")
+    assert crypto.last_price_ids == ["bitcoin"]
+    assert cache.put_calls == 1
+
+
+def test_get_quotes_does_not_assign_unrelated_single_quote() -> None:
+    """One leftover quote must not be bound to a different requested id."""
+    crypto = _IdAsSymbolCrypto({"ethereum": Decimal("3500")})
+    svc, _, _, cache = _svc(crypto=crypto)
+
+    quotes = svc.get_quotes([("crypto", "BTC", "bitcoin")])
+
+    assert quotes == []
+    assert cache.put_calls == 0
+
+
+def test_get_quotes_batch_does_not_cross_assign_id_symbols() -> None:
+    crypto = _IdAsSymbolCrypto({"bitcoin": Decimal("65000")})
+    svc, _, _, cache = _svc(crypto=crypto)
+
+    quotes = svc.get_quotes(
+        [
+            ("crypto", "BTC", "bitcoin"),
+            ("crypto", "ETH", "ethereum"),
+        ]
+    )
+
+    assert len(quotes) == 1
+    assert quotes[0].symbol == "BTC"
+    assert quotes[0].price == Decimal("65000")
+    cached_eth = cache.get("crypto", "ETH", allow_expired=True)
+    assert cached_eth is None
+
+
+def test_get_quotes_missing_asset_id_does_not_cache_other_coin() -> None:
+    """Fallback request is symbol.lower(); do not store a different coin as BTC."""
+    crypto = _IdAsSymbolCrypto({"bitcoin": Decimal("65000")})
+    svc, _, _, cache = _svc(crypto=crypto)
+
+    quotes = svc.get_quotes([("crypto", "BTC")])
+
+    assert quotes == []
+    assert crypto.last_price_ids == ["btc"]
+    assert cache.get("crypto", "BTC", allow_expired=True) is None
+
+
+def test_http_vnstock_search_tries_live_then_fixture(monkeypatch) -> None:
+    from app.adapters.vnstock.http_client import HttpVnstockClient
+    from app.ports.market import AssetSearchResult
+
+    client = HttpVnstockClient(use_fixture_fallback=True)
+    client._live = True
+    live_hit = AssetSearchResult(
+        symbol="AAA",
+        name="Live Co",
+        asset_id="AAA",
+        asset_type="stock",
+        currency="VND",
+    )
+    monkeypatch.setattr(client, "_live_search", lambda q: [live_hit])
+    results = client.search("aaa")
+    assert results[0].symbol == "AAA"
+    assert results[0].name == "Live Co"
+
+
+def test_http_vnstock_search_falls_back_when_live_empty(monkeypatch) -> None:
+    from app.adapters.vnstock.http_client import HttpVnstockClient
+
+    client = HttpVnstockClient(use_fixture_fallback=True)
+    client._live = True
+    monkeypatch.setattr(client, "_live_search", lambda q: [])
+    results = client.search("vinamilk")
+    assert any(r.symbol == "VNM" for r in results)
+
+
+def test_http_vnstock_history_tries_live_then_fixture(monkeypatch) -> None:
+    from app.adapters.vnstock.http_client import HttpVnstockClient
+
+    client = HttpVnstockClient(use_fixture_fallback=True)
+    client._live = True
+    monkeypatch.setattr(client, "_live_history", lambda s, r: [[1, 2.5]])
+    assert client.get_history("VNM", "7d") == [[1, 2.5]]
+
+    monkeypatch.setattr(client, "_live_history", lambda s, r: (_ for _ in ()).throw(RuntimeError("down")))
+    # fixture default is empty
+    assert client.get_history("VNM", "7d") == []

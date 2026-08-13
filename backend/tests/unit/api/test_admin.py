@@ -50,16 +50,24 @@ def test_admin_get_put_settings() -> None:
     profiles.set_role("admin1", "admin")
     r = client.get("/api/admin/settings", headers=_auth("admin1"))
     assert r.status_code == 200
-    assert "jobs" in r.json()
+    jobs = r.json()["jobs"]
+    assert "news" in jobs
+    assert "snapshot" in jobs
+    assert "email" in jobs
+    assert "price" in jobs
     r2 = client.put(
         "/api/admin/settings",
         headers=_auth("admin1"),
-        json={"emailEnabled": True, "jobs": {"news": False, "snapshot": True, "email": False}},
+        json={
+            "emailEnabled": True,
+            "jobs": {"news": False, "snapshot": True, "email": False, "price": False},
+        },
     )
     assert r2.status_code == 200
     body = r2.json()
     assert body["emailEnabled"] is True
     assert body["jobs"]["news"] is False
+    assert body["jobs"]["price"] is False
 
 
 def test_rss_crud() -> None:

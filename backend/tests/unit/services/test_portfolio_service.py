@@ -343,6 +343,27 @@ def test_preferred_currency_triggers_fx_when_rates_present() -> None:
     assert view.summary.market_value_display == Decimal("1000000000")
 
 
+def test_usd_quote_vnd_holding_excluded_from_totals() -> None:
+    """Crypto USD quote on a VND holding is missing_price, not a VND total."""
+    svc, holdings, _, _, _, _ = _svc()
+    holdings.create(
+        _holding(
+            symbol="BTC",
+            asset_id="bitcoin",
+            qty="1",
+            avg_cost="500000000",
+            currency="VND",
+        )
+    )
+
+    view = svc.get_portfolio("alice")
+
+    assert len(view.summary.lines) == 1
+    assert view.summary.lines[0].missing_price is True
+    assert view.summary.lines[0].market_value is None
+    assert view.summary.totals_by_currency == {}
+
+
 def test_no_duplicate_math_in_service_module() -> None:
     """Service must not re-implement pnl/market_value formulas."""
     import app.services.portfolio_service as mod

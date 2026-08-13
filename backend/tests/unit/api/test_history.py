@@ -107,3 +107,19 @@ def test_hit_skips_market() -> None:
     assert r.json()["source"] == "cache"
     assert getattr(crypto, "chart_calls", 0) == 0
     assert storage.put_calls == 0
+
+
+def test_empty_market_synthesizes_without_storing_as_live() -> None:
+    client, storage, crypto, _ = _setup()
+    r = client.get(
+        "/api/assets/bitcoin/history",
+        headers=_auth(),
+        params={"range": "7d", "type": "crypto"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "synthetic"
+    assert body["assetId"] == "bitcoin"
+    assert len(body["points"]) >= 1
+    assert crypto.chart_calls == 1
+    assert storage.put_calls == 0

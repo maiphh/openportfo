@@ -56,6 +56,19 @@ def _normalize_symbol(symbol: str) -> str:
     return s
 
 
+def _crypto_quote_matches(quote: PriceQuote, miss: QuoteKey, coin_id: str) -> bool:
+    """True when quote is this request (ticker or coin id), not a different coin."""
+    qsym = quote.symbol.upper()
+    if qsym == miss.symbol.upper():
+        return True
+    if qsym == coin_id.upper():
+        return True
+    aid = (miss.asset_id or "").strip()
+    if aid and qsym == aid.upper():
+        return True
+    return False
+
+
 def _parse_quote_key(item: QuoteKey | tuple) -> QuoteKey:
     if isinstance(item, QuoteKey):
         at = _normalize_type(item.asset_type)
@@ -110,6 +123,19 @@ class MarketService:
         if at == "crypto":
             return list(self._crypto.search(query))
         return list(self._stock.search(query))
+
+    def list_assets(
+        self,
+        asset_type: str,
+        *,
+        limit: int = 250,
+    ) -> list[AssetSearchResult]:
+        """Browse the full catalog for ``crypto`` or ``stock`` (capped)."""
+        at = _normalize_type(asset_type)
+        cap = max(1, min(int(limit), 2000))
+        if at == "crypto":
+            return list(self._crypto.list_all(limit=cap))
+        return list(self._stock.list_all(limit=cap))
 
     def get_quotes(
         self,
@@ -214,26 +240,34 @@ class MarketService:
                 raise MarketDataError(detail) from exc
             return
 
-        # Index by symbol (upper) and by id for flexible matching.
-        by_symbol: dict[str, PriceQuote] = {q.symbol.upper(): q for q in quotes}
-        # Map ids back: if client returns symbol matching our key, use that.
+        # Index by ticker and by coin id (request key / uppercased id-as-symbol).
+        by_symbol: dict[str, PriceQuote] = {}
+        by_id: dict[str, PriceQuote] = {}
+        for q in quotes:
+            by_symbol[q.symbol.upper()] = q
+            by_id[q.symbol.lower()] = q
+
         for coin_id, keys in id_for.items():
+            quote = by_id.get(coin_id)
+            if quote is None:
+                for m in keys:
+                    quote = by_symbol.get(m.symbol)
+                    if quote is not None:
+                        break
+            # Single leftover quote is used only when it *is* this requested id
+            # (never assign quotes[0] just because counts are 1).
+            if quote is None and len(quotes) == 1:
+                only = quotes[0]
+                if only.symbol.lower() == coin_id or only.symbol.upper() in {
+                    k.symbol for k in keys
+                }:
+                    quote = only
+            if quote is None:
+                continue
             for m in keys:
-                quote = by_symbol.get(m.symbol)
-                if quote is None:
-                    # Try any quote whose symbol equals upper id or we match first remaining
-                    quote = by_symbol.get(coin_id.upper())
-                if quote is None and len(quotes) == 1 and len(keys) == 1:
-                    quote = quotes[0]
-                if quote is None:
-                    # Match by iterating: prefer symbol match on miss list
-                    for q in quotes:
-                        if q.symbol.upper() == m.symbol:
-                            quote = q
-                            break
-                if quote is None:
+                if not _crypto_quote_matches(quote, m, coin_id):
                     continue
-                # Normalize symbol to requested key for cache consistency
+                # Normalize symbol to requested ticker for cache consistency
                 stored = PriceQuote(
                     asset_type="crypto",
                     symbol=m.symbol,

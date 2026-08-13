@@ -27,6 +27,7 @@ def settings_to_item(settings: SystemSettings) -> dict[str, Any]:
             "jobsNews": bool(settings.jobs_news),
             "jobsSnapshot": bool(settings.jobs_snapshot),
             "jobsEmail": bool(settings.jobs_email),
+            "jobsPrice": bool(settings.jobs_price),
             "defaultDisplayCurrency": settings.default_display_currency or "USD",
         }
     )
@@ -43,6 +44,7 @@ def item_to_settings(item: Optional[dict[str, Any]]) -> SystemSettings:
         jobs_news=bool(item.get("jobsNews", True)),
         jobs_snapshot=bool(item.get("jobsSnapshot", True)),
         jobs_email=bool(item.get("jobsEmail", False)),
+        jobs_price=bool(item.get("jobsPrice", True)),
         default_display_currency=str(item.get("defaultDisplayCurrency") or "USD"),
     )
 
@@ -72,6 +74,7 @@ class DynamoSettingsRepo:
             jobs_news=settings.jobs_news,
             jobs_snapshot=settings.jobs_snapshot,
             jobs_email=settings.jobs_email,
+            jobs_price=settings.jobs_price,
             default_display_currency=settings.default_display_currency,
         )
 

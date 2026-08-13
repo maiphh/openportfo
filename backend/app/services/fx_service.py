@@ -124,20 +124,18 @@ class FxService:
     def refresh(self, *, admin_user_id: str, base: str = "USD") -> FxRefreshResult:
         """Fetch provider once; save on success; keep previous on failure."""
         if self._client is None:
-            previous = self._repo.get_latest()
-            return FxRefreshResult(
-                ok=False,
-                stored=previous,
-                error="Exchange rate client not configured",
-            )
+            error = "Exchange rate client not configured"
+            stored = self._repo.mark_refresh_failure(error)
+            return FxRefreshResult(ok=False, stored=stored, error=error)
         try:
             snapshot = self._client.fetch_latest(base=base)
         except ProviderError as exc:
-            previous = self._repo.get_latest()
-            return FxRefreshResult(ok=False, stored=previous, error=exc.detail)
+            stored = self._repo.mark_refresh_failure(exc.detail)
+            return FxRefreshResult(ok=False, stored=stored, error=exc.detail)
         except Exception as exc:  # noqa: BLE001 — surface as provider failure
-            previous = self._repo.get_latest()
-            return FxRefreshResult(ok=False, stored=previous, error=str(exc) or "Provider error")
+            error = str(exc) or "Provider error"
+            stored = self._repo.mark_refresh_failure(error)
+            return FxRefreshResult(ok=False, stored=stored, error=error)
 
         rates = ensure_pair_rates(snapshot.rates, base=snapshot.base or base)
         normalized = RateSnapshot(

@@ -25,6 +25,7 @@ Open http://localhost:5173
 3. **Me** bootstraps the profile on first call.
 
 Admin screens need `role=admin` on the profile (set in tests/backend; not via this UI).
+For local testing, the **Me** tab includes a debug-only promotion button. The backend endpoint returns 404 outside `APP_ENV=local/test`.
 
 ## Screens
 

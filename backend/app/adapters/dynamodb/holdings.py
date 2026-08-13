@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
 
 from app.adapters.dynamodb.base import (
     dt_to_iso,
@@ -119,12 +120,6 @@ class DynamoHoldingsRepo:
         return item_to_holding(item) if item else None
 
     def create(self, holding: HoldingRecord) -> HoldingRecord:
-        sk = holding_sk(holding.asset_type, holding.symbol)
-        existing = self._table.get_item(Key={"userId": holding.user_id, "sk": sk}).get("Item")
-        if existing:
-            raise DuplicateHoldingError(
-                f"Holding already exists: {holding.asset_type}/{holding.symbol}"
-            )
         stored = HoldingRecord(
             user_id=holding.user_id,
             asset_type=holding.asset_type,
@@ -137,7 +132,18 @@ class DynamoHoldingsRepo:
             created_at=holding.created_at,
             updated_at=holding.updated_at,
         )
-        self._table.put_item(Item=holding_to_item(stored))
+        try:
+            self._table.put_item(
+                Item=holding_to_item(stored),
+                ConditionExpression="attribute_not_exists(userId) AND attribute_not_exists(sk)",
+            )
+        except ClientError as exc:
+            code = (exc.response or {}).get("Error", {}).get("Code", "")
+            if code == "ConditionalCheckFailedException":
+                raise DuplicateHoldingError(
+                    f"Holding already exists: {holding.asset_type}/{holding.symbol}"
+                ) from exc
+            raise
         return stored
 
     def update(

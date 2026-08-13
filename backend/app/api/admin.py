@@ -14,6 +14,7 @@ from app.core.deps import (
     get_rss_sources_repo,
     get_settings_repo,
     require_admin,
+    set_market_service,
 )
 from app.ports.admin import (
     AdminNotFoundError,
@@ -44,6 +45,7 @@ def settings_to_dict(s: SystemSettings) -> dict[str, Any]:
             "news": s.jobs_news,
             "snapshot": s.jobs_snapshot,
             "email": s.jobs_email,
+            "price": s.jobs_price,
         },
         "defaultDisplayCurrency": s.default_display_currency,
     }
@@ -61,6 +63,7 @@ class SettingsUpdate(BaseModel):
     jobs_news: Optional[bool] = Field(default=None, alias="jobsNews")
     jobs_snapshot: Optional[bool] = Field(default=None, alias="jobsSnapshot")
     jobs_email: Optional[bool] = Field(default=None, alias="jobsEmail")
+    jobs_price: Optional[bool] = Field(default=None, alias="jobsPrice")
     default_display_currency: Optional[str] = Field(
         default=None, alias="defaultDisplayCurrency"
     )
@@ -111,6 +114,8 @@ def put_admin_settings(
             current.jobs_snapshot = bool(jobs["snapshot"])
         if "email" in jobs:
             current.jobs_email = bool(jobs["email"])
+        if "price" in jobs:
+            current.jobs_price = bool(jobs["price"])
     if "email_time" in data and data["email_time"] is not None:
         current.email_time = data["email_time"]
     if "timezone" in data and data["timezone"] is not None:
@@ -125,9 +130,12 @@ def put_admin_settings(
         current.jobs_snapshot = data["jobs_snapshot"]
     if "jobs_email" in data and data["jobs_email"] is not None:
         current.jobs_email = data["jobs_email"]
+    if "jobs_price" in data and data["jobs_price"] is not None:
+        current.jobs_price = data["jobs_price"]
     if "default_display_currency" in data and data["default_display_currency"] is not None:
         current.default_display_currency = data["default_display_currency"]
     saved = repo.save(current)
+    set_market_service(None)
     return settings_to_dict(saved)
 
 
