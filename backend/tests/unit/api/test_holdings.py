@@ -737,7 +737,8 @@ def test_update_with_unknown_asset_id_rejects() -> None:
     assert "invalid" in r.json()["detail"].lower() or "unknown" in r.json()["detail"].lower()
 
 
-def test_provider_failure_on_create_returns_503() -> None:
+def test_provider_failure_on_create_raises_market_data_error() -> None:
+    """Service-level: catalog outage surfaces as MarketDataError (not ValidationError)."""
     from app.ports.market import MarketDataError
 
     class BoomMarket:
@@ -760,3 +761,38 @@ def test_provider_failure_on_create_returns_503() -> None:
             currency="USD",
             asset_id="bitcoin",
         )
+
+
+def test_provider_failure_on_create_http_503() -> None:
+    """API maps MarketDataError from resolve → HTTP 503."""
+    from app.ports.market import MarketDataError
+
+    class BoomMarket:
+        def search(self, q: str, asset_type: str) -> list:
+            raise MarketDataError("upstream down")
+
+        def list_assets(self, asset_type: str, *, limit: int = 250) -> list:
+            raise MarketDataError("upstream down")
+
+    client, h_repo, _ = _make_client()
+    boom = BoomMarket()
+    # Override the wired MarketService with a failing resolver.
+    from app.core.deps import get_market_service
+
+    client.app.dependency_overrides[get_market_service] = lambda: boom  # type: ignore[index]
+
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            symbol="BTC",
+            asset_id="bitcoin",
+            qty="1",
+            avg_cost="40000",
+            currency="USD",
+            note=None,
+        ),
+    )
+    assert r.status_code == 503, r.text
+    assert "upstream" in r.json()["detail"].lower()
+    assert h_repo.list("alice") == []

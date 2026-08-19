@@ -185,6 +185,8 @@ export default function PortfolioDashboard() {
             avgCost: payload.avgCost,
             currency: costCurrency,
             note: payload.note,
+            // Re-validate catalog identity on edit (AC5 PUT path).
+            ...(editing.assetId ? { assetId: editing.assetId } : {}),
           },
           { token },
         );

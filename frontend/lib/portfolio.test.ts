@@ -192,6 +192,7 @@ describe("portfolio API client", () => {
       avgCost: "25000000",
       currency: "VND",
       note: "rebalance",
+      assetId: "bitcoin",
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -206,6 +207,7 @@ describe("portfolio API client", () => {
           avgCost: "25000000",
           currency: "VND",
           note: "rebalance",
+          assetId: "bitcoin",
         }),
       }),
     );
