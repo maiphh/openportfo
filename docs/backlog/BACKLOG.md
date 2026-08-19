@@ -1,9 +1,10 @@
-﻿# Backlog board
+# Backlog board
 
 **Last updated:** 2026-08-19  
 **How to use:** see `docs/backlog/README.md`
 
-**Orchestration:** PLAN `6cc30007` complete on `integration/backlog-batch-6cc30007` (**not merged to main**).
+**Orchestration:** PLAN `6cc30007` complete on `integration/backlog-batch-6cc30007` (**not merged to main**).  
+**This batch:** review fixes **BL-011..014** then follow-ons **BL-005..010**. Never merge to `main`.
 
 ---
 
@@ -11,10 +12,16 @@
 
 | ID | Title | Priority | Status | Owner | Feature file | Notes |
 |----|-------|----------|--------|-------|--------------|-------|
-| BL-001 | Portfolio dashboard & holdings (1 per user) | P0 | `done` | Eng | `features/BL-001-portfolio-dashboard.md` | On integration |
-| BL-002 | Asset detail pages + global click-through | P0 | `done` | Eng | `features/BL-002-asset-detail.md` | On integration |
-| BL-003 | Session display currency (app-wide) | P0 | `done` | Eng | `features/BL-003-session-currency.md` | On integration |
-| BL-004 | Markets live data + skeletons (no mock) | P0 | `done` | Eng | `features/BL-004-markets-live-skeleton.md` | Merged into integration |
+| BL-011 | Markets stale-while-revalidate + shared BE cache | P0 | `ready` | Eng | `features/BL-011-markets-stale-cache.md` | Stock slow; FE always reloads |
+| BL-012 | Configurable 2-decimal number format | P0 | `ready` | Eng | `features/BL-012-number-format.md` | App-wide display |
+| BL-013 | Portfolio Avg cost / Price in session FX | P0 | `ready` | Eng | `features/BL-013-portfolio-unit-fx.md` | Native-only columns |
+| BL-014 | Portfolio chart + GitHub-style PnL heatmap | P0 | `ready` | Eng | `features/BL-014-portfolio-charts.md` | Snapshots |
+| BL-005 | Watchlist CRUD UI | P1 | `ready` | Eng | `features/BL-005-watchlist-ui.md` | APIs exist |
+| BL-006 | Cognito Hosted UI | P1 | `ready` | Eng | `features/BL-006-cognito-hosted-ui.md` | Replaces token paste |
+| BL-007 | TopStories → real news | P1 | `ready` | Eng | `features/BL-007-top-stories-news.md` | Drop mock headlines |
+| BL-008 | Admin FX refresh UI | P1 | `ready` | Eng | `features/BL-008-admin-fx-refresh.md` | BL-003 panel |
+| BL-009 | Live SearchDialog | P1 | `ready` | Eng | `features/BL-009-live-search-dialog.md` | Drop mock universe |
+| BL-010 | BE: no markets catalog fixture fallback | P1 | `ready` | Eng | `features/BL-010-no-markets-fixture.md` | Http mode 502 |
 
 ---
 
@@ -42,16 +49,3 @@
 | ID | Title | Status | Reason |
 |----|-------|--------|--------|
 | — | — | — | — |
-
----
-
-## Suggested follow-ons (not started)
-
-| ID | Title | Why |
-|----|-------|-----|
-| BL-005 | Watchlist CRUD UI | Deferred from BL-001; APIs exist |
-| BL-006 | Cognito Hosted UI in Artryx | Replaces provisional `artryx.accessToken` paste |
-| BL-007 | TopStories → real news API | Markets still shows mock headlines |
-| BL-008 | Admin FX refresh UI | Complements BL-003 read-only rates panel |
-| BL-009 | SearchDialog live `/api/assets/search` | Still mock universe |
-| BL-010 | BE markets: no catalog fixture fallback | Hardens “no catalog” end-to-end |
