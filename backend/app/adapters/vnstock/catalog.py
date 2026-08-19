@@ -98,3 +98,33 @@ def stock_prices() -> dict[str, tuple[Decimal, str]]:
     return {
         symbol: (Decimal(price), "VND") for symbol, _name, price in _VN_STOCKS
     }
+
+
+_STOCK_PROFILES: dict[str, dict] = {
+    "VNM": {
+        "description": "Vinamilk is Vietnam's largest dairy company, producing milk and related products.",
+        "industry": "Food & Beverage",
+        "exchange": "HOSE",
+        "homepage": "https://www.vinamilk.com.vn",
+        "country": "VN",
+    },
+    "FPT": {
+        "description": "FPT Corporation is a Vietnam technology group spanning software, telecom, and education.",
+        "industry": "Information Technology",
+        "exchange": "HOSE",
+        "homepage": "https://fpt.com.vn",
+        "country": "VN",
+    },
+    "VCB": {
+        "description": "Vietcombank is one of Vietnam's largest commercial banks.",
+        "industry": "Banking",
+        "exchange": "HOSE",
+        "homepage": "https://www.vietcombank.com.vn",
+        "country": "VN",
+    },
+}
+
+
+def stock_profile_meta(symbol: str) -> dict:
+    """Fixture company extras keyed by ticker."""
+    return dict(_STOCK_PROFILES.get((symbol or "").strip().upper()) or {})

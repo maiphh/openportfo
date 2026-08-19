@@ -181,7 +181,7 @@ class MarketService:
             if not force:
                 cached = self._cache.get(k.asset_type, k.symbol, allow_expired=False)
                 if cached is not None:
-                    results[(k.asset_type, k.symbol)] = cached.to_quote()
+                    results[(k.asset_type, k.symbol)] = cached.to_quote(stale=False)
                     continue
             misses.append(k)
 
@@ -232,7 +232,7 @@ class MarketService:
             for m in misses:
                 stale = self._cache.get(m.asset_type, m.symbol, allow_expired=True)
                 if stale is not None:
-                    results[(m.asset_type, m.symbol)] = stale.to_quote()
+                    results[(m.asset_type, m.symbol)] = stale.to_quote(stale=True)
                 else:
                     missing_after_stale.append(m)
             if missing_after_stale:
@@ -274,6 +274,7 @@ class MarketService:
                     price=quote.price,
                     currency=quote.currency,
                     as_of=quote.as_of,
+                    stale=False,
                 )
                 self._cache.put(stored, ttl)
                 results[(m.asset_type, m.symbol)] = stored
@@ -293,7 +294,7 @@ class MarketService:
             for m in misses:
                 stale = self._cache.get(m.asset_type, m.symbol, allow_expired=True)
                 if stale is not None:
-                    results[(m.asset_type, m.symbol)] = stale.to_quote()
+                    results[(m.asset_type, m.symbol)] = stale.to_quote(stale=True)
                 else:
                     missing_after_stale.append(m)
             if missing_after_stale:
@@ -312,6 +313,7 @@ class MarketService:
                 price=quote.price,
                 currency=quote.currency,
                 as_of=quote.as_of,
+                stale=False,
             )
             self._cache.put(stored, ttl)
             results[(m.asset_type, m.symbol)] = stored
@@ -327,6 +329,28 @@ def search_result_to_dict(r: AssetSearchResult) -> dict:
     }
 
 
+def quote_to_dict(
+    quote: PriceQuote,
+    *,
+    asset_id: Optional[str] = None,
+    source: str = "cache-first",
+) -> dict:
+    """Serialize a quote for watchlist / asset / batch quote APIs."""
+    as_of = quote.as_of.isoformat()
+    if quote.as_of.tzinfo is None and not as_of.endswith("Z"):
+        as_of = as_of + "Z"
+    return {
+        "assetType": quote.asset_type,
+        "symbol": quote.symbol,
+        "assetId": asset_id,
+        "price": format(quote.price, "f"),
+        "currency": quote.currency,
+        "asOf": as_of,
+        "stale": bool(quote.stale),
+        "source": source,
+    }
+
+
 __all__ = [
     "MarketService",
     "QuoteKey",
@@ -334,4 +358,5 @@ __all__ = [
     "MarketDataError",
     "DEFAULT_PRICE_CACHE_TTL_SECONDS",
     "search_result_to_dict",
+    "quote_to_dict",
 ]

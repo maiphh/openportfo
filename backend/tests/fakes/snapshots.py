@@ -21,5 +21,22 @@ class InMemorySnapshotRepo:
         item = self._data.get((user_id, date))
         return deepcopy(item) if item else None
 
+    def list(
+        self,
+        user_id: str,
+        *,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> list[SnapshotRecord]:
+        rows = [
+            deepcopy(record)
+            for (uid, date), record in self._data.items()
+            if uid == user_id
+            and (date_from is None or date >= date_from)
+            and (date_to is None or date <= date_to)
+        ]
+        rows.sort(key=lambda r: r.date)
+        return rows
+
 
 __all__ = ["InMemorySnapshotRepo"]

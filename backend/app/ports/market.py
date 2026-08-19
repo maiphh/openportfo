@@ -5,7 +5,7 @@ Browser must never call external market APIs — only FastAPI via these ports.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Literal, Optional, Protocol, Sequence
 
@@ -32,6 +32,42 @@ class AssetSearchResult:
     asset_type: AssetType
     # Optional extras from providers (ignored by API if unused)
     currency: Optional[str] = None
+
+
+@dataclass
+class AssetProfile:
+    """Provider profile for the asset detail page (crypto or VN stock)."""
+
+    asset_type: AssetType
+    symbol: str
+    asset_id: str
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    homepage: Optional[str] = None
+    categories: list[str] = field(default_factory=list)
+    market_cap_rank: Optional[int] = None
+    genesis_date: Optional[str] = None
+    hashing_algorithm: Optional[str] = None
+    circulating_supply: Optional[Decimal] = None
+    total_supply: Optional[Decimal] = None
+    max_supply: Optional[Decimal] = None
+    exchange: Optional[str] = None
+    industry: Optional[str] = None
+    country: Optional[str] = None
+    links: dict[str, str] = field(default_factory=dict)
+    change_percent_24h: Optional[Decimal] = None
+    change_percent_7d: Optional[Decimal] = None
+    change_percent_30d: Optional[Decimal] = None
+    market_cap: Optional[Decimal] = None
+    volume_24h: Optional[Decimal] = None
+    high_24h: Optional[Decimal] = None
+    low_24h: Optional[Decimal] = None
+    ath: Optional[Decimal] = None
+    atl: Optional[Decimal] = None
+    market_currency: Optional[str] = None
+    # "live" | "catalog" (cacheable) | "fixture-fallback" (do not persist)
+    source: str = "live"
 
 
 class CryptoMarketClient(Protocol):
@@ -61,6 +97,10 @@ class CryptoMarketClient(Protocol):
         """Historical series for coin ``id`` and range (e.g. ``7d``). Stub OK until S07."""
         ...
 
+    def get_profile(self, id: str) -> Optional[AssetProfile]:
+        """Coin profile/description. ``None`` if the id is unknown."""
+        ...
+
 
 class StockMarketClient(Protocol):
     """Port: vnstock (or fixture). Prices keyed by ticker symbol."""
@@ -81,10 +121,15 @@ class StockMarketClient(Protocol):
         """Historical series for stock ``symbol``. Stub OK until S07."""
         ...
 
+    def get_profile(self, symbol: str) -> Optional[AssetProfile]:
+        """Company profile/description. ``None`` if the ticker is unknown."""
+        ...
+
 
 __all__ = [
     "AssetType",
     "AssetSearchResult",
+    "AssetProfile",
     "CryptoMarketClient",
     "StockMarketClient",
     "MarketDataError",

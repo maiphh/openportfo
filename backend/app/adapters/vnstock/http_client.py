@@ -12,7 +12,7 @@ from typing import Any, Optional, Sequence
 
 from app.adapters.vnstock.client import FixtureVnstockClient
 from app.domain.models import PriceQuote
-from app.ports.market import AssetSearchResult, MarketDataError
+from app.ports.market import AssetProfile, AssetSearchResult, MarketDataError
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +198,25 @@ class HttpVnstockClient:
             return self._fallback.get_history(symbol, range)
         return []
 
+    def get_profile(self, symbol: str) -> Optional[AssetProfile]:
+        key = (symbol or "").strip().upper()
+        if not key:
+            return None
+        if self._live:
+            try:
+                live = self._live_profile(key)
+                if live is not None:
+                    live.source = "live"
+                    return live
+            except Exception:
+                pass
+        if self._fallback is not None:
+            fallback = self._fallback.get_profile(key)
+            if fallback is not None:
+                fallback.source = "fixture-fallback"
+            return fallback
+        return None
+
     def _map_listing(self, rec: dict[str, Any]) -> Optional[AssetSearchResult]:
         symbol = _pick(rec, _SYM_KEYS).upper()
         if not symbol:
@@ -277,6 +296,70 @@ class HttpVnstockClient:
 
         quote = Quote(symbol=symbol)
         return quote.history(start=start, end=end, interval="1D")
+
+    def _live_profile(self, symbol: str) -> Optional[AssetProfile]:
+        rec: dict[str, Any] = {}
+        rec.update(self._company_rows(symbol))
+        if not rec:
+            return None
+        name = _pick(rec, _NAME_KEYS) or symbol
+        description = _pick(
+            rec,
+            ("company_profile", "history", "history_dev", "description", "overview"),
+        ) or None
+        industry = _pick(rec, ("industry", "icb_name3", "icb_name2", "icb_name", "sector"))
+        exchange = _pick(rec, ("exchange", "exchange_name")) or "HOSE"
+        homepage = _pick(rec, ("website", "url", "homepage"))
+        if homepage and not homepage.startswith("http"):
+            homepage = f"https://{homepage}"
+        links = {"homepage": homepage} if homepage else {}
+        return AssetProfile(
+            asset_type="stock",
+            symbol=symbol,
+            asset_id=symbol,
+            name=name,
+            description=description,
+            homepage=homepage or None,
+            industry=industry or None,
+            exchange=exchange,
+            country="VN",
+            links=links,
+            market_currency="VND",
+        )
+
+    def _company_rows(self, symbol: str) -> dict[str, Any]:
+        merged: dict[str, Any] = {}
+        frames: list[Any] = []
+        try:
+            from vnstock import Company  # type: ignore
+
+            company = Company(symbol=symbol)
+            for method in ("overview", "profile"):
+                if hasattr(company, method):
+                    try:
+                        frames.append(getattr(company, method)())
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        if not frames:
+            try:
+                from vnstock import Vnstock  # type: ignore
+
+                company = Vnstock().stock(symbol=symbol, source="VCI").company
+                for method in ("overview", "profile"):
+                    if hasattr(company, method):
+                        try:
+                            frames.append(getattr(company, method)())
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+        for frame in frames:
+            rows = _records(frame)
+            if rows:
+                merged.update(rows[0])
+        return merged
 
     def _live_history(self, symbol: str, range: str) -> list:
         days = _RANGE_DAYS.get((range or "7d").lower(), 7)

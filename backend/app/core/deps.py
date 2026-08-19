@@ -28,7 +28,9 @@ from app.services.fx_service import FxService
 from app.services.history_service import HistoryService
 from app.services.market_service import MarketService
 from app.services.news_service import NewsService
+from app.services.asset_detail_service import AssetDetailService
 from app.services.portfolio_service import PortfolioService
+from app.services.snapshot_service import SnapshotService
 
 # Process-local stores (until set / first get)
 _user_profile_repo: Optional[UserProfileRepo] = None
@@ -44,12 +46,14 @@ _fx_service: Optional[FxService] = None
 _portfolio_service: Optional[PortfolioService] = None
 _object_storage: Optional[ObjectStorage] = None
 _history_service: Optional[HistoryService] = None
+_asset_detail_service: Optional[AssetDetailService] = None
 _news_repo: Optional[NewsRepo] = None
 _news_service: Optional[NewsService] = None
 _settings_repo: Optional[SettingsRepo] = None
 _rss_sources_repo: Optional[RssSourcesRepo] = None
 _job_runs_repo: Optional[JobRunsRepo] = None
 _snapshot_repo: Optional[SnapshotRepo] = None
+_snapshot_service: Optional[SnapshotService] = None
 _rss_fetcher: Optional[RssFetcher] = None
 
 
@@ -246,9 +250,10 @@ def get_crypto_market_client() -> CryptoMarketClient:
 
 
 def set_crypto_market_client(client: Optional[CryptoMarketClient]) -> None:
-    global _crypto_market_client, _market_service
+    global _crypto_market_client, _market_service, _asset_detail_service
     _crypto_market_client = client
     _market_service = None
+    _asset_detail_service = None
 
 
 def get_stock_market_client() -> StockMarketClient:
@@ -275,9 +280,10 @@ def get_stock_market_client() -> StockMarketClient:
 
 
 def set_stock_market_client(client: Optional[StockMarketClient]) -> None:
-    global _stock_market_client, _market_service
+    global _stock_market_client, _market_service, _asset_detail_service
     _stock_market_client = client
     _market_service = None
+    _asset_detail_service = None
 
 
 def get_price_cache_repo() -> PriceCacheRepo:
@@ -327,9 +333,10 @@ def get_market_service(
 
 
 def set_market_service(svc: Optional[MarketService]) -> None:
-    global _market_service, _portfolio_service
+    global _market_service, _portfolio_service, _asset_detail_service
     _market_service = svc
     _portfolio_service = None
+    _asset_detail_service = None
 
 
 # ---------------------------------------------------------------------------
@@ -357,10 +364,11 @@ def get_exchange_rate_repo() -> ExchangeRateRepo:
 
 
 def set_exchange_rate_repo(repo: Optional[ExchangeRateRepo]) -> None:
-    global _exchange_rate_repo, _portfolio_service, _fx_service
+    global _exchange_rate_repo, _portfolio_service, _fx_service, _asset_detail_service
     _exchange_rate_repo = repo
     _portfolio_service = None
     _fx_service = None
+    _asset_detail_service = None
 
 
 def get_exchange_rate_client(
@@ -455,9 +463,10 @@ def get_object_storage() -> ObjectStorage:
 
 
 def set_object_storage(storage: Optional[ObjectStorage]) -> None:
-    global _object_storage, _history_service
+    global _object_storage, _history_service, _asset_detail_service
     _object_storage = storage
     _history_service = None
+    _asset_detail_service = None
 
 
 def get_history_service() -> HistoryService:
@@ -472,8 +481,28 @@ def get_history_service() -> HistoryService:
 
 
 def set_history_service(svc: Optional[HistoryService]) -> None:
-    global _history_service
+    global _history_service, _asset_detail_service
     _history_service = svc
+    _asset_detail_service = None
+
+
+def get_asset_detail_service() -> AssetDetailService:
+    global _asset_detail_service
+    if _asset_detail_service is None:
+        _asset_detail_service = AssetDetailService(
+            get_market_service(),
+            get_history_service(),
+            get_crypto_market_client(),
+            get_stock_market_client(),
+            get_object_storage(),
+            fx_repo=get_exchange_rate_repo(),
+        )
+    return _asset_detail_service
+
+
+def set_asset_detail_service(svc: Optional[AssetDetailService]) -> None:
+    global _asset_detail_service
+    _asset_detail_service = svc
 
 
 # ---------------------------------------------------------------------------
@@ -621,8 +650,21 @@ def get_snapshot_repo() -> SnapshotRepo:
 
 
 def set_snapshot_repo(repo: Optional[SnapshotRepo]) -> None:
-    global _snapshot_repo
+    global _snapshot_repo, _snapshot_service
     _snapshot_repo = repo
+    _snapshot_service = None
+
+
+def get_snapshot_service() -> SnapshotService:
+    global _snapshot_service
+    if _snapshot_service is None:
+        _snapshot_service = SnapshotService(get_snapshot_repo())
+    return _snapshot_service
+
+
+def set_snapshot_service(svc: Optional[SnapshotService]) -> None:
+    global _snapshot_service
+    _snapshot_service = svc
 
 
 def get_rss_fetcher() -> RssFetcher:

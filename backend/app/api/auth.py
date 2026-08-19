@@ -66,6 +66,16 @@ def debug_make_current_user_admin(
     return profile_to_response(updated)
 
 
+@router.get("/api/settings")
+def get_user_settings(user: UserProfile = Depends(get_current_user)) -> dict[str, Any]:
+    """Settings slice of the current profile (alias of /auth/me fields)."""
+    return {
+        "newsKeywords": list(user.news_keywords),
+        "emailOptIn": user.email_opt_in,
+        "preferredCurrency": user.preferred_currency,
+    }
+
+
 @router.put("/api/settings")
 def put_settings(
     body: SettingsUpdate,

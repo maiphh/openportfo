@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from boto3.dynamodb.conditions import Key
+
 from app.adapters.dynamodb.base import (
     deep_from_dynamo,
     dt_to_iso,
@@ -65,6 +67,30 @@ class DynamoSnapshotRepo:
         resp = self._table.get_item(Key={"userId": user_id, "sk": snapshot_sk(date)})
         item = resp.get("Item")
         return item_to_snapshot(item) if item else None
+
+    def list(
+        self,
+        user_id: str,
+        *,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> list[SnapshotRecord]:
+        lo = snapshot_sk(date_from or "0000-01-01")
+        hi = snapshot_sk(date_to or "9999-12-31")
+        records: list[SnapshotRecord] = []
+        kwargs: dict[str, Any] = {
+            "KeyConditionExpression": Key("userId").eq(user_id) & Key("sk").between(lo, hi),
+        }
+        resp = self._table.query(**kwargs)
+        for raw in resp.get("Items") or []:
+            records.append(item_to_snapshot(raw))
+        while resp.get("LastEvaluatedKey"):
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+            resp = self._table.query(**kwargs)
+            for raw in resp.get("Items") or []:
+                records.append(item_to_snapshot(raw))
+        records.sort(key=lambda r: r.date)
+        return records
 
 
 __all__ = [

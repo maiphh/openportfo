@@ -26,13 +26,14 @@ class CachedPrice:
     as_of: datetime
     expires_at: datetime
 
-    def to_quote(self) -> PriceQuote:
+    def to_quote(self, *, stale: bool = False) -> PriceQuote:
         return PriceQuote(
             asset_type=self.asset_type,
             symbol=self.symbol,
             price=self.price,
             currency=self.currency,
             as_of=self.as_of,
+            stale=stale,
         )
 
     def is_fresh(self, now: Optional[datetime] = None) -> bool:

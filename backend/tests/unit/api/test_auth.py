@@ -246,6 +246,29 @@ def test_put_settings_persists() -> None:
     assert me["preferredCurrency"] == "VND"
 
 
+def test_get_settings_returns_slice() -> None:
+    client, _ = _make_client()
+    headers = _auth_header("dana")
+    client.get("/api/auth/me", headers=headers)
+    client.put(
+        "/api/settings",
+        headers=headers,
+        json={"newsKeywords": ["btc"], "emailOptIn": True, "preferredCurrency": "USD"},
+    )
+    r = client.get("/api/settings", headers=headers)
+    assert r.status_code == 200
+    assert r.json() == {
+        "newsKeywords": ["btc"],
+        "emailOptIn": True,
+        "preferredCurrency": "USD",
+    }
+
+
+def test_get_settings_requires_auth() -> None:
+    client, _ = _make_client()
+    assert client.get("/api/settings").status_code == 401
+
+
 def test_put_settings_requires_auth() -> None:
     client, _ = _make_client()
     r = client.put("/api/settings", json={"emailOptIn": True})

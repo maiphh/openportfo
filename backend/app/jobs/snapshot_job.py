@@ -43,9 +43,19 @@ def _view_to_payload(view: PortfolioView) -> dict[str, Any]:
         }
         for cur, t in summary.totals_by_currency.items()
     }
+    totals_display = None
+    if summary.market_value_display is not None:
+        totals_display = {
+            "currency": summary.display_currency,
+            "marketValue": _dec(summary.market_value_display),
+            "costBasis": _dec(summary.cost_basis_display),
+            "pnl": _dec(summary.pnl_display),
+        }
     return {
         "lines": lines,
         "totalsByCurrency": totals,
+        "totalsDisplay": totals_display,
+        "displayCurrency": summary.display_currency,
         "fxStatus": summary.fx_status,
         "rates": {k: _dec(v) for k, v in (view.fx_rates or {}).items()},
     }

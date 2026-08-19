@@ -169,6 +169,7 @@ def test_get_portfolio_200_shape_empty() -> None:
     assert data["lines"] == []
     assert data["totalsByCurrency"] == {}
     assert data["totalsDisplay"] is None
+    assert data["totalsByAssetClass"] == {}
     assert data["fx"]["status"] == "missing"
     assert data["fx"]["asOf"] is None
     assert data["fx"]["rates"] == {}
@@ -194,7 +195,10 @@ def test_get_portfolio_200_one_holding_shape() -> None:
     assert line["costBasis"] == "30000"
     assert line["pnl"] == "10000"
     assert line["missingPrice"] is False
+    assert line["stale"] is False
     assert isinstance(line["pnlPercent"], str)
+    assert "crypto" in data["totalsByAssetClass"]
+    assert data["totalsByAssetClass"]["crypto"]["marketValue"] == "40000"
 
     usd = data["totalsByCurrency"]["USD"]
     assert usd["marketValue"] == "40000"

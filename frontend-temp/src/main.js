@@ -81,6 +81,19 @@ function switchTab(name) {
 
 function renderPortfolio(data) {
   const host = $("portfolioTable");
+  const klass = $("portfolioClass");
+  const classes = data?.totalsByAssetClass || {};
+  const classKeys = Object.keys(classes);
+  klass.innerHTML = classKeys.length
+    ? `<div class="stat-grid">${classKeys
+        .map((key) => {
+          const row = classes[key];
+          return `<div class="stat"><span>${escapeHtml(key)}</span><strong>${escapeHtml(
+            formatMoney(row.marketValue, row.currency)
+          )}</strong><span class="muted">PnL ${escapeHtml(row.pnl ?? "—")}</span></div>`;
+        })
+        .join("")}</div>`
+    : "";
   const lines = data?.lines || [];
   if (!lines.length) {
     host.innerHTML = "<p class='muted'>No lines</p>";
@@ -90,12 +103,15 @@ function renderPortfolio(data) {
     .map(
       (l) => `<tr>
       <td>${escapeHtml(l.assetType || "")}</td>
-      <td>${escapeHtml(l.symbol || "")}</td>
+      <td><button type="button" class="clickable asset-link" data-type="${escapeHtml(
+        l.assetType || ""
+      )}" data-slug="${escapeHtml(l.symbol || "")}">${escapeHtml(l.symbol || "")}</button></td>
       <td>${escapeHtml(l.qty ?? "")}</td>
       <td>${escapeHtml(l.price ?? "—")}</td>
       <td>${escapeHtml(l.marketValue ?? "—")}</td>
       <td>${escapeHtml(l.pnl ?? "—")}</td>
       <td>${escapeHtml(l.currency || "")}</td>
+      <td>${l.stale ? "stale" : ""}</td>
       <td>${l.missingPrice ? "yes" : ""}</td>
     </tr>`
     )
@@ -103,11 +119,36 @@ function renderPortfolio(data) {
   host.innerHTML = `<table>
     <thead><tr>
       <th>Type</th><th>Symbol</th><th>Qty</th><th>Price</th>
-      <th>MV</th><th>PnL</th><th>CCY</th><th>Missing</th>
+      <th>MV</th><th>PnL</th><th>CCY</th><th>Stale</th><th>Missing</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <p class="muted">totalsDisplay: ${escapeHtml(JSON.stringify(data.totalsDisplay))} · fx: ${escapeHtml(data.fx?.status)}</p>`;
+}
+
+function renderWatchlist(items) {
+  const host = $("watchTable");
+  if (!Array.isArray(items) || !items.length) {
+    host.innerHTML = "<p class='muted'>No watchlist items</p>";
+    return;
+  }
+  host.innerHTML = `<table>
+    <thead><tr><th>Type</th><th>Symbol</th><th>Price</th><th>CCY</th><th>Stale</th><th>As of</th></tr></thead>
+    <tbody>${items
+      .map(
+        (item) => `<tr>
+        <td>${escapeHtml(item.assetType || "")}</td>
+        <td><button type="button" class="clickable asset-link" data-type="${escapeHtml(
+          item.assetType || ""
+        )}" data-slug="${escapeHtml(item.symbol || "")}">${escapeHtml(item.symbol || "")}</button></td>
+        <td>${escapeHtml(item.price != null ? formatMoney(item.price, item.currency) : "—")}</td>
+        <td>${escapeHtml(item.currency || "")}</td>
+        <td>${item.stale ? "yes" : ""}</td>
+        <td>${escapeHtml(item.asOf ? new Date(item.asOf).toLocaleString() : "")}</td>
+      </tr>`
+      )
+      .join("")}</tbody>
+  </table>`;
 }
 
 function renderNews(items) {
@@ -152,6 +193,182 @@ function selectedMarketAsset() {
   const value = $("marketResults").value || $("marketPopular").value;
   const [assetType, symbol, assetId] = value.split("|");
   return { assetType, symbol, assetId };
+}
+
+function drawChart(host, points, { valueKey = "priceDisplay", fallbackKey = "price" } = {}) {
+  const series = (points || [])
+    .map((p) => ({ t: p.t, v: Number(p[valueKey] ?? p[fallbackKey]) }))
+    .filter((p) => Number.isFinite(p.v));
+  if (!series.length) {
+    host.innerHTML = "<p class='muted'>No chart points</p>";
+    return;
+  }
+  const w = 720;
+  const h = 220;
+  const pad = 28;
+  const min = Math.min(...series.map((p) => p.v));
+  const max = Math.max(...series.map((p) => p.v));
+  const span = max - min || 1;
+  const coords = series
+    .map((p, i) => {
+      const x = pad + (i / Math.max(series.length - 1, 1)) * (w - pad * 2);
+      const y = h - pad - ((p.v - min) / span) * (h - pad * 2);
+      return `${x},${y}`;
+    })
+    .join(" ");
+  const first = series[0].t ? new Date(series[0].t).toLocaleDateString() : "";
+  const last = series[series.length - 1].t ? new Date(series[series.length - 1].t).toLocaleDateString() : "";
+  host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" class="chart" role="img" aria-label="Price chart">
+    <polyline points="${coords}"></polyline>
+  </svg>
+  <p class="muted">${escapeHtml(first)} → ${escapeHtml(last)} · ${series.length} points · min ${escapeHtml(
+    String(min)
+  )} · max ${escapeHtml(String(max))}</p>`;
+}
+
+function assetQuery() {
+  return {
+    type: $("assetType").value,
+    slug: $("assetSlug").value.trim(),
+    currency: $("assetCurrency").value,
+    range: $("assetRange").value,
+  };
+}
+
+function writeAssetHash({ type, slug, currency, range }) {
+  const params = new URLSearchParams();
+  if (currency) params.set("currency", currency);
+  if (range) params.set("range", range);
+  const q = params.toString();
+  const next = `#/${type}/${encodeURIComponent(slug)}${q ? `?${q}` : ""}`;
+  if (location.hash !== next) history.replaceState(null, "", next);
+}
+
+function parseAssetHash() {
+  const raw = location.hash.replace(/^#/, "");
+  const match = raw.match(/^\/(crypto|stock)\/([^?]+)/i);
+  if (!match) return null;
+  const params = new URLSearchParams(raw.split("?")[1] || "");
+  return {
+    type: match[1].toLowerCase(),
+    slug: decodeURIComponent(match[2]),
+    currency: params.get("currency") || "",
+    range: params.get("range") || "30d",
+  };
+}
+
+function applyAssetForm(q) {
+  if (!q) return;
+  $("assetType").value = q.type;
+  $("assetSlug").value = q.slug;
+  if ([...$("assetCurrency").options].some((o) => o.value === q.currency)) {
+    $("assetCurrency").value = q.currency;
+  }
+  if ([...$("assetRange").options].some((o) => o.value === q.range)) {
+    $("assetRange").value = q.range;
+  }
+}
+
+function renderAssetDetail(data) {
+  const hero = $("assetHero");
+  const stats = $("assetStats");
+  const profile = data.profile || {};
+  const quote = data.quote || {};
+  const links = Object.entries(profile.links || {}).filter(([, url]) => url);
+  hero.classList.remove("muted");
+  hero.innerHTML = `
+    ${profile.imageUrl ? `<img src="${escapeHtml(profile.imageUrl)}" alt="" />` : "<div></div>"}
+    <div>
+      <span class="eyebrow">${escapeHtml(data.assetType)} · ${escapeHtml(data.nativeCurrency)} → ${escapeHtml(
+        data.displayCurrency
+      )}</span>
+      <h3 style="margin:0.15rem 0">${escapeHtml(data.name || "")} <span class="muted">${escapeHtml(
+        data.symbol || ""
+      )}</span></h3>
+      <div class="price">${escapeHtml(
+        formatMoney(quote.priceDisplay || quote.price, data.displayCurrency || quote.currency)
+      )}</div>
+      <p class="muted">Native ${escapeHtml(formatMoney(quote.price, quote.currency))} · fx ${escapeHtml(
+        data.fx?.status || "—"
+      )} ${quote.stale ? "· stale" : ""} · ${escapeHtml(data.assetId || "")}</p>
+      <p class="desc">${escapeHtml(profile.description || "No description")}</p>
+      <div class="link-row">${links
+        .map(([name, url]) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>`)
+        .join("")}</div>
+    </div>`;
+  const cells = [
+    ["24h %", quote.changePercent24h],
+    ["7d %", quote.changePercent7d],
+    ["30d %", quote.changePercent30d],
+    ["Market cap", quote.marketCapDisplay || quote.marketCap],
+    ["Volume 24h", quote.volume24hDisplay || quote.volume24h],
+    ["High 24h", quote.high24hDisplay || quote.high24h],
+    ["Low 24h", quote.low24hDisplay || quote.low24h],
+    ["Rank", profile.marketCapRank],
+    ["Exchange", profile.exchange],
+    ["Industry", profile.industry],
+    ["Circulating", profile.circulatingSupply],
+    ["Max supply", profile.maxSupply],
+  ].filter(([, v]) => v != null && v !== "");
+  stats.innerHTML = cells.length
+    ? `<div class="stat-grid">${cells
+        .map(([label, value]) => `<div class="stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
+        .join("")}</div>`
+    : "";
+  drawChart($("assetChart"), data.history?.points || [], {
+    valueKey: data.fx?.rate ? "priceDisplay" : "price",
+  });
+}
+
+function openAssetDetail({ type, slug, currency, range }) {
+  applyAssetForm({
+    type,
+    slug,
+    currency: currency ?? $("assetCurrency").value,
+    range: range ?? $("assetRange").value,
+  });
+  switchTab("asset");
+  return loadAssetDetail();
+}
+
+async function loadAssetDetail() {
+  const q = assetQuery();
+  if (!q.slug) {
+    show($("outAsset"), { error: "Enter a slug such as btc or VNM" });
+    return;
+  }
+  const params = new URLSearchParams();
+  if (q.currency) params.set("currency", q.currency);
+  if (q.range) params.set("range", q.range);
+  writeAssetHash(q);
+  try {
+    const data = await api(
+      `/api/assets/${encodeURIComponent(q.type)}/${encodeURIComponent(q.slug)}?${params}`
+    );
+    renderAssetDetail(data);
+    show($("outAsset"), data);
+  } catch (e) {
+    show($("outAsset"), { error: e.message, body: e.body });
+  }
+}
+
+async function loadAssetHistoryOnly() {
+  const q = assetQuery();
+  if (!q.slug) return;
+  const params = new URLSearchParams({ range: q.range });
+  if (q.currency) params.set("currency", q.currency);
+  writeAssetHash(q);
+  try {
+    const data = await api(
+      `/api/assets/${encodeURIComponent(q.type)}/${encodeURIComponent(q.slug)}/history?${params}`
+    );
+    drawChart($("assetChart"), data.points || [], {
+      valueKey: data.fx?.rate ? "priceDisplay" : "price",
+    });
+    show($("outAsset"), data);
+  } catch (e) {
+    show($("outAsset"), { error: e.message, body: e.body });
+  }
 }
 
 function renderQuote(quote) {
@@ -218,6 +435,14 @@ $("btnHealth").onclick = async () => {
   }
 };
 
+$("btnReady").onclick = async () => {
+  try {
+    show($("outHealth"), await api("/health/ready"));
+  } catch (e) {
+    show($("outHealth"), { error: e.message, status: e.status, body: e.body });
+  }
+};
+
 $("btnMe").onclick = async () => {
   try {
     const me = await api("/api/auth/me");
@@ -239,6 +464,18 @@ $("btnMakeAdmin").onclick = async () => {
     el.classList.add("ok");
   } catch (e) {
     show($("outMe"), { error: e.message, body: e.body });
+  }
+};
+
+$("btnSettingsGet").onclick = async () => {
+  try {
+    const settings = await api("/api/settings");
+    show($("outSettings"), settings);
+    if (settings.newsKeywords) $("setKeywords").value = (settings.newsKeywords || []).join(", ");
+    if (settings.preferredCurrency) $("setCurrency").value = settings.preferredCurrency;
+    $("setEmailOptIn").checked = !!settings.emailOptIn;
+  } catch (e) {
+    show($("outSettings"), { error: e.message, body: e.body });
   }
 };
 
@@ -287,6 +524,29 @@ $("btnHoldingAdd").onclick = async () => {
   }
 };
 
+$("btnHoldingsExport").onclick = async () => {
+  try {
+    const headers = {};
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${getApiBase()}/api/holdings/export`, { headers });
+    if (!res.ok) {
+      const body = await res.text();
+      throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status, body });
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "holdings.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    show($("outHoldings"), { downloaded: "holdings.csv" });
+  } catch (e) {
+    show($("outHoldings"), { error: e.message, body: e.body });
+  }
+};
+
 $("btnHoldingDel").onclick = async () => {
   try {
     const t = $("hType").value;
@@ -302,7 +562,9 @@ $("btnHoldingDel").onclick = async () => {
 
 $("btnWatchList").onclick = async () => {
   try {
-    show($("outWatch"), await api("/api/watchlist"));
+    const items = await api("/api/watchlist");
+    renderWatchlist(items);
+    show($("outWatch"), items);
   } catch (e) {
     show($("outWatch"), { error: e.message, body: e.body });
   }
@@ -358,6 +620,36 @@ async function loadPortfolio(refresh = false) {
 $("btnPortfolio").onclick = () => loadPortfolio(false);
 $("btnPortfolioRefresh").onclick = () => loadPortfolio(true);
 
+$("btnPerformance").onclick = async () => {
+  const range = $("pPerfRange").value;
+  try {
+    const data = await api(`/api/portfolio/performance?range=${encodeURIComponent(range)}`);
+    drawChart($("perfChart"), data.points || [], { valueKey: "marketValue", fallbackKey: "marketValue" });
+    show($("outPortfolio"), data);
+  } catch (e) {
+    show($("outPortfolio"), { error: e.message, body: e.body });
+  }
+};
+
+$("btnAssetLoad").onclick = () => loadAssetDetail();
+$("btnAssetHistory").onclick = () => loadAssetHistoryOnly();
+$("assetRange").onchange = () => {
+  if ($("tab-asset").classList.contains("active") && $("assetSlug").value.trim()) {
+    loadAssetHistoryOnly();
+  }
+};
+
+document.body.addEventListener("click", (e) => {
+  const link = e.target.closest(".asset-link");
+  if (!link) return;
+  openAssetDetail({
+    type: link.dataset.type,
+    slug: link.dataset.slug,
+    currency: $("assetCurrency").value,
+    range: $("assetRange").value,
+  });
+});
+
 $("btnFxGet").onclick = async () => {
   try {
     show($("outFx"), await api("/api/fx/rates"));
@@ -406,6 +698,11 @@ $("btnFxConvert").onclick = async () => {
 
 $("btnMarketPrice").onclick = () => loadMarketQuote(false);
 $("btnMarketRefresh").onclick = () => loadMarketQuote(true);
+$("btnMarketDetail").onclick = () => {
+  const { assetType, symbol } = selectedMarketAsset();
+  if (!assetType || !symbol) return;
+  openAssetDetail({ type: assetType, slug: symbol });
+};
 
 $("marketPopular").onchange = () => {
   $("marketResults").value = "";
@@ -482,6 +779,49 @@ $("btnHistory").onclick = async () => {
   }
 };
 
+$("btnSnapList").onclick = async () => {
+  const params = new URLSearchParams();
+  if ($("snapFrom").value) params.set("from", $("snapFrom").value);
+  if ($("snapTo").value) params.set("to", $("snapTo").value);
+  const q = params.toString() ? `?${params}` : "";
+  try {
+    const rows = await api(`/api/snapshots${q}`);
+    $("snapTable").innerHTML = Array.isArray(rows) && rows.length
+      ? `<table><thead><tr><th>Date</th><th>Created</th></tr></thead><tbody>${rows
+          .map(
+            (r) =>
+              `<tr><td><button type="button" class="clickable snap-date" data-date="${escapeHtml(
+                r.date
+              )}">${escapeHtml(r.date)}</button></td><td>${escapeHtml(r.createdAt || "")}</td></tr>`
+          )
+          .join("")}</tbody></table>`
+      : "<p class='muted'>No snapshots</p>";
+    show($("outSnap"), rows);
+  } catch (e) {
+    show($("outSnap"), { error: e.message, body: e.body });
+  }
+};
+
+$("btnSnapGet").onclick = async () => {
+  const date = $("snapDate").value;
+  if (!date) {
+    show($("outSnap"), { error: "Pick a date" });
+    return;
+  }
+  try {
+    show($("outSnap"), await api(`/api/snapshots/${encodeURIComponent(date)}`));
+  } catch (e) {
+    show($("outSnap"), { error: e.message, body: e.body });
+  }
+};
+
+$("snapTable").addEventListener("click", (e) => {
+  const btn = e.target.closest(".snap-date");
+  if (!btn) return;
+  $("snapDate").value = btn.dataset.date;
+  $("btnSnapGet").click();
+});
+
 $("btnAdminSettings").onclick = async () => {
   try {
     show($("outAdmin"), await api("/api/admin/settings"));
@@ -504,6 +844,44 @@ $("btnAdminJobs").onclick = async () => {
   } catch (e) {
     show($("outAdmin"), { error: e.message, body: e.body });
   }
+};
+
+$("btnS3Refresh").onclick = async () => {
+  const prefix = $("s3Prefix").value;
+  const params = new URLSearchParams({ limit: "200" });
+  if (prefix) params.set("prefix", prefix);
+  try {
+    const data = await api(`/api/dev/s3?${params}`);
+    const keys = data.keys || [];
+    const selected = $("s3Key").value;
+    $("s3Key").innerHTML = `<option value="">${keys.length ? `Select a key (${keys.length})` : "No keys"}</option>${keys
+      .map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(key)}</option>`)
+      .join("")}`;
+    if (keys.includes(selected)) $("s3Key").value = selected;
+    $("s3Summary").innerHTML = `<p class="muted">backend: ${escapeHtml(
+      data.backend || ""
+    )} · bucket: ${escapeHtml(data.bucket || "—")} · endpoint: ${escapeHtml(data.endpoint || "—")}</p>`;
+    show($("outS3"), data);
+  } catch (e) {
+    show($("outS3"), { error: e.message, body: e.body });
+  }
+};
+
+$("btnS3Get").onclick = async () => {
+  const key = $("s3Key").value;
+  if (!key) {
+    show($("outS3"), { error: "Select a key first (load an Asset so profile/ is written)" });
+    return;
+  }
+  try {
+    show($("outS3"), await api(`/api/dev/s3/object?key=${encodeURIComponent(key)}`));
+  } catch (e) {
+    show($("outS3"), { error: e.message, body: e.body });
+  }
+};
+
+$("s3Key").onchange = () => {
+  if ($("s3Key").value) $("btnS3Get").click();
 };
 
 $("btnDynamoRefresh").onclick = async () => {
@@ -534,3 +912,13 @@ $("btnDynamoScan").onclick = async () => {
 };
 
 loadAuth();
+
+window.addEventListener("hashchange", () => {
+  const q = parseAssetHash();
+  if (q) openAssetDetail(q);
+});
+
+const initialAsset = parseAssetHash();
+if (initialAsset) {
+  openAssetDetail(initialAsset);
+}

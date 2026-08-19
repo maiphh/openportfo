@@ -31,15 +31,21 @@ For local testing, the **Me** tab includes a debug-only promotion button. The ba
 
 | Tab | Calls |
 |-----|--------|
-| Health | `GET /health` |
-| Me | `GET /api/auth/me`, `PUT /api/settings` |
-| Holdings / Watchlist | CRUD |
-| Portfolio | `GET` + `POST /api/portfolio/refresh` |
-| Market | popular/searchable crypto and VN stocks, cache-first price + explicit refresh |
-| FX | stored rates, server-side conversion test, admin refresh (502 shows previous rates) |
+| Health | `GET /health`, `GET /health/ready` |
+| Me | `GET /api/auth/me`, `GET/PUT /api/settings` |
+| Holdings | CRUD + `GET /api/holdings/export` |
+| Watchlist | CRUD; list includes `price` / `stale`; click symbol → Asset |
+| Portfolio | `GET` + `POST /api/portfolio/refresh`, `totalsByAssetClass`, `GET /api/portfolio/performance` |
+| Asset | `GET /api/assets/{type}/{slug}?currency=&range=` + `/history`; hash `#/crypto/btc?currency=VND` |
+| Market | search/list + quote; **Open detail** |
+| FX | stored rates, conversion, admin refresh |
 | News | `GET /api/news` |
-| History | `GET /api/assets/{id}/history` |
-| DynamoDB | local-only table metadata and read-only item scans (max 100) |
+| History | legacy `GET /api/assets/{id}/history` |
+| Snapshots | `GET /api/snapshots`, `GET /api/snapshots/{date}` |
+| S3 | local-only `GET /api/dev/s3` + `/object?key=` (memory or LocalStack) |
+| DynamoDB | local-only table scan |
 | Admin | settings, RSS, job-runs |
+
+Asset deep-link example: http://localhost:5173/#/crypto/btc?currency=VND
 
 Env: `VITE_API_URL` (default `http://127.0.0.1:8000`).

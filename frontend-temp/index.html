@@ -29,10 +29,13 @@
       <button data-tab="holdings">Holdings</button>
       <button data-tab="watchlist">Watchlist</button>
       <button data-tab="portfolio">Portfolio</button>
+      <button data-tab="asset">Asset</button>
       <button data-tab="market">Market</button>
       <button data-tab="fx">FX</button>
       <button data-tab="news">News</button>
       <button data-tab="history">History</button>
+      <button data-tab="snapshots">Snapshots</button>
+      <button data-tab="s3">S3</button>
       <button data-tab="dynamodb">DynamoDB</button>
       <button data-tab="admin">Admin</button>
     </nav>
@@ -40,7 +43,10 @@
     <main>
       <section id="tab-health" class="panel active">
         <h2>Health</h2>
-        <button id="btnHealth" type="button">GET /health</button>
+        <div class="row">
+          <button id="btnHealth" type="button">GET /health</button>
+          <button id="btnReady" type="button">GET /health/ready</button>
+        </div>
         <pre id="outHealth" class="out"></pre>
       </section>
 
@@ -52,6 +58,7 @@
         <pre id="outMe" class="out"></pre>
         <h3>Settings</h3>
         <div class="row">
+          <button id="btnSettingsGet" type="button">GET /api/settings</button>
           <input id="setKeywords" placeholder="keywords comma-separated" />
           <input id="setCurrency" placeholder="preferredCurrency" size="8" />
           <label><input id="setEmailOptIn" type="checkbox" /> emailOptIn</label>
@@ -62,7 +69,10 @@
 
       <section id="tab-holdings" class="panel">
         <h2>Holdings</h2>
-        <button id="btnHoldingsList" type="button">List</button>
+        <div class="row">
+          <button id="btnHoldingsList" type="button">List</button>
+          <button id="btnHoldingsExport" type="button">Export CSV</button>
+        </div>
         <div class="row form">
           <select id="hType"><option>crypto</option><option>stock</option></select>
           <input id="hSymbol" placeholder="symbol" size="8" />
@@ -78,7 +88,9 @@
 
       <section id="tab-watchlist" class="panel">
         <h2>Watchlist</h2>
+        <p class="muted">List includes cache-first <code>price</code> / <code>stale</code>. Click a symbol to open Asset detail.</p>
         <button id="btnWatchList" type="button">List</button>
+        <div id="watchTable"></div>
         <div class="row form">
           <select id="wType"><option>crypto</option><option>stock</option></select>
           <input id="wSymbol" placeholder="symbol" size="8" />
@@ -100,8 +112,18 @@
           </select>
           <button id="btnPortfolio" type="button">GET portfolio</button>
           <button id="btnPortfolioRefresh" type="button">POST refresh</button>
+          <select id="pPerfRange">
+            <option value="1d">1d</option>
+            <option value="1w" selected>1w</option>
+            <option value="mtd">mtd</option>
+            <option value="ytd">ytd</option>
+            <option value="max">max</option>
+          </select>
+          <button id="btnPerformance" type="button">GET performance</button>
         </div>
+        <div id="portfolioClass"></div>
         <div id="portfolioTable"></div>
+        <div id="perfChart"></div>
         <pre id="outPortfolio" class="out"></pre>
       </section>
 
@@ -144,6 +166,7 @@
           </label>
           <button id="btnMarketPrice" type="button">Get price</button>
           <button id="btnMarketRefresh" type="button">Refresh price</button>
+          <button id="btnMarketDetail" class="secondary" type="button">Open detail</button>
         </div>
         <h3>Asset search</h3>
         <div class="row form">
@@ -155,6 +178,47 @@
         </div>
         <div id="marketPriceCard" class="result-card muted" aria-live="polite">Select an asset to view its price.</div>
         <pre id="outMarket" class="out"></pre>
+      </section>
+
+      <section id="tab-asset" class="panel">
+        <h2>Asset detail</h2>
+        <p class="muted">
+          <code>GET /api/assets/{type}/{slug}?currency=&amp;range=</code>
+          · hash route <code>#/crypto/btc?currency=VND</code>
+          · second load should skip CoinGecko/vnstock profile (S3/memory cache)
+        </p>
+        <div class="row form">
+          <label>Type
+            <select id="assetType">
+              <option value="crypto">crypto</option>
+              <option value="stock">stock</option>
+            </select>
+          </label>
+          <label>Slug
+            <input id="assetSlug" placeholder="btc or bitcoin / VNM" value="btc" />
+          </label>
+          <label>Display currency
+            <select id="assetCurrency">
+              <option value="">native / profile</option>
+              <option value="USD">USD</option>
+              <option value="VND">VND</option>
+            </select>
+          </label>
+          <label>Range
+            <select id="assetRange">
+              <option>7d</option>
+              <option selected>30d</option>
+              <option>90d</option>
+              <option>1y</option>
+            </select>
+          </label>
+          <button id="btnAssetLoad" type="button">Load detail</button>
+          <button id="btnAssetHistory" class="secondary" type="button">Reload chart only</button>
+        </div>
+        <div id="assetHero" class="asset-hero muted">Pick an asset (or open #/crypto/btc?currency=VND).</div>
+        <div id="assetStats"></div>
+        <div id="assetChart"></div>
+        <pre id="outAsset" class="out"></pre>
       </section>
 
       <section id="tab-news" class="panel">
@@ -180,6 +244,20 @@
         <pre id="outHistory" class="out"></pre>
       </section>
 
+      <section id="tab-snapshots" class="panel">
+        <h2>Snapshots</h2>
+        <p class="muted"><code>GET /api/snapshots</code> and <code>GET /api/snapshots/{date}</code></p>
+        <div class="row">
+          <label>From<input id="snapFrom" type="date" /></label>
+          <label>To<input id="snapTo" type="date" /></label>
+          <button id="btnSnapList" type="button">List</button>
+          <label>Date<input id="snapDate" type="date" /></label>
+          <button id="btnSnapGet" type="button">Get one</button>
+        </div>
+        <div id="snapTable"></div>
+        <pre id="outSnap" class="out"></pre>
+      </section>
+
       <section id="tab-admin" class="panel">
         <h2>Admin</h2>
         <p class="muted">Requires profile role=admin (tests: set_role after me).</p>
@@ -187,6 +265,29 @@
         <button id="btnAdminRss" type="button">GET rss-sources</button>
         <button id="btnAdminJobs" type="button">GET job-runs</button>
         <pre id="outAdmin" class="out"></pre>
+      </section>
+
+      <section id="tab-s3" class="panel">
+        <h2>Object storage</h2>
+        <p class="muted">
+          Local-only. Memory backend (default) or LocalStack S3.
+          Prefixes: <code>profile/</code>, <code>resolve/</code>, <code>history/</code>, <code>snapshots/</code>.
+          Requires admin (Me → Debug: make me admin).
+        </p>
+        <div class="row">
+          <button id="btnS3Refresh" type="button">List keys</button>
+          <select id="s3Prefix">
+            <option value="">all</option>
+            <option value="profile/">profile/</option>
+            <option value="resolve/">resolve/</option>
+            <option value="history/">history/</option>
+            <option value="snapshots/">snapshots/</option>
+          </select>
+          <select id="s3Key"><option value="">Select a key</option></select>
+          <button id="btnS3Get" type="button">View object</button>
+        </div>
+        <div id="s3Summary"></div>
+        <pre id="outS3" class="out"></pre>
       </section>
 
       <section id="tab-dynamodb" class="panel">

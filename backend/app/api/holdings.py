@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import csv
 from datetime import datetime
 from decimal import Decimal
+from io import StringIO
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.deps import get_current_user, get_holdings_repo
@@ -77,6 +80,36 @@ class HoldingUpdate(BaseModel):
 
 def _service(repo: HoldingsRepo = Depends(get_holdings_repo)) -> HoldingsService:
     return HoldingsService(repo)
+
+
+@router.get("/api/holdings/export")
+def export_holdings_csv(
+    user: UserProfile = Depends(get_current_user),
+    svc: HoldingsService = Depends(_service),
+) -> Response:
+    """CSV download of the current user's holdings."""
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        ["assetType", "symbol", "assetId", "qty", "avgCost", "currency", "note"]
+    )
+    for h in svc.list_holdings(user.user_id):
+        writer.writerow(
+            [
+                h.asset_type,
+                h.symbol,
+                h.asset_id or "",
+                _dec_str(h.qty),
+                _dec_str(h.avg_cost),
+                h.currency,
+                h.note or "",
+            ]
+        )
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="holdings.csv"'},
+    )
 
 
 @router.get("/api/holdings")

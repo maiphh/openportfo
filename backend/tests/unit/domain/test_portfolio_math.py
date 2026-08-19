@@ -8,6 +8,7 @@ import pytest
 from app.domain.fx_math import apply_fx, get_rate
 from app.domain.models import FxRates, Holding, PriceQuote
 from app.domain.portfolio_math import (
+    compute_asset_class_totals,
     compute_native_portfolio,
     native_line,
     pnl_percent,
@@ -366,6 +367,56 @@ def test_allocation_sums_to_one_in_display_currency() -> None:
     assert alloc_sum == pytest.approx(Decimal("1"), abs=Decimal("0.000001"))
     assert all(ln.allocation is not None for ln in priced)
     assert all(ln.allocation >= 0 for ln in priced)
+
+
+def test_stale_quote_marks_line() -> None:
+    h = _holding()
+    q = PriceQuote(
+        asset_type="crypto",
+        symbol="BTC",
+        price=Decimal("20000"),
+        currency="USD",
+        as_of=_dt(),
+        stale=True,
+    )
+    line = native_line(h, q)
+    assert line.stale is True
+    assert line.missing_price is False
+
+
+def test_asset_class_totals_native_and_display() -> None:
+    holdings = [
+        _holding(symbol="BTC", asset_type="crypto", qty="1", avg_cost="30000", currency="USD"),
+        _holding(
+            symbol="VNM",
+            asset_type="stock",
+            qty="100",
+            avg_cost="70000",
+            currency="VND",
+        ),
+    ]
+    quotes = [
+        _quote(symbol="BTC", asset_type="crypto", price="40000", currency="USD"),
+        _quote(symbol="VNM", asset_type="stock", price="80000", currency="VND"),
+    ]
+    native = compute_native_portfolio(holdings, quotes)
+    by_class = compute_asset_class_totals(native)
+    assert by_class["crypto"].currency == "USD"
+    assert by_class["crypto"].market_value == Decimal("40000")
+    assert by_class["stock"].currency == "VND"
+    assert by_class["stock"].market_value == Decimal("8000000")
+
+    fx = FxRates(
+        base="USD",
+        rates={"USD_VND": Decimal("25000"), "VND_USD": Decimal("0.00004")},
+        status="fresh",
+        as_of=_dt(),
+    )
+    display = apply_fx(native, fx, "VND")
+    converted = compute_asset_class_totals(display)
+    assert converted["crypto"].currency == "VND"
+    assert converted["crypto"].market_value == Decimal("1000000000")
+    assert converted["stock"].market_value == Decimal("8000000")
 
 
 def test_allocation_zero_total_market_value() -> None:

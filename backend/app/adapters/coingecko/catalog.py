@@ -68,3 +68,38 @@ def crypto_prices() -> dict[str, tuple[Decimal, str]]:
     return {
         coin_id: (Decimal(price), "USD") for coin_id, _ticker, _name, price in _CRYPTO
     }
+
+
+_CRYPTO_PROFILES: dict[str, dict] = {
+    "bitcoin": {
+        "description": "Bitcoin is a decentralized digital currency that can be transferred on the peer-to-peer bitcoin network.",
+        "homepage": "https://bitcoin.org",
+        "categories": ["Cryptocurrency", "Layer 1 (L1)"],
+        "genesis_date": "2009-01-03",
+        "hashing_algorithm": "SHA-256",
+        "image_url": "https://assets.coingecko.com/coins/images/1/large/bitcoin.png",
+        "market_cap_rank": 1,
+        "max_supply": "21000000",
+    },
+    "ethereum": {
+        "description": "Ethereum is a decentralized, open-source blockchain with smart contract functionality.",
+        "homepage": "https://ethereum.org",
+        "categories": ["Smart Contract Platform", "Layer 1 (L1)"],
+        "genesis_date": "2015-07-30",
+        "hashing_algorithm": "Ethash",
+        "image_url": "https://assets.coingecko.com/coins/images/279/large/ethereum.png",
+        "market_cap_rank": 2,
+    },
+    "solana": {
+        "description": "Solana is a high-throughput Layer 1 blockchain designed for fast, low-cost transactions.",
+        "homepage": "https://solana.com",
+        "categories": ["Smart Contract Platform", "Layer 1 (L1)"],
+        "image_url": "https://assets.coingecko.com/coins/images/4128/large/solana.png",
+        "market_cap_rank": 5,
+    },
+}
+
+
+def crypto_profile_meta(asset_id: str) -> dict:
+    """Fixture profile extras keyed by CoinGecko id."""
+    return dict(_CRYPTO_PROFILES.get((asset_id or "").strip().lower()) or {})

@@ -16,5 +16,13 @@ class ObjectStorage(Protocol):
         """Write/overwrite JSON object at ``key``."""
         ...
 
+    def ping(self) -> None:
+        """Raise if object storage is unreachable."""
+        ...
+
+    def list_keys(self, prefix: str = "", *, limit: int = 100) -> list[str]:
+        """Return object keys under ``prefix`` (lexicographic, capped)."""
+        ...
+
 
 __all__ = ["ObjectStorage"]

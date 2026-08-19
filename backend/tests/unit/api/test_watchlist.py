@@ -8,8 +8,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.deps import (
+    get_market_service,
     get_user_profile_repo,
     get_watchlist_repo,
+    set_crypto_market_client,
+    set_market_service,
+    set_price_cache_repo,
+    set_stock_market_client,
     set_user_profile_repo,
     set_watchlist_repo,
 )
@@ -20,6 +25,9 @@ from app.ports.watchlist import (
     WatchlistNotFoundError,
 )
 from app.services.watchlist_service import ValidationError, WatchlistService
+from app.services.market_service import MarketService
+from tests.fakes.market import FixtureCryptoMarketClient, FixtureStockMarketClient
+from tests.fakes.price_cache import InMemoryPriceCacheRepo
 from tests.fakes.users import InMemoryUserProfileRepo
 from tests.fakes.watchlist import InMemoryWatchlistRepo
 
@@ -56,9 +64,18 @@ def _make_client(
     p_repo = profiles or InMemoryUserProfileRepo()
     set_watchlist_repo(w_repo)
     set_user_profile_repo(p_repo)
+    crypto = FixtureCryptoMarketClient()
+    stock = FixtureStockMarketClient()
+    cache = InMemoryPriceCacheRepo()
+    market = MarketService(crypto, stock, cache, default_ttl_seconds=600)
+    set_crypto_market_client(crypto)
+    set_stock_market_client(stock)
+    set_price_cache_repo(cache)
+    set_market_service(market)
     app = create_app()
     app.dependency_overrides[get_watchlist_repo] = lambda: w_repo
     app.dependency_overrides[get_user_profile_repo] = lambda: p_repo
+    app.dependency_overrides[get_market_service] = lambda: market
     return TestClient(app), w_repo, p_repo
 
 
@@ -66,9 +83,17 @@ def _make_client(
 def _reset_repos() -> Any:
     set_watchlist_repo(None)
     set_user_profile_repo(None)
+    set_market_service(None)
+    set_crypto_market_client(None)
+    set_stock_market_client(None)
+    set_price_cache_repo(None)
     yield
     set_watchlist_repo(None)
     set_user_profile_repo(None)
+    set_market_service(None)
+    set_crypto_market_client(None)
+    set_stock_market_client(None)
+    set_price_cache_repo(None)
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +177,11 @@ def test_watchlist_add_list_remove() -> None:
     listed = client.get("/api/watchlist", headers=_auth("alice"))
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+    quoted = listed.json()[0]
+    assert quoted["price"] == "65000"
+    assert quoted["currency"] == "USD"
+    assert quoted["stale"] is False
+    assert quoted["asOf"] is not None
 
     d = client.delete("/api/watchlist/crypto/BTC", headers=_auth("alice"))
     assert d.status_code == 204
@@ -217,6 +247,21 @@ def test_bob_cannot_remove_alice_watchlist_item() -> None:
         == 404
     )
     assert len(client.get("/api/watchlist", headers=_auth("alice")).json()) == 1
+
+
+def test_watchlist_list_survives_market_failure() -> None:
+    client, _, _ = _make_client()
+    client.post("/api/watchlist", headers=_auth("alice"), json=_item_body())
+    from app.core.deps import get_crypto_market_client
+
+    crypto = get_crypto_market_client()
+    crypto.fail_prices = True  # type: ignore[attr-defined]
+    r = client.get("/api/watchlist", headers=_auth("alice"))
+    assert r.status_code == 200
+    item = r.json()[0]
+    assert item["symbol"] == "BTC"
+    assert item["price"] is None
+    assert item["stale"] is False
 
 
 def test_never_trust_user_id_from_body_watchlist() -> None:

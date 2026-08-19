@@ -56,5 +56,17 @@ class S3ObjectStorage:
             ContentType="application/json",
         )
 
+    def ping(self) -> None:
+        self._client.head_bucket(Bucket=self.bucket)
+
+    def list_keys(self, prefix: str = "", *, limit: int = 100) -> list[str]:
+        cap = max(1, min(int(limit), 500))
+        resp = self._client.list_objects_v2(
+            Bucket=self.bucket,
+            Prefix=prefix or "",
+            MaxKeys=cap,
+        )
+        return [str(obj["Key"]) for obj in (resp.get("Contents") or []) if obj.get("Key")]
+
 
 __all__ = ["S3ObjectStorage"]

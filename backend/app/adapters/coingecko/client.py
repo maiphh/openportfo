@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Sequence
 
-from app.adapters.coingecko.catalog import crypto_catalog, crypto_prices
+from app.adapters.coingecko.catalog import crypto_catalog, crypto_prices, crypto_profile_meta
 from app.domain.models import PriceQuote
-from app.ports.market import AssetSearchResult, MarketDataError
+from app.ports.market import AssetProfile, AssetSearchResult, MarketDataError
 
 
 def _utc_now() -> datetime:
@@ -103,6 +103,39 @@ class FixtureCoinGeckoClient:
     def set_price(self, coin_id: str, price: Decimal, currency: str = "USD") -> None:
         """Test helper: upsert fixture price."""
         self._prices[coin_id.lower()] = (price, currency)
+
+    def get_profile(self, id: str) -> Optional[AssetProfile]:
+        self.profile_calls = getattr(self, "profile_calls", 0) + 1
+        self.last_profile_id = id
+        coin_id = (id or "").strip().lower()
+        hit = next((r for r in self._search_index if r.asset_id.lower() == coin_id), None)
+        if hit is None:
+            hit = next((r for r in self._search_index if r.symbol.lower() == coin_id), None)
+        if hit is None:
+            return None
+        meta = crypto_profile_meta(hit.asset_id)
+        desc = meta.get("description") or f"{hit.name} is a cryptocurrency ({hit.symbol})."
+        links: dict[str, str] = {}
+        if meta.get("homepage"):
+            links["homepage"] = str(meta["homepage"])
+        max_supply = meta.get("max_supply")
+        return AssetProfile(
+            asset_type="crypto",
+            symbol=hit.symbol,
+            asset_id=hit.asset_id,
+            name=hit.name,
+            description=desc,
+            image_url=meta.get("image_url"),
+            homepage=meta.get("homepage"),
+            categories=list(meta.get("categories") or []),
+            market_cap_rank=meta.get("market_cap_rank"),
+            genesis_date=meta.get("genesis_date"),
+            hashing_algorithm=meta.get("hashing_algorithm"),
+            max_supply=Decimal(str(max_supply)) if max_supply else None,
+            links=links,
+            market_currency="USD",
+            source="catalog",
+        )
 
 
 __all__ = ["FixtureCoinGeckoClient"]

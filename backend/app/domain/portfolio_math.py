@@ -68,6 +68,7 @@ def native_line(holding: Holding, quote: PriceQuote) -> PortfolioLine:
         pnl=pnl,
         pnl_percent=pnl_percent(pnl, cost_basis),
         missing_price=False,
+        stale=bool(quote.stale),
     )
 
 
@@ -95,6 +96,7 @@ def _missing_line(holding: Holding) -> PortfolioLine:
         pnl=None,
         pnl_percent=None,
         missing_price=True,
+        stale=False,
     )
 
 
@@ -146,3 +148,42 @@ def compute_native_portfolio(
         )
 
     return PortfolioSummary(lines=lines, totals_by_currency=totals)
+
+
+def compute_asset_class_totals(summary: PortfolioSummary) -> dict[str, CurrencyTotals]:
+    """Roll up priced lines by ``crypto`` / ``stock``.
+
+    Uses converted display amounts when FX succeeded; otherwise native amounts
+    only when every priced line in that class shares one currency.
+    """
+    use_display = any(ln.market_value_display is not None for ln in summary.lines)
+    out: dict[str, CurrencyTotals] = {}
+    for asset_type in ("crypto", "stock"):
+        priced = [
+            ln
+            for ln in summary.lines
+            if ln.asset_type == asset_type and not ln.missing_price
+        ]
+        if not priced:
+            continue
+        if use_display:
+            valued = [ln for ln in priced if ln.market_value_display is not None]
+            if not valued:
+                continue
+            mv = sum((ln.market_value_display or Decimal("0")) for ln in valued)
+            cost = sum((ln.cost_basis_display or Decimal("0")) for ln in valued)
+            currency = (summary.display_currency or "").upper() or valued[0].currency
+        else:
+            currencies = {(ln.currency or "").upper() for ln in priced}
+            if len(currencies) != 1:
+                continue
+            mv = sum((ln.market_value or Decimal("0")) for ln in priced)
+            cost = sum((ln.cost_basis or Decimal("0")) for ln in priced)
+            currency = next(iter(currencies))
+        out[asset_type] = CurrencyTotals(
+            currency=currency,
+            market_value=mv,
+            cost_basis=cost,
+            pnl=mv - cost,
+        )
+    return out

@@ -14,7 +14,7 @@ from typing import Optional, Sequence
 
 from app.domain.fx_math import apply_fx
 from app.domain.models import FxRates, Holding, PortfolioSummary, PriceQuote
-from app.domain.portfolio_math import compute_native_portfolio
+from app.domain.portfolio_math import compute_asset_class_totals, compute_native_portfolio
 from app.ports.fx import ExchangeRateRepo, StoredRates
 from app.ports.holdings import HoldingRecord, HoldingsRepo
 from app.services.market_service import MarketService, QuoteKey
@@ -140,6 +140,7 @@ class PortfolioService:
             fx_domain = stored_rates_to_domain(stored)
             summary = apply_fx(native, fx_domain, display)
             rates_out = dict(stored.rates)
+            summary.totals_by_asset_class = compute_asset_class_totals(summary)
             return PortfolioView(summary=summary, fx_rates=rates_out, as_of=as_of)
 
         # No conversion: native only; surface missing FX meta
@@ -153,6 +154,7 @@ class PortfolioService:
             # Still missing conversion path (no display currency or empty rates)
             if not stored.rates or not display:
                 summary.fx_status = "missing"
+        summary.totals_by_asset_class = compute_asset_class_totals(summary)
         return PortfolioView(summary=summary, fx_rates=rates_out, as_of=as_of)
 
 

@@ -22,5 +22,15 @@ class SnapshotRepo(Protocol):
     def get(self, user_id: str, date: str) -> Optional[SnapshotRecord]:
         ...
 
+    def list(
+        self,
+        user_id: str,
+        *,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> list[SnapshotRecord]:
+        """Return snapshots for ``user_id`` in ``[date_from, date_to]`` (inclusive ISO dates)."""
+        ...
+
 
 __all__ = ["SnapshotRecord", "SnapshotRepo"]

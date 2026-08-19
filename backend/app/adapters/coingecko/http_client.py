@@ -12,7 +12,7 @@ from typing import Any, Optional, Sequence
 import httpx
 
 from app.domain.models import PriceQuote
-from app.ports.market import AssetSearchResult, MarketDataError
+from app.ports.market import AssetProfile, AssetSearchResult, MarketDataError
 
 
 def _utc_now() -> datetime:
@@ -150,5 +150,109 @@ class HttpCoinGeckoClient:
         prices = (data or {}).get("prices") or []
         return [[p[0], p[1]] for p in prices if isinstance(p, (list, tuple)) and len(p) >= 2]
 
+    def get_profile(self, id: str) -> Optional[AssetProfile]:
+        coin_id = (id or "").strip()
+        if not coin_id:
+            return None
+        data = self._get(
+            f"/coins/{coin_id}",
+            {
+                "localization": "false",
+                "tickers": "false",
+                "market_data": "true",
+                "community_data": "false",
+                "developer_data": "false",
+                "sparkline": "false",
+            },
+        )
+        if not isinstance(data, dict) or not data.get("id"):
+            return None
+        return profile_from_coingecko(data)
 
-__all__ = ["HttpCoinGeckoClient"]
+
+def _first_url(value: Any) -> Optional[str]:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if item and str(item).strip():
+                return str(item).strip()
+    return None
+
+
+def _as_decimal(value: Any) -> Optional[Decimal]:
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _currency_map_value(data: Any, key: str = "usd") -> Optional[Decimal]:
+    if not isinstance(data, dict):
+        return None
+    return _as_decimal(data.get(key))
+
+
+def profile_from_coingecko(data: dict[str, Any]) -> AssetProfile:
+    """Map CoinGecko /coins/{id} JSON to AssetProfile (native USD stats)."""
+    description = None
+    desc = data.get("description")
+    if isinstance(desc, dict):
+        description = (desc.get("en") or "").strip() or None
+    elif isinstance(desc, str):
+        description = desc.strip() or None
+    image = data.get("image") if isinstance(data.get("image"), dict) else {}
+    links_raw = data.get("links") if isinstance(data.get("links"), dict) else {}
+    homepage = _first_url(links_raw.get("homepage"))
+    twitter = (links_raw.get("twitter_screen_name") or "").strip()
+    reddit = _first_url(links_raw.get("subreddit_url"))
+    github = None
+    repos = links_raw.get("repos_url") if isinstance(links_raw.get("repos_url"), dict) else {}
+    if isinstance(repos.get("github"), list) and repos["github"]:
+        github = _first_url(repos["github"])
+    whitepaper = _first_url(links_raw.get("whitepaper"))
+    links: dict[str, str] = {}
+    if homepage:
+        links["homepage"] = homepage
+    if twitter:
+        links["twitter"] = f"https://twitter.com/{twitter.lstrip('@')}"
+    if reddit:
+        links["reddit"] = reddit
+    if github:
+        links["github"] = github
+    if whitepaper:
+        links["whitepaper"] = whitepaper
+    md = data.get("market_data") if isinstance(data.get("market_data"), dict) else {}
+    categories = [str(c) for c in (data.get("categories") or []) if c]
+    return AssetProfile(
+        asset_type="crypto",
+        symbol=str(data.get("symbol") or "").upper(),
+        asset_id=str(data.get("id") or ""),
+        name=str(data.get("name") or data.get("id") or ""),
+        description=description,
+        image_url=_first_url((image or {}).get("large") or (image or {}).get("small")),
+        homepage=homepage,
+        categories=categories,
+        market_cap_rank=int(data["market_cap_rank"]) if data.get("market_cap_rank") is not None else None,
+        genesis_date=(str(data.get("genesis_date") or "").strip() or None),
+        hashing_algorithm=(str(data.get("hashing_algorithm") or "").strip() or None),
+        circulating_supply=_as_decimal(md.get("circulating_supply")),
+        total_supply=_as_decimal(md.get("total_supply")),
+        max_supply=_as_decimal(md.get("max_supply")),
+        links=links,
+        change_percent_24h=_as_decimal(md.get("price_change_percentage_24h")),
+        change_percent_7d=_as_decimal(md.get("price_change_percentage_7d")),
+        change_percent_30d=_as_decimal(md.get("price_change_percentage_30d")),
+        market_cap=_currency_map_value(md.get("market_cap")),
+        volume_24h=_currency_map_value(md.get("total_volume")),
+        high_24h=_currency_map_value(md.get("high_24h")),
+        low_24h=_currency_map_value(md.get("low_24h")),
+        ath=_currency_map_value(md.get("ath")),
+        atl=_currency_map_value(md.get("atl")),
+        market_currency="USD",
+    )
+
+
+__all__ = ["HttpCoinGeckoClient", "profile_from_coingecko"]

@@ -1,4 +1,9 @@
-"""Price warm job: collect symbols → market force fetch → PriceCache."""
+"""Price warm job: collect symbols → market force fetch → PriceCache.
+
+Global refresh for every user's holdings + watchlist (crypto and VN stocks).
+Schedule via EventBridge at 10–15 minutes, not 1 minute: CoinGecko demo
+quotas and after-hours VN quotes make a 1-minute loop wasteful and brittle.
+"""
 
 from __future__ import annotations
 

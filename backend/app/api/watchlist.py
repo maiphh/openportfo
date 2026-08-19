@@ -8,7 +8,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.deps import get_current_user, get_watchlist_repo
+from app.core.deps import get_current_user, get_market_service, get_watchlist_repo
+from app.ports.market import MarketDataError
 from app.ports.users import UserProfile
 from app.ports.watchlist import (
     DuplicateWatchlistError,
@@ -16,6 +17,7 @@ from app.ports.watchlist import (
     WatchlistNotFoundError,
     WatchlistRepo,
 )
+from app.services.market_service import MarketService, QuoteKey
 from app.services.watchlist_service import ValidationError, WatchlistService
 
 router = APIRouter(tags=["watchlist"])
@@ -27,15 +29,29 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat()
 
 
-def item_to_response(item: WatchlistItem) -> dict[str, Any]:
+def item_to_response(
+    item: WatchlistItem,
+    *,
+    quote: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     """Serialize watchlist item to API JSON (camelCase)."""
-    return {
+    body: dict[str, Any] = {
         "userId": item.user_id,
         "assetType": item.asset_type,
         "symbol": item.symbol,
         "assetId": item.asset_id,
         "addedAt": _iso(item.added_at),
+        "price": None,
+        "currency": None,
+        "asOf": None,
+        "stale": False,
     }
+    if quote is not None:
+        body["price"] = quote.get("price")
+        body["currency"] = quote.get("currency")
+        body["asOf"] = quote.get("asOf")
+        body["stale"] = bool(quote.get("stale"))
+    return body
 
 
 class WatchlistAdd(BaseModel):
@@ -56,9 +72,41 @@ def _service(repo: WatchlistRepo = Depends(get_watchlist_repo)) -> WatchlistServ
 def list_watchlist(
     user: UserProfile = Depends(get_current_user),
     svc: WatchlistService = Depends(_service),
+    market: MarketService = Depends(get_market_service),
 ) -> list[dict[str, Any]]:
-    """List current user's watchlist items."""
-    return [item_to_response(i) for i in svc.list_items(user.user_id)]
+    """List current user's watchlist items with cache-first quotes."""
+    items = svc.list_items(user.user_id)
+    quotes_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    keys = [
+        QuoteKey(asset_type=i.asset_type, symbol=i.symbol, asset_id=i.asset_id)
+        for i in items
+    ]
+    if keys:
+        quotes = []
+        by_type: dict[str, list[QuoteKey]] = {"crypto": [], "stock": []}
+        for key in keys:
+            by_type.setdefault(key.asset_type, []).append(key)
+        for group in by_type.values():
+            if not group:
+                continue
+            try:
+                quotes.extend(market.get_quotes(group, force=False))
+            except MarketDataError:
+                continue
+        for q in quotes:
+            quotes_by_key[(q.asset_type, q.symbol.upper())] = {
+                "price": format(q.price, "f"),
+                "currency": q.currency,
+                "asOf": q.as_of.isoformat() if q.as_of.tzinfo else q.as_of.isoformat() + "Z",
+                "stale": bool(q.stale),
+            }
+    return [
+        item_to_response(
+            i,
+            quote=quotes_by_key.get((i.asset_type, i.symbol.upper())),
+        )
+        for i in items
+    ]
 
 
 @router.post("/api/watchlist", status_code=status.HTTP_201_CREATED)

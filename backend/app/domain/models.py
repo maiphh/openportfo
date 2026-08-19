@@ -38,6 +38,7 @@ class PriceQuote:
     price: Decimal
     currency: str
     as_of: datetime
+    stale: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ class PortfolioLine:
     pnl: Optional[Decimal] = None
     pnl_percent: Optional[Decimal] = None
     missing_price: bool = False
+    stale: bool = False
     # Display (after apply_fx)
     display_currency: Optional[str] = None
     market_value_display: Optional[Decimal] = None
@@ -104,3 +106,4 @@ class PortfolioSummary:
     fx_status: Optional[FxStatus] = None
     fx_as_of: Optional[datetime] = None
     fx_base: Optional[str] = None
+    totals_by_asset_class: dict[str, CurrencyTotals] = field(default_factory=dict)

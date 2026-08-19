@@ -431,3 +431,19 @@ def test_bob_cannot_update_or_delete_alice_holding() -> None:
     listed = client.get("/api/holdings", headers=_auth("alice")).json()
     assert len(listed) == 1
     assert listed[0]["qty"] == "1.5"
+
+
+def test_export_holdings_csv() -> None:
+    client, _, _ = _make_client()
+    client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(),
+    )
+    r = client.get("/api/holdings/export", headers=_auth("alice"))
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+    text = r.text
+    assert "assetType,symbol,assetId,qty,avgCost,currency,note" in text
+    assert "crypto,BTC,bitcoin,1.5,40000,USD,optional" in text
+    assert client.get("/api/holdings/export").status_code == 401

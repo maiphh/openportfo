@@ -132,6 +132,7 @@ def test_get_quotes_cache_hit_skips_client() -> None:
     quotes = svc.get_quotes([("crypto", "BTC", "bitcoin")])
     assert len(quotes) == 1
     assert quotes[0].price == Decimal("60000")
+    assert quotes[0].stale is False
     assert crypto.price_calls == 0
     assert stock.price_calls == 0
     assert cache.put_calls == 1  # only the seed put
@@ -238,6 +239,7 @@ def test_get_quotes_external_failure_returns_stale() -> None:
     quotes = svc.get_quotes([("crypto", "BTC", "bitcoin")])
     assert len(quotes) == 1
     assert quotes[0].price == Decimal("50000")
+    assert quotes[0].stale is True
     assert crypto.price_calls == 1
 
 

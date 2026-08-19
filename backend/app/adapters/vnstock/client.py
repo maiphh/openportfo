@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Sequence
 
-from app.adapters.vnstock.catalog import stock_catalog, stock_prices
+from app.adapters.vnstock.catalog import stock_catalog, stock_prices, stock_profile_meta
 from app.domain.models import PriceQuote
-from app.ports.market import AssetSearchResult, MarketDataError
+from app.ports.market import AssetProfile, AssetSearchResult, MarketDataError
 
 
 def _utc_now() -> datetime:
@@ -91,6 +91,33 @@ class FixtureVnstockClient:
     def set_price(self, symbol: str, price: Decimal, currency: str = "VND") -> None:
         """Test helper: upsert fixture price."""
         self._prices[symbol.upper()] = (price, currency)
+
+    def get_profile(self, symbol: str) -> Optional[AssetProfile]:
+        self.profile_calls = getattr(self, "profile_calls", 0) + 1
+        self.last_profile_symbol = symbol
+        key = (symbol or "").strip().upper()
+        hit = next((r for r in self._search_index if r.symbol.upper() == key), None)
+        if hit is None:
+            return None
+        meta = stock_profile_meta(hit.symbol)
+        desc = meta.get("description") or f"{hit.name} is a Vietnam-listed equity ({hit.symbol})."
+        links: dict[str, str] = {}
+        if meta.get("homepage"):
+            links["homepage"] = str(meta["homepage"])
+        return AssetProfile(
+            asset_type="stock",
+            symbol=hit.symbol,
+            asset_id=hit.asset_id,
+            name=hit.name,
+            description=desc,
+            homepage=meta.get("homepage"),
+            industry=meta.get("industry"),
+            exchange=meta.get("exchange") or "HOSE",
+            country=meta.get("country") or "VN",
+            links=links,
+            market_currency="VND",
+            source="catalog",
+        )
 
 
 __all__ = ["FixtureVnstockClient"]
