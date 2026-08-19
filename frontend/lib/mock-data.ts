@@ -264,18 +264,4 @@ export const OVERVIEW_TABS: Record<OverviewTab, QuoteRow[]> = {
   ],
 };
 
-export const SEARCH_UNIVERSE: QuoteRow[] = [
-  ...OVERVIEW_TABS.Financial,
-  ...OVERVIEW_TABS.Technology,
-  ...OVERVIEW_TABS.Services,
-  { symbol: "NVDA", name: "NVIDIA", value: 118.42, change: -2.84, changePct: -2.34, open: 121.1, high: 122.4, low: 117.8, prev: 121.26, assetType: "stock" },
-  { symbol: "TSLA", name: "Tesla", value: 248.9, change: 2.16, changePct: 0.88, open: 246.2, high: 251.3, low: 245.1, prev: 246.74, assetType: "stock" },
-  { symbol: "AMD", name: "Advanced Micro Devices", value: 148.22, change: -6.61, changePct: -4.27, open: 154.1, high: 155.4, low: 147.3, prev: 154.83, assetType: "stock" },
-  { symbol: "BTC", name: "Bitcoin", value: 68420, change: 820, changePct: 1.21, open: 67600, high: 69100, low: 67250, prev: 67600, assetType: "crypto" },
-  { symbol: "ETH", name: "Ethereum", value: 3420, change: -48, changePct: -1.38, open: 3468, high: 3510, low: 3395, prev: 3468, assetType: "crypto" },
-]
-  .map((row): QuoteRow => ({
-    ...row,
-    assetType: row.assetType === "crypto" ? "crypto" : "stock",
-  }))
-  .filter((row, index, arr) => arr.findIndex((r) => r.symbol === row.symbol) === index);
+

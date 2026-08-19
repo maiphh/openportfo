@@ -173,16 +173,20 @@ export async function refreshPortfolio(options: {
   });
 }
 
+export function assetSearchQuery(params: { q: string; type: "crypto" | "stock" }): string {
+  const q = new URLSearchParams();
+  q.set("q", params.q);
+  q.set("type", params.type);
+  return q.toString();
+}
+
 export async function searchAssets(options: {
   q: string;
   type: "crypto" | "stock";
   token?: string | null;
   signal?: AbortSignal;
 }): Promise<AssetSearchHit[]> {
-  const qs = new URLSearchParams({
-    q: options.q,
-    type: options.type,
-  });
+  const qs = assetSearchQuery({ q: options.q, type: options.type });
   return apiFetch<AssetSearchHit[]>(`/api/assets/search?${qs}`, {
     token: options.token,
     signal: options.signal,
