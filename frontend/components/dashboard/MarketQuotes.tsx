@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { fetchMarketQuotes, type MarketKind } from "@/lib/api";
-import { convertAmount, nativeCurrencyForMarket } from "@/lib/currency";
+import { convertAmount, DEFAULT_FX_BASE, nativeCurrencyForMarket } from "@/lib/currency";
 import { CRYPTO_QUOTE_GROUPS, QUOTE_GROUPS, type QuoteGroup, type QuoteRow } from "@/lib/mock-data";
 import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
 
@@ -25,9 +25,10 @@ function mapMoney(
   native: string,
   display: string,
   rates: Record<string, string>,
+  base: string,
 ): { value: number; converted: boolean } {
   if (native === display) return { value: amount, converted: true };
-  const converted = convertAmount(amount, native, display, rates);
+  const converted = convertAmount(amount, native, display, rates, base);
   if (converted == null) return { value: amount, converted: false };
   return { value: converted, converted: true };
 }
@@ -37,13 +38,14 @@ function mapRow(
   native: string,
   display: string,
   rates: Record<string, string>,
+  base: string,
 ): QuoteRow & { moneyConverted: boolean } {
-  const value = mapMoney(row.value, native, display, rates);
-  const change = mapMoney(row.change, native, display, rates);
-  const open = mapMoney(row.open, native, display, rates);
-  const high = mapMoney(row.high, native, display, rates);
-  const low = mapMoney(row.low, native, display, rates);
-  const prev = mapMoney(row.prev, native, display, rates);
+  const value = mapMoney(row.value, native, display, rates, base);
+  const change = mapMoney(row.change, native, display, rates, base);
+  const open = mapMoney(row.open, native, display, rates, base);
+  const high = mapMoney(row.high, native, display, rates, base);
+  const low = mapMoney(row.low, native, display, rates, base);
+  const prev = mapMoney(row.prev, native, display, rates, base);
   return {
     ...row,
     value: value.value,
@@ -59,6 +61,7 @@ function mapRow(
 export default function MarketQuotes({ market = "stock" }: { market?: MarketKind }) {
   const { currency, rates, fxStatus } = useDisplayCurrency();
   const native = nativeCurrencyForMarket(market);
+  const fxBase = rates.base?.trim() || DEFAULT_FX_BASE;
   const [groups, setGroups] = useState<QuoteGroup[]>(() => mockGroups(market));
   const [source, setSource] = useState<"mock" | "live" | "loading">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -88,9 +91,9 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
   const displayGroups = useMemo(() => {
     return groups.map((group) => ({
       ...group,
-      rows: group.rows.map((row) => mapRow(row, native, currency, rates.rates)),
+      rows: group.rows.map((row) => mapRow(row, native, currency, rates.rates, fxBase)),
     }));
-  }, [currency, groups, native, rates.rates]);
+  }, [currency, fxBase, groups, native, rates.rates]);
 
   const conversionOk =
     native === currency || (fxStatus !== "missing" && getAnyRowConverted(displayGroups));

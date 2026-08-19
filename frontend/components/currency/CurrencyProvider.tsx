@@ -6,12 +6,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
   convertAmount,
   DEFAULT_DISPLAY_CURRENCY,
+  DEFAULT_FX_BASE,
   emptyFxRates,
   getRate,
   parseDisplayCurrency,
@@ -20,7 +22,7 @@ import {
   type DisplayCurrency,
   type FxRatesPayload,
 } from "@/lib/currency";
-import { fetchFxRates, readAuthToken } from "@/lib/fx";
+import { AUTH_TOKEN_STORAGE_KEY, fetchFxRates, readAuthToken } from "@/lib/fx";
 
 export type CurrencyContextValue = {
   currency: DisplayCurrency;
@@ -28,6 +30,7 @@ export type CurrencyContextValue = {
   rates: FxRatesPayload;
   ratesLoading: boolean;
   ratesAuthRequired: boolean;
+  ratesError: string | null;
   refreshRates: () => Promise<void>;
   /** Multiplier native→display, or null when unavailable. */
   rateToDisplay: (nativeCurrency: string) => number | null;
@@ -44,6 +47,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [rates, setRates] = useState<FxRatesPayload>(() => emptyFxRates());
   const [ratesLoading, setRatesLoading] = useState(false);
   const [ratesAuthRequired, setRatesAuthRequired] = useState(false);
+  const [ratesError, setRatesError] = useState<string | null>(null);
+
+  const abortRef = useRef<AbortController | null>(null);
+  const hasLoadedRatesRef = useRef(false);
+  const lastTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     setCurrencyState(readStoredDisplayCurrency());
@@ -57,21 +65,50 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshRates = useCallback(async () => {
+    abortRef.current?.abort();
     const controller = new AbortController();
+    abortRef.current = controller;
     setRatesLoading(true);
+    setRatesError(null);
+
     try {
+      const token = readAuthToken();
+      lastTokenRef.current = token;
       const result = await fetchFxRates({
-        token: readAuthToken(),
+        token,
         signal: controller.signal,
       });
-      setRates(result.data);
+      if (controller.signal.aborted) return;
+
       setRatesAuthRequired(result.authRequired);
-    } catch {
-      setRates(emptyFxRates("missing"));
-      setRatesAuthRequired(false);
+      if (result.ok) {
+        setRates(result.data);
+        hasLoadedRatesRef.current = Object.keys(result.data.rates).length > 0 || result.data.status !== "missing";
+        setRatesError(null);
+      } else if (!hasLoadedRatesRef.current) {
+        setRates(result.data);
+        setRatesError(result.authRequired ? "auth_required" : `http_${result.status}`);
+      } else {
+        // Keep last-good rates; surface auth/error separately.
+        setRatesError(result.authRequired ? "auth_required" : `http_${result.status}`);
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      if (!hasLoadedRatesRef.current) {
+        setRates(emptyFxRates("missing"));
+      }
+      setRatesError(err instanceof Error ? err.message : "fetch_failed");
     } finally {
-      setRatesLoading(false);
+      if (!controller.signal.aborted) {
+        setRatesLoading(false);
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -79,15 +116,48 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     void refreshRates();
   }, [hydrated, refreshRates]);
 
+  // Re-fetch when auth token appears (other tab via storage; same tab via focus/visibility).
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const maybeRefreshForAuth = () => {
+      const token = readAuthToken();
+      if (token !== lastTokenRef.current) {
+        void refreshRates();
+      }
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_TOKEN_STORAGE_KEY) {
+        void refreshRates();
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") maybeRefreshForAuth();
+    };
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", maybeRefreshForAuth);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", maybeRefreshForAuth);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [hydrated, refreshRates]);
+
+  const fxBase = rates.base?.trim() || DEFAULT_FX_BASE;
+
   const rateToDisplay = useCallback(
-    (nativeCurrency: string) => getRate(rates.rates, nativeCurrency, currency),
-    [currency, rates.rates],
+    (nativeCurrency: string) => getRate(rates.rates, nativeCurrency, currency, fxBase),
+    [currency, fxBase, rates.rates],
   );
 
   const convertToDisplay = useCallback(
     (amount: number, nativeCurrency: string) =>
-      convertAmount(amount, nativeCurrency, currency, rates.rates),
-    [currency, rates.rates],
+      convertAmount(amount, nativeCurrency, currency, rates.rates, fxBase),
+    [currency, fxBase, rates.rates],
   );
 
   const value = useMemo<CurrencyContextValue>(
@@ -97,6 +167,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       rates,
       ratesLoading,
       ratesAuthRequired,
+      ratesError,
       refreshRates,
       rateToDisplay,
       convertToDisplay,
@@ -109,6 +180,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       rateToDisplay,
       rates,
       ratesAuthRequired,
+      ratesError,
       ratesLoading,
       refreshRates,
       setCurrency,

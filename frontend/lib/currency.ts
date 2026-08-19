@@ -5,6 +5,7 @@ export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 
 export const DEFAULT_DISPLAY_CURRENCY: DisplayCurrency = "VND";
 export const DISPLAY_CURRENCY_STORAGE_KEY = "artryx.displayCurrency";
+export const DEFAULT_FX_BASE = "USD";
 
 export type FxRatesPayload = {
   base: string | null;
@@ -55,11 +56,40 @@ export function rateKey(src: string, dst: string): string {
   return `${src.toUpperCase()}_${dst.toUpperCase()}`;
 }
 
-/** Resolve SRC→DST multiplier from flat stored rates (direct or inverse). */
+function parseRateNumber(value: string | number | undefined): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Direct SRC_DST or inverse DST_SRC only (no triangulation). */
+export function lookupDirectOrInverse(
+  rates: Record<string, string | number> | null | undefined,
+  src: string,
+  dst: string,
+): number | null {
+  const srcU = src.trim().toUpperCase();
+  const dstU = dst.trim().toUpperCase();
+  if (!srcU || !dstU || !rates) return null;
+  if (srcU === dstU) return 1;
+
+  const direct = parseRateNumber(rates[rateKey(srcU, dstU)]);
+  if (direct != null) return direct;
+
+  const inverse = parseRateNumber(rates[rateKey(dstU, srcU)]);
+  if (inverse != null && inverse !== 0) return 1 / inverse;
+  return null;
+}
+
+/**
+ * Resolve SRC→DST multiplier from flat stored rates.
+ * Tries direct/inverse, then triangulation via `base` (admin store is USD-based).
+ */
 export function getRate(
   rates: Record<string, string | number> | null | undefined,
   src: string,
   dst: string,
+  base: string = DEFAULT_FX_BASE,
 ): number | null {
   const srcU = src.trim().toUpperCase();
   const dstU = dst.trim().toUpperCase();
@@ -67,18 +97,16 @@ export function getRate(
   if (srcU === dstU) return 1;
   if (!rates) return null;
 
-  const direct = rates[rateKey(srcU, dstU)];
-  if (direct != null && direct !== "") {
-    const n = Number(direct);
-    return Number.isFinite(n) ? n : null;
-  }
+  const direct = lookupDirectOrInverse(rates, srcU, dstU);
+  if (direct != null) return direct;
 
-  const inverse = rates[rateKey(dstU, srcU)];
-  if (inverse != null && inverse !== "") {
-    const n = Number(inverse);
-    if (Number.isFinite(n) && n !== 0) return 1 / n;
-  }
-  return null;
+  const baseU = (base || DEFAULT_FX_BASE).trim().toUpperCase() || DEFAULT_FX_BASE;
+  if (srcU === baseU || dstU === baseU) return null;
+
+  const toBase = lookupDirectOrInverse(rates, srcU, baseU);
+  const fromBase = lookupDirectOrInverse(rates, baseU, dstU);
+  if (toBase == null || fromBase == null) return null;
+  return toBase * fromBase;
 }
 
 export function convertAmount(
@@ -86,9 +114,10 @@ export function convertAmount(
   src: string,
   dst: string,
   rates: Record<string, string | number> | null | undefined,
+  base: string = DEFAULT_FX_BASE,
 ): number | null {
   if (!Number.isFinite(amount)) return null;
-  const rate = getRate(rates, src, dst);
+  const rate = getRate(rates, src, dst, base);
   if (rate == null) return null;
   return amount * rate;
 }

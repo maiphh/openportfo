@@ -11,7 +11,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DISPLAY_CURRENCIES, getRate, rateKey, type DisplayCurrency } from "@/lib/currency";
+import {
+  DEFAULT_FX_BASE,
+  DISPLAY_CURRENCIES,
+  getRate,
+  rateKey,
+  type DisplayCurrency,
+} from "@/lib/currency";
 
 function formatAsOfShort(asOf: string | null): string {
   if (!asOf) return "asOf —";
@@ -20,25 +26,44 @@ function formatAsOfShort(asOf: string | null): string {
   return `asOf ${d.toLocaleDateString()}`;
 }
 
-function relevantRateLabel(currency: DisplayCurrency, rates: Record<string, string>, asOf: string | null, status: string) {
+function formatAsOfCompact(asOf: string | null): string | null {
+  if (!asOf) return null;
+  const d = new Date(asOf);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString();
+}
+
+function relevantRateLabel(
+  currency: DisplayCurrency,
+  rates: Record<string, string>,
+  asOf: string | null,
+  status: string,
+  base: string,
+) {
   if (status === "missing" || Object.keys(rates).length === 0) {
     return `Rate unavailable · ${formatAsOfShort(asOf)}`;
   }
   if (currency === "VND") {
-    const usdVnd = getRate(rates, "USD", "VND");
+    const usdVnd = getRate(rates, "USD", "VND", base);
     if (usdVnd != null) return `1 USD = ${usdVnd.toLocaleString()} VND · ${formatAsOfShort(asOf)}`;
   }
   if (currency === "USD") {
-    const vndUsd = getRate(rates, "VND", "USD");
-    if (vndUsd != null) return `1 VND = ${vndUsd.toLocaleString(undefined, { maximumFractionDigits: 8 })} USD · ${formatAsOfShort(asOf)}`;
-    const usdVnd = getRate(rates, "USD", "VND");
+    const vndUsd = getRate(rates, "VND", "USD", base);
+    if (vndUsd != null) {
+      return `1 VND = ${vndUsd.toLocaleString(undefined, { maximumFractionDigits: 8 })} USD · ${formatAsOfShort(asOf)}`;
+    }
+    const usdVnd = getRate(rates, "USD", "VND", base);
     if (usdVnd != null) return `1 USD = ${usdVnd.toLocaleString()} VND · ${formatAsOfShort(asOf)}`;
   }
   if (currency === "EUR") {
-    const usdEur = getRate(rates, "USD", "EUR");
-    if (usdEur != null) return `1 USD = ${usdEur.toLocaleString(undefined, { maximumFractionDigits: 6 })} EUR · ${formatAsOfShort(asOf)}`;
-    const eurUsd = getRate(rates, "EUR", "USD");
-    if (eurUsd != null) return `1 EUR = ${eurUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })} USD · ${formatAsOfShort(asOf)}`;
+    const usdEur = getRate(rates, "USD", "EUR", base);
+    if (usdEur != null) {
+      return `1 USD = ${usdEur.toLocaleString(undefined, { maximumFractionDigits: 6 })} EUR · ${formatAsOfShort(asOf)}`;
+    }
+    const eurUsd = getRate(rates, "EUR", "USD", base);
+    if (eurUsd != null) {
+      return `1 EUR = ${eurUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })} USD · ${formatAsOfShort(asOf)}`;
+    }
   }
   const first = Object.keys(rates).sort()[0];
   if (first) return `${first} ${rates[first]} · ${formatAsOfShort(asOf)}`;
@@ -48,22 +73,24 @@ function relevantRateLabel(currency: DisplayCurrency, rates: Record<string, stri
 export default function CurrencySelect() {
   const { currency, setCurrency, rates, asOf, fxStatus } = useDisplayCurrency();
   const [panelOpen, setPanelOpen] = useState(false);
+  const fxBase = rates.base?.trim() || DEFAULT_FX_BASE;
 
   const tip = useMemo(
-    () => relevantRateLabel(currency, rates.rates, asOf, fxStatus),
-    [asOf, currency, fxStatus, rates.rates],
+    () => relevantRateLabel(currency, rates.rates, asOf, fxStatus, fxBase),
+    [asOf, currency, fxBase, fxStatus, rates.rates],
   );
 
   const compactLabel = useMemo(() => {
-    const pair = currency === "EUR" ? rateKey("USD", "EUR") : rateKey("USD", "VND");
-    const direct = getRate(rates.rates, pair.slice(0, 3), pair.slice(4));
+    const quoteTo = currency === "EUR" ? "EUR" : "VND";
+    const pair = rateKey("USD", quoteTo);
+    const direct = getRate(rates.rates, "USD", quoteTo, fxBase);
+    const asOfBit = formatAsOfCompact(asOf);
     if (direct != null) {
-      const asOfBit = asOf ? ` · ${new Date(asOf).toLocaleDateString()}` : "";
-      return `${pair} ${direct}${asOfBit}`;
+      return asOfBit ? `${pair} ${direct} · ${asOfBit}` : `${pair} ${direct}`;
     }
     if (fxStatus === "missing" || Object.keys(rates.rates).length === 0) return "FX n/a";
-    return asOf ? `FX · ${new Date(asOf).toLocaleDateString()}` : "FX";
-  }, [asOf, currency, fxStatus, rates.rates]);
+    return asOfBit ? `FX · ${asOfBit}` : "FX";
+  }, [asOf, currency, fxBase, fxStatus, rates.rates]);
 
   return (
     <>

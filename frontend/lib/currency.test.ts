@@ -62,9 +62,15 @@ describe("getRate / convertAmount", () => {
     expect(getRate(rates, "USD", "EUR")).toBe(0.92);
   });
 
-  it("returns null when pair missing", () => {
-    expect(getRate(rates, "EUR", "VND")).toBeNull();
-    expect(convertAmount(100, "EUR", "VND", rates)).toBeNull();
+  it("triangulates via USD base when cross pair is absent", () => {
+    expect(getRate(rates, "VND", "EUR")).toBeCloseTo((1 / 25000) * 0.92);
+    expect(getRate(rates, "EUR", "VND")).toBeCloseTo((1 / 0.92) * 25000);
+    expect(convertAmount(25000, "VND", "EUR", rates)).toBeCloseTo(0.92);
+  });
+
+  it("returns null when a triangulation leg is missing", () => {
+    expect(getRate({ USD_VND: "25000" }, "VND", "EUR")).toBeNull();
+    expect(convertAmount(100, "VND", "EUR", { USD_VND: "25000" })).toBeNull();
   });
 
   it("converts amounts when rate exists", () => {
