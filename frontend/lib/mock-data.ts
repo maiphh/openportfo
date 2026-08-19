@@ -351,5 +351,8 @@ export const SEARCH_UNIVERSE: QuoteRow[] = [
   { symbol: "BTC", name: "Bitcoin", value: 68420, change: 820, changePct: 1.21, open: 67600, high: 69100, low: 67250, prev: 67600, assetType: "crypto" },
   { symbol: "ETH", name: "Ethereum", value: 3420, change: -48, changePct: -1.38, open: 3468, high: 3510, low: 3395, prev: 3468, assetType: "crypto" },
 ]
-  .map((row) => ({ ...row, assetType: row.assetType ?? "stock" }))
+  .map((row): QuoteRow => ({
+    ...row,
+    assetType: row.assetType === "crypto" ? "crypto" : "stock",
+  }))
   .filter((row, index, arr) => arr.findIndex((r) => r.symbol === row.symbol) === index);
