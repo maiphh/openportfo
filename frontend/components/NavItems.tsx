@@ -37,7 +37,19 @@ export default function NavItems({
         }
 
         const children = "children" in item ? item.children : undefined;
-        if (!children) return null;
+        if (!children) {
+          const active = pathname === normalizePath(item.href);
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={cn("transition-colors hover:text-teal-400", active ? "text-gray-100" : "text-gray-500")}
+              >
+                {item.label}
+              </Link>
+            </li>
+          );
+        }
 
         const active = MARKET_ACTIVE.has(pathname);
         return (

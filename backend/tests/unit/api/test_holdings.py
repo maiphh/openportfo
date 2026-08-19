@@ -1,7 +1,8 @@
-"""Sprint 03: holdings ports, service validation, REST CRUD + isolation."""
+"""Sprint 03 + BL-001: holdings ports, catalog validation, REST CRUD."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -9,15 +10,31 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.deps import (
+    get_exchange_rate_repo,
+    get_fx_service,
     get_holdings_repo,
+    get_market_service,
+    get_price_cache_repo,
     get_user_profile_repo,
+    set_crypto_market_client,
+    set_exchange_rate_repo,
+    set_fx_service,
     set_holdings_repo,
+    set_market_service,
+    set_price_cache_repo,
+    set_stock_market_client,
     set_user_profile_repo,
 )
 from app.main import create_app
+from app.ports.fx import StoredRates
 from app.ports.holdings import DuplicateHoldingError, HoldingNotFoundError, HoldingRecord
+from app.services.fx_service import FxService
 from app.services.holdings_service import HoldingsService, ValidationError
+from app.services.market_service import MarketService
+from tests.fakes.fx import InMemoryExchangeRateRepo
 from tests.fakes.holdings import InMemoryHoldingsRepo
+from tests.fakes.market import FixtureCryptoMarketClient, FixtureStockMarketClient
+from tests.fakes.price_cache import InMemoryPriceCacheRepo
 from tests.fakes.users import InMemoryUserProfileRepo
 
 
@@ -54,17 +71,55 @@ def _holding_body(
     return body
 
 
+def _seed_fx(repo: InMemoryExchangeRateRepo) -> None:
+    repo.seed(
+        StoredRates(
+            base="USD",
+            rates={
+                "USD_VND": Decimal("25000"),
+                "VND_USD": Decimal("0.00004"),
+                "USD_EUR": Decimal("0.92"),
+                "EUR_USD": Decimal("1") / Decimal("0.92"),
+            },
+            as_of=datetime(2026, 8, 1, tzinfo=timezone.utc),
+            provider="test",
+            status="fresh",
+        )
+    )
+
+
 def _make_client(
     holdings: InMemoryHoldingsRepo | None = None,
     profiles: InMemoryUserProfileRepo | None = None,
+    fx: InMemoryExchangeRateRepo | None = None,
 ) -> tuple[TestClient, InMemoryHoldingsRepo, InMemoryUserProfileRepo]:
     h_repo = holdings or InMemoryHoldingsRepo()
     p_repo = profiles or InMemoryUserProfileRepo()
+    crypto = FixtureCryptoMarketClient()
+    stock = FixtureStockMarketClient()
+    cache = InMemoryPriceCacheRepo()
+    fx_repo = fx if fx is not None else InMemoryExchangeRateRepo()
+    if fx is None:
+        _seed_fx(fx_repo)
+    market = MarketService(crypto, stock, cache, default_ttl_seconds=600)
+    fx_svc = FxService(fx_repo)
+
     set_holdings_repo(h_repo)
     set_user_profile_repo(p_repo)
+    set_crypto_market_client(crypto)
+    set_stock_market_client(stock)
+    set_price_cache_repo(cache)
+    set_exchange_rate_repo(fx_repo)
+    set_market_service(market)
+    set_fx_service(fx_svc)
+
     app = create_app()
     app.dependency_overrides[get_holdings_repo] = lambda: h_repo
     app.dependency_overrides[get_user_profile_repo] = lambda: p_repo
+    app.dependency_overrides[get_market_service] = lambda: market
+    app.dependency_overrides[get_fx_service] = lambda: fx_svc
+    app.dependency_overrides[get_exchange_rate_repo] = lambda: fx_repo
+    app.dependency_overrides[get_price_cache_repo] = lambda: cache
     return TestClient(app), h_repo, p_repo
 
 
@@ -72,9 +127,21 @@ def _make_client(
 def _reset_repos() -> Any:
     set_holdings_repo(None)
     set_user_profile_repo(None)
+    set_crypto_market_client(None)
+    set_stock_market_client(None)
+    set_price_cache_repo(None)
+    set_exchange_rate_repo(None)
+    set_market_service(None)
+    set_fx_service(None)
     yield
     set_holdings_repo(None)
     set_user_profile_repo(None)
+    set_crypto_market_client(None)
+    set_stock_market_client(None)
+    set_price_cache_repo(None)
+    set_exchange_rate_repo(None)
+    set_market_service(None)
+    set_fx_service(None)
 
 
 # ---------------------------------------------------------------------------
@@ -447,3 +514,120 @@ def test_export_holdings_csv() -> None:
     assert "assetType,symbol,assetId,qty,avgCost,currency,note" in text
     assert "crypto,BTC,bitcoin,1.5,40000,USD,optional" in text
     assert client.get("/api/holdings/export").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 4. BL-001: catalog validity + session→native cost conversion
+# ---------------------------------------------------------------------------
+
+
+def test_reject_unknown_crypto_holding() -> None:
+    client, h_repo, _ = _make_client()
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(symbol="NOTACOIN", asset_id="not-a-coin"),
+    )
+    assert r.status_code == 400
+    assert "invalid" in r.json()["detail"].lower() or "unknown" in r.json()["detail"].lower()
+    assert h_repo.list("alice") == []
+
+
+def test_reject_unknown_stock_holding() -> None:
+    client, h_repo, _ = _make_client()
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            asset_type="stock",
+            symbol="ZZZZ",
+            asset_id=None,
+            avg_cost="10000",
+            currency="VND",
+            note=None,
+        ),
+    )
+    assert r.status_code == 400
+    assert h_repo.list("alice") == []
+
+
+def test_create_valid_stock_stores_vnd() -> None:
+    client, _, _ = _make_client()
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            asset_type="stock",
+            symbol="VNM",
+            asset_id="VNM",
+            qty="10",
+            avg_cost="70000",
+            currency="VND",
+            note=None,
+        ),
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["symbol"] == "VNM"
+    assert body["currency"] == "VND"
+    assert body["avgCost"] == "70000"
+
+
+def test_create_crypto_converts_vnd_session_cost_to_usd() -> None:
+    """avgCost entered in session VND → stored native USD."""
+    client, _, _ = _make_client()
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            symbol="BTC",
+            asset_id="bitcoin",
+            qty="1",
+            avg_cost="25000000",  # 25M VND == 1000 USD at test FX
+            currency="VND",
+            note=None,
+        ),
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["currency"] == "USD"
+    assert Decimal(body["avgCost"]) == Decimal("1000")
+
+
+def test_update_avg_cost_converts_session_to_native() -> None:
+    client, _, _ = _make_client()
+    assert (
+        client.post(
+            "/api/holdings",
+            headers=_auth("alice"),
+            json=_holding_body(qty="1", avg_cost="40000", currency="USD"),
+        ).status_code
+        == 201
+    )
+    r = client.put(
+        "/api/holdings/crypto/BTC",
+        headers=_auth("alice"),
+        json={"avgCost": "50000000", "currency": "VND"},  # 2000 USD
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["currency"] == "USD"
+    assert Decimal(body["avgCost"]) == Decimal("2000")
+
+
+def test_service_rejects_unresolvable_when_market_wired() -> None:
+    market = MarketService(
+        FixtureCryptoMarketClient(),
+        FixtureStockMarketClient(),
+        InMemoryPriceCacheRepo(),
+    )
+    svc = HoldingsService(InMemoryHoldingsRepo(), market=market)
+    with pytest.raises(ValidationError, match="[Ii]nvalid|[Uu]nknown"):
+        svc.create_holding(
+            "u1",
+            asset_type="crypto",
+            symbol="NOPE",
+            qty="1",
+            avg_cost="1",
+            currency="USD",
+        )

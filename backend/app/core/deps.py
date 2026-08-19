@@ -700,7 +700,11 @@ def set_rss_fetcher(fetcher: Optional[RssFetcher]) -> None:
 
 
 def get_holdings_service() -> HoldingsService:
-    return HoldingsService(get_holdings_repo())
+    return HoldingsService(
+        get_holdings_repo(),
+        market=get_market_service(),
+        fx=get_fx_service(),
+    )
 
 
 def get_watchlist_service() -> WatchlistService:

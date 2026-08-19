@@ -12,7 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.deps import get_current_user, get_holdings_repo
+from app.core.deps import (
+    get_current_user,
+    get_fx_service,
+    get_holdings_repo,
+    get_market_service,
+)
 from app.ports.holdings import (
     DuplicateHoldingError,
     HoldingNotFoundError,
@@ -20,7 +25,9 @@ from app.ports.holdings import (
     HoldingsRepo,
 )
 from app.ports.users import UserProfile
+from app.services.fx_service import FxService
 from app.services.holdings_service import HoldingsService, ValidationError
+from app.services.market_service import MarketService
 
 router = APIRouter(tags=["holdings"])
 
@@ -78,8 +85,13 @@ class HoldingUpdate(BaseModel):
     note: Optional[str] = None
 
 
-def _service(repo: HoldingsRepo = Depends(get_holdings_repo)) -> HoldingsService:
-    return HoldingsService(repo)
+def _service(
+    repo: HoldingsRepo = Depends(get_holdings_repo),
+    market: MarketService = Depends(get_market_service),
+    fx: FxService = Depends(get_fx_service),
+) -> HoldingsService:
+    """Wire catalog validation + stored FX cost conversion on write."""
+    return HoldingsService(repo, market=market, fx=fx)
 
 
 @router.get("/api/holdings/export")

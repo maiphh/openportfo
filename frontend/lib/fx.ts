@@ -1,19 +1,8 @@
 import { apiBase } from "@/lib/api";
+import { AUTH_TOKEN_STORAGE_KEY, readAuthToken } from "@/lib/auth";
 import { emptyFxRates, type FxRatesPayload } from "@/lib/currency";
 
-export const AUTH_TOKEN_STORAGE_KEY = "artryx.accessToken";
-
-export function readAuthToken(
-  storage: Pick<Storage, "getItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
-): string | null {
-  if (!storage) return null;
-  try {
-    const raw = storage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    return raw?.trim() || null;
-  } catch {
-    return null;
-  }
-}
+export { AUTH_TOKEN_STORAGE_KEY, readAuthToken };
 
 export type FetchFxRatesResult = {
   data: FxRatesPayload;

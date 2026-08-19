@@ -91,21 +91,21 @@ As an **authenticated investor**, I want **one implicit portfolio with validated
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** Authenticated user can open `/portfolio`; unauthenticated user cannot access portfolio data.
-- [ ] **AC2** User with zero holdings sees empty state + Add holding CTA (no separate “create portfolio” step).
-- [ ] **AC3** User can **add** a VN stock only if it resolves via stock asset search (vnstock universe).
-- [ ] **AC4** User can **add** a crypto only if it resolves via crypto asset search (CoinGecko-backed).
-- [ ] **AC5** `POST`/`PUT` holdings **server-side** reject assets that do not resolve in the catalog/search (not FE-only).
-- [ ] **AC6** User can **edit** qty, avgCost (session→native conversion on save), and note; can **delete** a holding.
-- [ ] **AC7** Duplicate holding for same user+assetType+symbol returns conflict and UI shows error.
-- [ ] **AC8** Dashboard shows market value, cost basis, PnL, PnL% in the **session display currency** when FX allows.
-- [ ] **AC9** Allocation **pie** uses converted market values when display totals exist.
-- [ ] **AC10** Holdings **table** lists lines with key fields; supports filter **all | crypto | stock**.
-- [ ] **AC11** **Refresh** triggers `POST /api/portfolio/refresh` (or equivalent) and updates quotes/PnL.
-- [ ] **AC12** Portfolio money UI follows BL-003 session currency (VND/USD/EUR); no duplicate switcher on this page.
-- [ ] **AC13** Cost is entered in session currency; stored holding currency is **VND for stock**, **USD for crypto** after FX conversion at save.
-- [ ] **AC14** Rows with `missingPrice` or `stale` show a basic badge/indicator.
-- [ ] **AC15** Watchlist UI is **not** delivered in this BL.
+- [x] **AC1** Authenticated user can open `/portfolio`; unauthenticated user cannot access portfolio data.
+- [x] **AC2** User with zero holdings sees empty state + Add holding CTA (no separate “create portfolio” step).
+- [x] **AC3** User can **add** a VN stock only if it resolves via stock asset search (vnstock universe).
+- [x] **AC4** User can **add** a crypto only if it resolves via crypto asset search (CoinGecko-backed).
+- [x] **AC5** `POST`/`PUT` holdings **server-side** reject assets that do not resolve in the catalog/search (not FE-only).
+- [x] **AC6** User can **edit** qty, avgCost (session→native conversion on save), and note; can **delete** a holding.
+- [x] **AC7** Duplicate holding for same user+assetType+symbol returns conflict and UI shows error.
+- [x] **AC8** Dashboard shows market value, cost basis, PnL, PnL% in the **session display currency** when FX allows.
+- [x] **AC9** Allocation **pie** uses converted market values when display totals exist.
+- [x] **AC10** Holdings **table** lists lines with key fields; supports filter **all | crypto | stock**.
+- [x] **AC11** **Refresh** triggers `POST /api/portfolio/refresh` (or equivalent) and updates quotes/PnL.
+- [x] **AC12** Portfolio money UI follows BL-003 session currency (VND/USD/EUR); no duplicate switcher on this page.
+- [x] **AC13** Cost is entered in session currency; stored holding currency is **VND for stock**, **USD for crypto** after FX conversion at save.
+- [x] **AC14** Rows with `missingPrice` or `stale` show a basic badge/indicator.
+- [x] **AC15** Watchlist UI is **not** delivered in this BL.
 
 ---
 
@@ -188,6 +188,6 @@ As an **authenticated investor**, I want **one implicit portfolio with validated
 
 ## 11. Implementation notes (Eng fills after start)
 
-- Approach:
-- PR / branch:
-- Verification:
+- Approach: Artryx `/portfolio` dashboard (summary, SVG pie, table, filter, refresh, modal CRUD) + BE `HoldingsService` catalog resolve on POST/PUT and session→native cost FX via stored rates. Auth gate uses `artryx.accessToken` localStorage + paste CTA when Cognito Hosted UI is incomplete.
+- PR / branch: `execute-plan/6cc30007-pr-3-bl-001-portfolio-dashboard`
+- Verification: `pytest backend/tests/unit/api/test_holdings.py`; `npm test` in `frontend/` (NavItems + portfolio helpers).

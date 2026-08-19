@@ -54,6 +54,7 @@ export const NAV_ITEMS = [
       { href: "/markets/crypto", label: "Crypto" },
     ],
   },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/search", label: "Search" },
 ] as const;
 
