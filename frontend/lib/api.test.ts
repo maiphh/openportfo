@@ -28,7 +28,7 @@ describe("market API client", () => {
     vi.restoreAllMocks();
   });
 
-  it("fetchMarketQuotes({ market: \"stock\" }) hits HOSE quotes", async () => {
+  it('fetchMarketQuotes({ market: "stock" }) hits HOSE quotes', async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ exchange: "HOSE", limit: 80, groups: [], source: "vnstock" }),
     );
@@ -38,7 +38,7 @@ describe("market API client", () => {
     expect(lastFetchUrl()).toBe(`${base}/api/markets/quotes?exchange=HOSE&limit=80`);
   });
 
-  it("fetchMarketQuotes({ market: \"crypto\" }) hits crypto quotes", async () => {
+  it('fetchMarketQuotes({ market: "crypto" }) hits crypto quotes', async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ limit: 80, groups: [], source: "coingecko" }),
     );
@@ -48,7 +48,7 @@ describe("market API client", () => {
     expect(lastFetchUrl()).toBe(`${base}/api/markets/crypto/quotes?limit=80`);
   });
 
-  it("fetchMarketHeatmap({ market: \"crypto\" }) hits crypto heatmap", async () => {
+  it('fetchMarketHeatmap({ market: "crypto" }) hits crypto heatmap', async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ limit: 100, sectors: [], source: "coingecko" }),
     );
@@ -90,5 +90,45 @@ describe("market API client", () => {
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ source: "vnstock" }));
 
     await expect(fetchMarketHeatmap({ market: "stock" })).rejects.toThrow(/sectors/i);
+  });
+
+  it("returns live stock heatmap payload without transforming sectors", async () => {
+    const body = {
+      exchange: "HOSE",
+      limit: 100,
+      sectors: [{ name: "Banks", stocks: [{ symbol: "VCB", name: "Vietcombank", changePct: 1.2, marketCap: 100 }] }],
+      source: "vnstock",
+    };
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse(body));
+
+    await expect(fetchMarketHeatmap({ market: "stock" })).resolves.toEqual(body);
+  });
+
+  it("returns live crypto quotes payload without transforming groups", async () => {
+    const body = {
+      limit: 80,
+      groups: [
+        {
+          name: "MAJOR",
+          rows: [
+            {
+              symbol: "BTC",
+              name: "Bitcoin",
+              value: 1,
+              change: 0,
+              changePct: 0,
+              open: 1,
+              high: 1,
+              low: 1,
+              prev: 1,
+            },
+          ],
+        },
+      ],
+      source: "coingecko",
+    };
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse(body));
+
+    await expect(fetchMarketQuotes({ market: "crypto" })).resolves.toEqual(body);
   });
 });

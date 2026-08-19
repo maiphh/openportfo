@@ -4,12 +4,15 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
+import { Button } from "@/components/ui/button";
 import { fetchMarketQuotes, type MarketKind } from "@/lib/api";
 import { convertAmount, DEFAULT_FX_BASE, nativeCurrencyForMarket } from "@/lib/currency";
-import { CRYPTO_QUOTE_GROUPS, QUOTE_GROUPS, type QuoteGroup, type QuoteRow } from "@/lib/mock-data";
+import type { QuoteGroup, QuoteRow } from "@/types/markets";
 import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
 
 const COLUMNS = ["Name", "Value", "Change", "Chg%", "Open", "High", "Low", "Prev"] as const;
+
+type LoadState = "loading" | "live" | "error";
 
 function toneClass(value: number) {
   if (value > 0) return "text-emerald-400";
@@ -17,8 +20,25 @@ function toneClass(value: number) {
   return "text-gray-500";
 }
 
-function mockGroups(market: MarketKind) {
-  return market === "crypto" ? CRYPTO_QUOTE_GROUPS : QUOTE_GROUPS;
+function QuotesSkeleton() {
+  return (
+    <tbody data-testid="quotes-skeleton">
+      {Array.from({ length: 8 }).map((_, row) => (
+        <tr key={row} className="border-t border-gray-700">
+          {COLUMNS.map((column, col) => (
+            <td key={column} className="px-3 py-3">
+              <div
+                className={cn(
+                  "h-3 animate-pulse rounded bg-gray-700/60",
+                  col === 0 ? "w-28" : "ml-auto w-12",
+                )}
+              />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  );
 }
 
 function mapMoney(
@@ -59,22 +79,36 @@ function mapRow(
   };
 }
 
+function getAnyRowConverted(
+  groups: Array<{ rows: Array<{ moneyConverted: boolean }> }>,
+): boolean {
+  return groups.some((g) => g.rows.some((r) => r.moneyConverted));
+}
+
 export default function MarketQuotes({ market = "stock" }: { market?: MarketKind }) {
   const { currency, rates, fxStatus } = useDisplayCurrency();
   const native = nativeCurrencyForMarket(market);
   const fxBase = rates.base?.trim() || DEFAULT_FX_BASE;
-  const [groups, setGroups] = useState<QuoteGroup[]>(() => mockGroups(market));
-  const [source, setSource] = useState<"mock" | "live" | "loading">("loading");
+  const [groups, setGroups] = useState<QuoteGroup[]>([]);
+  const [source, setSource] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     setSource("loading");
     setError(null);
-    setGroups(mockGroups(market));
-    fetchMarketQuotes({ market, exchange: "HOSE", limit: 80, signal: controller.signal })
+    setGroups([]);
+    fetchMarketQuotes({
+      market,
+      limit: 80,
+      signal: controller.signal,
+      ...(market === "stock" ? { exchange: "HOSE" } : {}),
+    })
       .then((data) => {
-        if (!data.groups.length) {
+        if (controller.signal.aborted) return;
+        const hasRows = data.groups.some((group) => group.rows.length > 0);
+        if (!hasRows) {
           throw new Error("Empty quotes");
         }
         setGroups(data.groups);
@@ -82,12 +116,12 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
-        setGroups(mockGroups(market));
-        setSource("mock");
+        setGroups([]);
+        setSource("error");
         setError(err instanceof Error ? err.message : "Quotes unavailable");
       });
     return () => controller.abort();
-  }, [market]);
+  }, [market, reloadKey]);
 
   const displayGroups = useMemo(() => {
     return groups.map((group) => ({
@@ -110,76 +144,81 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
         <div className="text-[11px] text-gray-500">
           {source === "loading" ? (market === "crypto" ? "Loading crypto quotes…" : "Loading VN quotes…") : null}
           {source === "live" ? (market === "crypto" ? "CoinGecko" : "HOSE · vnstock") : null}
-          {source === "mock" ? `Demo data${error ? ` (${error})` : ""}` : null}
           {showNativeFallback ? ` · showing ${native} (rate unavailable)` : null}
         </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-gray-600 text-gray-500">
-                {COLUMNS.map((column, index) => (
-                  <th
-                    key={column}
-                    className={cn(
-                      "px-3 py-2.5 font-medium",
-                      index === 0 ? "text-left" : "text-right",
-                    )}
-                  >
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {displayGroups.map((group) => (
-                <Fragment key={group.name}>
-                  <tr className="bg-gray-800">
-                    <td colSpan={8} className="px-3 py-2 text-[11px] font-semibold tracking-[0.14em] text-gray-500">
-                      {group.name}
-                    </td>
-                  </tr>
-                  {group.rows.map((row) => (
-                    <tr key={`${group.name}-${row.symbol}`} className="border-t border-gray-700 hover:bg-gray-700/40">
-                      <td className="px-3 py-2">
-                        <AssetLink
-                          assetType={market}
-                          id={row.symbol}
-                          className="flex items-center gap-2.5 text-gray-200 hover:text-teal-400"
-                        >
-                          <CompanyLogo symbol={row.symbol} size={20} />
-                          <span>
-                            <span className="font-medium">{row.symbol}</span>
-                            <span className="ml-2 text-gray-400">{row.name}</span>
-                          </span>
-                        </AssetLink>
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-200">{formatPrice(row.value)}</td>
-                      <td className={cn("px-3 py-2 text-right tabular-nums", toneClass(row.change))}>
-                        {formatSigned(row.change)}
-                      </td>
-                      <td className={cn("px-3 py-2 text-right tabular-nums", toneClass(row.changePct))}>
-                        {formatPct(row.changePct)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.open)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.high)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.low)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.prev)}</td>
-                    </tr>
+        {source === "error" ? (
+          <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center" data-testid="quotes-error">
+            <p className="text-sm text-gray-400">{error ?? "Quotes unavailable"}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+              Retry
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-gray-600 text-gray-500">
+                  {COLUMNS.map((column, index) => (
+                    <th
+                      key={column}
+                      className={cn(
+                        "px-3 py-2.5 font-medium",
+                        index === 0 ? "text-left" : "text-right",
+                      )}
+                    >
+                      {column}
+                    </th>
                   ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </tr>
+              </thead>
+              {source === "loading" ? <QuotesSkeleton /> : null}
+              {source === "live" ? (
+                <tbody>
+                  {displayGroups.map((group) => (
+                    <Fragment key={group.name}>
+                      <tr className="bg-gray-800">
+                        <td colSpan={8} className="px-3 py-2 text-[11px] font-semibold tracking-[0.14em] text-gray-500">
+                          {group.name}
+                        </td>
+                      </tr>
+                      {group.rows.map((row) => (
+                        <tr key={`${group.name}-${row.symbol}`} className="border-t border-gray-700 hover:bg-gray-700/40">
+                          <td className="px-3 py-2">
+                            <AssetLink
+                              assetType={market}
+                              id={row.symbol}
+                              className="flex items-center gap-2.5 text-gray-200 hover:text-teal-400"
+                            >
+                              <CompanyLogo symbol={row.symbol} size={20} />
+                              <span>
+                                <span className="font-medium">{row.symbol}</span>
+                                <span className="ml-2 text-gray-400">{row.name}</span>
+                              </span>
+                            </AssetLink>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-200">{formatPrice(row.value)}</td>
+                          <td className={cn("px-3 py-2 text-right tabular-nums", toneClass(row.change))}>
+                            {formatSigned(row.change)}
+                          </td>
+                          <td className={cn("px-3 py-2 text-right tabular-nums", toneClass(row.changePct))}>
+                            {formatPct(row.changePct)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.open)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.high)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.low)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-400">{formatPrice(row.prev)}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              ) : null}
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
-}
-
-function getAnyRowConverted(
-  groups: Array<{ rows: Array<{ moneyConverted: boolean }> }>,
-): boolean {
-  return groups.some((g) => g.rows.some((r) => r.moneyConverted));
 }

@@ -1,7 +1,7 @@
-import type { HeatmapSector, QuoteGroup, QuoteRow } from "@/lib/mock-data";
 import type { DisplayCurrency } from "@/lib/currency";
+import type { HeatmapSector, QuoteGroup, QuoteRow } from "@/types/markets";
 
-export type { QuoteGroup, QuoteRow };
+export type { HeatmapSector, QuoteGroup, QuoteRow };
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
