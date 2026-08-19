@@ -32,6 +32,8 @@ export type CurrencyContextValue = {
   ratesAuthRequired: boolean;
   ratesError: string | null;
   refreshRates: () => Promise<void>;
+  /** Replace stored rates in session (admin refresh success). */
+  replaceRates: (data: FxRatesPayload) => void;
   /** Multiplier native→display, or null when unavailable. */
   rateToDisplay: (nativeCurrency: string) => number | null;
   convertToDisplay: (amount: number, nativeCurrency: string) => number | null;
@@ -105,6 +107,13 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const replaceRates = useCallback((data: FxRatesPayload) => {
+    setRates(data);
+    hasLoadedRatesRef.current = Object.keys(data.rates).length > 0 || data.status !== "missing";
+    setRatesError(null);
+    setRatesAuthRequired(false);
+  }, []);
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -169,6 +178,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       ratesAuthRequired,
       ratesError,
       refreshRates,
+      replaceRates,
       rateToDisplay,
       convertToDisplay,
       asOf: rates.asOf,
@@ -183,6 +193,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       ratesError,
       ratesLoading,
       refreshRates,
+      replaceRates,
       setCurrency,
     ],
   );
