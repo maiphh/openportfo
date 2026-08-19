@@ -70,6 +70,48 @@ class AssetProfile:
     source: str = "live"
 
 
+@dataclass(frozen=True)
+class HeatmapStock:
+    """One stock tile for the market heatmap treemap."""
+
+    symbol: str
+    name: str
+    change_pct: float
+    # Tile size weight: market cap when available, else session traded value.
+    market_cap: float
+
+
+@dataclass(frozen=True)
+class HeatmapSector:
+    """Industry / sector group of heatmap tiles."""
+
+    name: str
+    stocks: tuple[HeatmapStock, ...] = ()
+
+
+@dataclass(frozen=True)
+class QuoteRow:
+    """One quote-board row (OHLC + change)."""
+
+    symbol: str
+    name: str
+    value: float
+    change: float
+    change_pct: float
+    open: float
+    high: float
+    low: float
+    prev: float
+
+
+@dataclass(frozen=True)
+class QuoteGroup:
+    """Industry / category group of quote-board rows."""
+
+    name: str
+    rows: tuple[QuoteRow, ...] = ()
+
+
 class CryptoMarketClient(Protocol):
     """Port: CoinGecko (or fixture). Prices keyed by provider coin id."""
 
@@ -101,6 +143,14 @@ class CryptoMarketClient(Protocol):
         """Coin profile/description. ``None`` if the id is unknown."""
         ...
 
+    def get_heatmap(self, *, limit: int = 100) -> list[HeatmapSector]:
+        """Category-grouped coins for a Finviz-style heatmap. Tile size = market cap."""
+        ...
+
+    def get_quotes(self, *, limit: int = 80) -> list[QuoteGroup]:
+        """Category-grouped crypto quote rows (USD). ``limit`` caps total rows."""
+        ...
+
 
 class StockMarketClient(Protocol):
     """Port: vnstock (or fixture). Prices keyed by ticker symbol."""
@@ -125,11 +175,32 @@ class StockMarketClient(Protocol):
         """Company profile/description. ``None`` if the ticker is unknown."""
         ...
 
+    def get_heatmap(
+        self,
+        *,
+        exchange: str = "HOSE",
+        limit: int = 100,
+    ) -> list[HeatmapSector]:
+        """Sector-grouped stocks for a Finviz-style market heatmap.
+
+        Prefer live Insights heatmap when available; otherwise quote board +
+        industry listing. ``limit`` caps total tiles across all sectors.
+        """
+        ...
+
+    def get_quotes(self, *, exchange: str = "HOSE", limit: int = 80) -> list[QuoteGroup]:
+        """Industry-grouped quote board rows (OHLC + change). ``limit`` caps total rows."""
+        ...
+
 
 __all__ = [
     "AssetType",
     "AssetSearchResult",
     "AssetProfile",
+    "HeatmapStock",
+    "HeatmapSector",
+    "QuoteRow",
+    "QuoteGroup",
     "CryptoMarketClient",
     "StockMarketClient",
     "MarketDataError",

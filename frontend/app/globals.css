@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gray-900: #050505;
+  --color-gray-800: #141414;
+  --color-gray-700: #212328;
+  --color-gray-600: #30333a;
+  --color-gray-500: #9095a1;
+  --color-gray-400: #ccdadc;
+  --color-gray-200: #e8eeee;
+  --color-gray-100: #f4f7f7;
+  --color-teal-400: #0fedbe;
+  --color-teal-500: #0ed2a8;
+  --color-teal-950: #042f28;
+  --color-red-500: #ff495b;
+  --color-emerald-400: #34d399;
+  --color-background: #050505;
+  --color-foreground: #ccdadc;
+  --color-primary: #0fedbe;
+  --color-primary-foreground: #042f28;
+  --color-accent: #212328;
+  --color-accent-foreground: #f4f7f7;
+  --color-muted: #212328;
+  --color-ring: #0fedbe;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-gray-600);
+  }
+
+  html,
+  body {
+    background: var(--color-gray-900);
+    color: var(--color-gray-400);
+  }
+
+  body {
+    font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  }
+}
+
+@layer utilities {
+  .container {
+    @apply mx-auto max-w-screen-2xl px-4 md:px-6 lg:px-8;
+  }
+
+  .home-wrapper {
+    @apply flex-col items-center gap-4 text-gray-400 sm:items-start md:gap-10;
+  }
+
+  .home-section {
+    @apply grid w-full grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-3;
+  }
+
+  .header {
+    @apply z-50 h-[70px] w-full overflow-visible bg-gray-800;
+  }
+
+  .header-wrapper {
+    @apply flex items-center justify-between px-6 py-4 text-gray-500;
+  }
+
+  .search-text {
+    @apply cursor-pointer text-gray-500 hover:text-teal-400;
+  }
+}

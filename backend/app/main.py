@@ -15,6 +15,7 @@ from app.api.fx import router as fx_router
 from app.api.health import router as health_router
 from app.api.history import router as history_router
 from app.api.holdings import router as holdings_router
+from app.api.markets import router as markets_router
 from app.api.news import router as news_router
 from app.api.portfolio import router as portfolio_router
 from app.api.snapshots import router as snapshots_router
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health_router)
+    app.include_router(markets_router)
     app.include_router(auth_router)
     app.include_router(holdings_router)
     app.include_router(watchlist_router)

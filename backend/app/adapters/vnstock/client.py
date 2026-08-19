@@ -9,13 +9,67 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, Sequence
 
-from app.adapters.vnstock.catalog import stock_catalog, stock_prices, stock_profile_meta
+from app.adapters.vnstock.catalog import (
+    fixture_heatmap_rows,
+    stock_catalog,
+    stock_prices,
+    stock_profile_meta,
+)
 from app.domain.models import PriceQuote
-from app.ports.market import AssetProfile, AssetSearchResult, MarketDataError
+from app.ports.market import (
+    AssetProfile,
+    AssetSearchResult,
+    HeatmapSector,
+    HeatmapStock,
+    MarketDataError,
+    QuoteGroup,
+    QuoteRow,
+)
 
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _quote_from_value(symbol: str, name: str, value: float, change_pct: float) -> QuoteRow:
+    change = value * change_pct / 100.0
+    prev = value - change
+    open_px = prev
+    return QuoteRow(
+        symbol=symbol,
+        name=name,
+        value=value,
+        change=change,
+        change_pct=change_pct,
+        open=open_px,
+        high=max(value, open_px, prev),
+        low=min(value, open_px, prev),
+        prev=prev,
+    )
+
+
+def group_quote_rows(
+    items: list[tuple[str, QuoteRow]],
+    *,
+    limit: int,
+    empty_name: str = "Khác",
+) -> list[QuoteGroup]:
+    """Sort by value, trim to ``limit``, and rebuild industry/category buckets."""
+    capped = sorted(items, key=lambda item: item[1].value, reverse=True)[:limit]
+    buckets: dict[str, list[QuoteRow]] = {}
+    for name, row in capped:
+        buckets.setdefault(name or empty_name, []).append(row)
+    return [
+        QuoteGroup(
+            name=name,
+            rows=tuple(sorted(rows, key=lambda r: r.value, reverse=True)),
+        )
+        for name, rows in sorted(
+            buckets.items(),
+            key=lambda kv: -sum(r.value for r in kv[1]),
+        )
+        if rows
+    ]
 
 
 class FixtureVnstockClient:
@@ -118,6 +172,61 @@ class FixtureVnstockClient:
             market_currency="VND",
             source="catalog",
         )
+
+    def get_heatmap(
+        self,
+        *,
+        exchange: str = "HOSE",
+        limit: int = 100,
+    ) -> list[HeatmapSector]:
+        self.heatmap_calls = getattr(self, "heatmap_calls", 0) + 1
+        self.last_heatmap_exchange = exchange
+        cap = max(1, min(int(limit), 300))
+        grouped: dict[str, list[HeatmapStock]] = {}
+        for symbol, name, industry, change_pct, weight in fixture_heatmap_rows():
+            grouped.setdefault(industry, []).append(
+                HeatmapStock(
+                    symbol=symbol,
+                    name=name,
+                    change_pct=change_pct,
+                    market_cap=weight,
+                )
+            )
+        # Prefer larger tiles first, then trim to ``limit``.
+        flat: list[tuple[str, HeatmapStock]] = []
+        for industry, stocks in grouped.items():
+            for stock in stocks:
+                flat.append((industry, stock))
+        flat.sort(key=lambda item: item[1].market_cap, reverse=True)
+        flat = flat[:cap]
+        out_map: dict[str, list[HeatmapStock]] = {}
+        for industry, stock in flat:
+            out_map.setdefault(industry, []).append(stock)
+        sectors = [
+            HeatmapSector(
+                name=name,
+                stocks=tuple(sorted(stocks, key=lambda s: s.market_cap, reverse=True)),
+            )
+            for name, stocks in sorted(out_map.items(), key=lambda kv: -sum(s.market_cap for s in kv[1]))
+        ]
+        return sectors
+
+    def get_quotes(
+        self,
+        *,
+        exchange: str = "HOSE",
+        limit: int = 80,
+    ) -> list[QuoteGroup]:
+        self.quotes_calls = getattr(self, "quotes_calls", 0) + 1
+        self.last_quotes_exchange = exchange
+        cap = max(1, min(int(limit), 300))
+        paired: list[tuple[str, QuoteRow]] = []
+        for symbol, name, industry, change_pct, _weight in fixture_heatmap_rows():
+            if symbol not in self._prices:
+                continue
+            value = float(self._prices[symbol][0])
+            paired.append((industry, _quote_from_value(symbol, name, value, change_pct)))
+        return group_quote_rows(paired, limit=cap)
 
 
 __all__ = ["FixtureVnstockClient"]

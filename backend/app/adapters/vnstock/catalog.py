@@ -124,7 +124,102 @@ _STOCK_PROFILES: dict[str, dict] = {
     },
 }
 
+# Industry labels for fixture heatmap (covers the demo catalog).
+_STOCK_INDUSTRIES: dict[str, str] = {
+    "VNM": "Thực phẩm - Đồ uống",
+    "MSN": "Thực phẩm - Đồ uống",
+    "MCH": "Thực phẩm - Đồ uống",
+    "SAB": "Thực phẩm - Đồ uống",
+    "DBC": "Thực phẩm - Đồ uống",
+    "ANV": "Thực phẩm - Đồ uống",
+    "VHC": "Thực phẩm - Đồ uống",
+    "FMC": "Thực phẩm - Đồ uống",
+    "FPT": "Công nghệ và thông tin",
+    "CMG": "Công nghệ và thông tin",
+    "FRT": "Bán lẻ",
+    "MWG": "Bán lẻ",
+    "PNJ": "Bán lẻ",
+    "DGW": "Bán lẻ",
+    "PET": "Bán lẻ",
+    "VCB": "Ngân hàng",
+    "BID": "Ngân hàng",
+    "CTG": "Ngân hàng",
+    "TCB": "Ngân hàng",
+    "MBB": "Ngân hàng",
+    "ACB": "Ngân hàng",
+    "VPB": "Ngân hàng",
+    "STB": "Ngân hàng",
+    "HDB": "Ngân hàng",
+    "TPB": "Ngân hàng",
+    "VIB": "Ngân hàng",
+    "SHB": "Ngân hàng",
+    "MSB": "Ngân hàng",
+    "SSB": "Ngân hàng",
+    "EIB": "Ngân hàng",
+    "LPB": "Ngân hàng",
+    "HPG": "Vật liệu xây dựng",
+    "HSG": "Vật liệu xây dựng",
+    "NKG": "Vật liệu xây dựng",
+    "VIC": "Bất động sản",
+    "VHM": "Bất động sản",
+    "VRE": "Bất động sản",
+    "KDH": "Bất động sản",
+    "NLG": "Bất động sản",
+    "DXG": "Bất động sản",
+    "PDR": "Bất động sản",
+    "DIG": "Bất động sản",
+    "NVL": "Bất động sản",
+    "KBC": "Bất động sản",
+    "BCM": "Bất động sản",
+    "IDC": "Bất động sản",
+    "GAS": "Tiện ích",
+    "PLX": "Tiện ích",
+    "POW": "Tiện ích",
+    "REE": "Tiện ích",
+    "PC1": "Tiện ích",
+    "GEG": "Tiện ích",
+    "PVD": "Khai khoáng",
+    "PVS": "Khai khoáng",
+    "BSR": "Khai khoáng",
+    "SSI": "Chứng khoán",
+    "VND": "Chứng khoán",
+    "HCM": "Chứng khoán",
+    "VCI": "Chứng khoán",
+    "CTS": "Chứng khoán",
+    "DGC": "SX Nhựa - Hóa chất",
+    "DPM": "SX Nhựa - Hóa chất",
+    "DCM": "SX Nhựa - Hóa chất",
+    "GVR": "SX Nhựa - Hóa chất",
+    "GMD": "Vận tải - kho bãi",
+    "HAH": "Vận tải - kho bãi",
+    "VSC": "Vận tải - kho bãi",
+    "VJC": "Vận tải - kho bãi",
+    "HVN": "Vận tải - kho bãi",
+    "IMP": "Chăm sóc sức khỏe",
+    "DHG": "Chăm sóc sức khỏe",
+    "TRA": "Chăm sóc sức khỏe",
+    "VGC": "Vật liệu xây dựng",
+}
+
 
 def stock_profile_meta(symbol: str) -> dict:
     """Fixture company extras keyed by ticker."""
     return dict(_STOCK_PROFILES.get((symbol or "").strip().upper()) or {})
+
+
+def stock_industry(symbol: str) -> str:
+    """Industry label for heatmap grouping (fixture catalog)."""
+    key = (symbol or "").strip().upper()
+    return _STOCK_INDUSTRIES.get(key) or "Khác"
+
+
+def fixture_heatmap_rows() -> list[tuple[str, str, str, float, float]]:
+    """(symbol, name, industry, change_pct, size_weight) for fixture heatmap."""
+    rows: list[tuple[str, str, str, float, float]] = []
+    for symbol, name, price in _VN_STOCKS:
+        # Deterministic pseudo move from ticker chars (stable across runs).
+        seed = sum(ord(c) * (i + 3) for i, c in enumerate(symbol))
+        change = ((seed % 1101) / 100.0) - 5.5
+        weight = float(Decimal(price)) * (10 + (seed % 40))
+        rows.append((symbol, name, stock_industry(symbol), round(change, 2), weight))
+    return rows

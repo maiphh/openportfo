@@ -103,3 +103,76 @@ _CRYPTO_PROFILES: dict[str, dict] = {
 def crypto_profile_meta(asset_id: str) -> dict:
     """Fixture profile extras keyed by CoinGecko id."""
     return dict(_CRYPTO_PROFILES.get((asset_id or "").strip().lower()) or {})
+
+
+_CRYPTO_CATEGORIES: dict[str, str] = {
+    "bitcoin": "Layer 1",
+    "ethereum": "Layer 1",
+    "solana": "Layer 1",
+    "cardano": "Layer 1",
+    "avalanche-2": "Layer 1",
+    "near": "Layer 1",
+    "aptos": "Layer 1",
+    "sui": "Layer 1",
+    "toncoin": "Layer 1",
+    "cosmos": "Layer 1",
+    "algorand": "Layer 1",
+    "hedera-hashgraph": "Layer 1",
+    "internet-computer": "Layer 1",
+    "blockstack": "Layer 1",
+    "optimism": "Smart Contract / L2",
+    "arbitrum": "Smart Contract / L2",
+    "matic-network": "Smart Contract / L2",
+    "polkadot": "Smart Contract / L2",
+    "uniswap": "DeFi",
+    "aave": "DeFi",
+    "maker": "DeFi",
+    "injective-protocol": "DeFi",
+    "the-graph": "DeFi",
+    "dogecoin": "Meme",
+    "pepe": "Meme",
+    "shiba-inu": "Meme",
+    "ripple": "Payments / Other",
+    "stellar": "Payments / Other",
+    "litecoin": "Payments / Other",
+    "bitcoin-cash": "Payments / Other",
+    "monero": "Payments / Other",
+    "vechain": "Payments / Other",
+    "filecoin": "Payments / Other",
+    "worldcoin-wld": "Payments / Other",
+    "tron": "Payments / Other",
+    "binancecoin": "Exchange",
+    "okb": "Exchange",
+    "render-token": "AI / Infra",
+    "tether": "Stablecoin",
+    "usd-coin": "Stablecoin",
+    "dai": "Stablecoin",
+}
+
+
+def crypto_category(coin_id: str, symbol: str = "") -> str:
+    """Heatmap/quote bucket for a CoinGecko id (or ticker). Unknown → Others."""
+    key = (coin_id or "").strip().lower()
+    if key in _CRYPTO_CATEGORIES:
+        return _CRYPTO_CATEGORIES[key]
+    ticker = (symbol or "").strip().upper()
+    if ticker:
+        for cid, t, _name, _price in _CRYPTO:
+            if t.upper() == ticker:
+                return _CRYPTO_CATEGORIES.get(cid, "Others")
+    return "Others"
+
+
+def fixture_crypto_heatmap_rows() -> list[tuple[str, str, str, str, float, float]]:
+    """(coin_id, symbol, name, category, change_pct, market_cap) for fixture heatmap."""
+    rows: list[tuple[str, str, str, str, float, float]] = []
+    n = len(_CRYPTO)
+    for rank, (coin_id, ticker, name, price) in enumerate(_CRYPTO, start=1):
+        seed = sum(ord(c) * (i + 3) for i, c in enumerate(coin_id))
+        change = ((seed % 1101) / 100.0) - 5.5
+        px = float(Decimal(price))
+        market_cap = (n - rank + 1) * 1_000_000_000.0 * max(px, 0.01)
+        rows.append(
+            (coin_id, ticker, name, crypto_category(coin_id), round(change, 2), market_cap)
+        )
+    return rows

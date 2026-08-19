@@ -5,18 +5,87 @@ Fixture client remains the unit-test default.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional, Sequence
 
 import httpx
 
+from app.adapters.coingecko.catalog import crypto_category
+from app.adapters.coingecko.client import FixtureCoinGeckoClient
 from app.domain.models import PriceQuote
-from app.ports.market import AssetProfile, AssetSearchResult, MarketDataError
+from app.ports.market import (
+    AssetProfile,
+    AssetSearchResult,
+    HeatmapSector,
+    HeatmapStock,
+    MarketDataError,
+    QuoteGroup,
+    QuoteRow,
+)
+
+logger = logging.getLogger(__name__)
+_MARKETS_TTL_SECONDS = 120
 
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _group_heatmap(
+    stocks: list[tuple[str, HeatmapStock]],
+    *,
+    limit: int,
+) -> list[HeatmapSector]:
+    capped = sorted(stocks, key=lambda item: item[1].market_cap, reverse=True)[:limit]
+    buckets: dict[str, list[HeatmapStock]] = {}
+    for sector, stock in capped:
+        if stock.market_cap <= 0:
+            continue
+        buckets.setdefault(sector or "Others", []).append(stock)
+    return [
+        HeatmapSector(
+            name=name,
+            stocks=tuple(sorted(items, key=lambda s: s.market_cap, reverse=True)),
+        )
+        for name, items in sorted(
+            buckets.items(),
+            key=lambda kv: -sum(s.market_cap for s in kv[1]),
+        )
+        if items
+    ]
+
+
+def _group_quotes(
+    items: list[tuple[str, QuoteRow]],
+    *,
+    limit: int,
+) -> list[QuoteGroup]:
+    capped = sorted(items, key=lambda item: item[1].value, reverse=True)[:limit]
+    buckets: dict[str, list[QuoteRow]] = {}
+    for name, row in capped:
+        buckets.setdefault(name or "Others", []).append(row)
+    return [
+        QuoteGroup(
+            name=name,
+            rows=tuple(sorted(rows, key=lambda r: r.value, reverse=True)),
+        )
+        for name, rows in sorted(
+            buckets.items(),
+            key=lambda kv: -sum(r.value for r in kv[1]),
+        )
+        if rows
+    ]
 
 
 class HttpCoinGeckoClient:
@@ -29,11 +98,15 @@ class HttpCoinGeckoClient:
         base_url: str = "https://api.coingecko.com/api/v3",
         timeout_seconds: float = 15.0,
         transport: Optional[httpx.BaseTransport] = None,
+        use_fixture_fallback: bool = True,
     ) -> None:
         self._api_key = (api_key or "").strip() or None
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._transport = transport
+        self._fallback = FixtureCoinGeckoClient() if use_fixture_fallback else None
+        self._markets_cache: Optional[tuple[int, list[dict[str, Any]]]] = None
+        self._markets_cached_at: Optional[datetime] = None
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
@@ -168,6 +241,137 @@ class HttpCoinGeckoClient:
         if not isinstance(data, dict) or not data.get("id"):
             return None
         return profile_from_coingecko(data)
+
+    def get_heatmap(self, *, limit: int = 100) -> list[HeatmapSector]:
+        cap = max(1, min(int(limit), 300))
+        try:
+            coins = self._live_markets(cap)
+            sectors = self._heatmap_from_markets(coins, cap)
+            if sectors:
+                return sectors
+        except Exception as exc:
+            logger.warning("CoinGecko heatmap failed: %s", exc)
+            if self._fallback is None:
+                if isinstance(exc, MarketDataError):
+                    raise
+                raise MarketDataError(f"CoinGecko heatmap failed: {exc}") from exc
+        if self._fallback is not None:
+            logger.warning("CoinGecko heatmap unavailable; using catalog fixture")
+            return self._fallback.get_heatmap(limit=cap)
+        raise MarketDataError("CoinGecko heatmap unavailable")
+
+    def get_quotes(self, *, limit: int = 80) -> list[QuoteGroup]:
+        cap = max(1, min(int(limit), 300))
+        try:
+            coins = self._live_markets(cap)
+            groups = self._quotes_from_markets(coins, cap)
+            if groups:
+                return groups
+        except Exception as exc:
+            logger.warning("CoinGecko quotes failed: %s", exc)
+            if self._fallback is None:
+                if isinstance(exc, MarketDataError):
+                    raise
+                raise MarketDataError(f"CoinGecko quotes failed: {exc}") from exc
+        if self._fallback is not None:
+            logger.warning("CoinGecko quotes unavailable; using catalog fixture")
+            return self._fallback.get_quotes(limit=cap)
+        raise MarketDataError("CoinGecko quotes unavailable")
+
+    def _live_markets(self, limit: int) -> list[dict[str, Any]]:
+        now = _utc_now()
+        per_page = min(max(1, int(limit)), 250)
+        if (
+            self._markets_cache is not None
+            and self._markets_cached_at is not None
+            and self._markets_cache[0] >= per_page
+            and (now - self._markets_cached_at).total_seconds() < _MARKETS_TTL_SECONDS
+        ):
+            return self._markets_cache[1][:per_page]
+        data = self._get(
+            "/coins/markets",
+            {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": per_page,
+                "page": 1,
+                "sparkline": "false",
+            },
+        )
+        coins = [c for c in (data or []) if isinstance(c, dict)]
+        self._markets_cache = (per_page, coins)
+        self._markets_cached_at = now
+        return coins
+
+    def _heatmap_from_markets(
+        self,
+        coins: list[dict[str, Any]],
+        limit: int,
+    ) -> list[HeatmapSector]:
+        paired: list[tuple[str, HeatmapStock]] = []
+        for rec in coins:
+            coin_id = str(rec.get("id") or "").strip()
+            symbol = str(rec.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            market_cap = _to_float(rec.get("market_cap"))
+            if market_cap <= 0:
+                continue
+            paired.append(
+                (
+                    crypto_category(coin_id, symbol),
+                    HeatmapStock(
+                        symbol=symbol,
+                        name=str(rec.get("name") or symbol),
+                        change_pct=round(_to_float(rec.get("price_change_percentage_24h")), 4),
+                        market_cap=market_cap,
+                    ),
+                )
+            )
+        return _group_heatmap(paired, limit=limit)
+
+    def _quotes_from_markets(
+        self,
+        coins: list[dict[str, Any]],
+        limit: int,
+    ) -> list[QuoteGroup]:
+        paired: list[tuple[str, QuoteRow]] = []
+        for rec in coins:
+            coin_id = str(rec.get("id") or "").strip()
+            symbol = str(rec.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            value = _to_float(rec.get("current_price"))
+            if value <= 0:
+                continue
+            change = _to_float(rec.get("price_change_24h"))
+            pct = _to_float(rec.get("price_change_percentage_24h"))
+            high = _to_float(rec.get("high_24h"))
+            low = _to_float(rec.get("low_24h"))
+            prev = value - change
+            open_px = prev
+            if not high:
+                high = max(value, open_px, prev)
+            if not low:
+                candidates = [x for x in (value, open_px, prev) if x]
+                low = min(candidates) if candidates else value
+            paired.append(
+                (
+                    crypto_category(coin_id, symbol),
+                    QuoteRow(
+                        symbol=symbol,
+                        name=str(rec.get("name") or symbol),
+                        value=value,
+                        change=change,
+                        change_pct=round(pct, 4),
+                        open=open_px,
+                        high=high,
+                        low=low,
+                        prev=prev,
+                    ),
+                )
+            )
+        return _group_quotes(paired, limit=limit)
 
 
 def _first_url(value: Any) -> Optional[str]:
