@@ -26,3 +26,24 @@ npm run build
 ```
 
 Output is written to `out/`. Asset detail HTML is generated from `generateStaticParams()` (markets API + seed fallbacks).
+
+## Auth (Cognito Hosted UI)
+
+Public env in `frontend/.env.local` (no client secret — SPA public client):
+
+```env
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_COGNITO_DOMAIN=your-prefix.auth.us-east-1.amazoncognito.com
+NEXT_PUBLIC_COGNITO_CLIENT_ID=xxxxxxxx
+NEXT_PUBLIC_COGNITO_REGION=us-east-1
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+Register these exact Hosted UI URLs (trailing slash required for static export):
+
+- Callback: `http://localhost:3000/auth/callback/`
+- Sign-out: `http://localhost:3000/`
+
+The app stores the **ID token** in `artryx.accessToken` and sends `Authorization: Bearer <id_token>` to FastAPI. PKCE `code_verifier` stays in `sessionStorage` only.
+
+If the Cognito public env vars are omitted, `/portfolio` keeps the local token-paste fallback (`fake:alice`).

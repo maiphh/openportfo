@@ -23,7 +23,8 @@ import {
   type AssetKind,
   type ChartRange,
 } from "@/lib/asset";
-import { clearAuthToken, readAuthToken, writeAuthToken } from "@/lib/auth";
+import AuthGate from "@/components/auth/AuthGate";
+import { clearAuthToken, readAuthToken } from "@/lib/auth";
 import {
   createHolding,
   PortfolioApiError,
@@ -55,7 +56,6 @@ export default function AssetDetailView({
   const { currency } = useDisplayCurrency();
   const slug = decodeURIComponent(id);
   const [token, setToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [detail, setDetail] = useState<AssetDetailDto | null>(null);
@@ -259,50 +259,19 @@ export default function AssetDetailView({
 
   if (authRequired || !token) {
     return (
-      <div className="mx-auto max-w-lg rounded-xl border border-gray-600 bg-gray-800/60 p-6">
-        <h1 className="text-xl font-semibold text-gray-100">Asset detail</h1>
-        <p className="mt-2 text-sm text-gray-400">
-          Asset detail APIs require a Bearer access token. Paste a temporary token (saved as{" "}
-          <code className="text-teal-400">artryx.accessToken</code>). This is a provisional gate — Cognito Hosted UI
-          sign-in is not wired in this UI yet.
-        </p>
-        <input
-          value={tokenInput}
-          onChange={(e) => setTokenInput(e.target.value)}
-          placeholder="Bearer token or fake:userId"
-          className="mt-4 h-10 w-full rounded-md border border-gray-600 bg-gray-900 px-3 text-sm text-gray-200 outline-none focus:border-teal-500"
-        />
-        <div className="mt-3 flex gap-2">
-          <Button
-            type="button"
-            onClick={() => {
-              writeAuthToken(tokenInput);
-              setToken(readAuthToken());
-              setTokenInput("");
-              setAuthRequired(false);
-              setError(null);
-              void loadDetail();
-            }}
-            disabled={!tokenInput.trim()}
-          >
-            Continue with token
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              clearAuthToken();
-              setToken(null);
-              setDetail(null);
-              setHistory(null);
-              setError(null);
-            }}
-          >
-            Clear token
-          </Button>
-        </div>
-        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
-      </div>
+      <AuthGate
+        title="Asset detail"
+        description={
+          "Asset detail APIs require a Bearer access token. Paste a temporary token (saved as artryx.accessToken). Cognito Hosted UI is not configured in this environment."
+        }
+        error={error}
+        onTokenSaved={() => {
+          setToken(readAuthToken());
+          setAuthRequired(false);
+          setError(null);
+          void loadDetail();
+        }}
+      />
     );
   }
 

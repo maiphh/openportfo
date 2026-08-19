@@ -5,14 +5,14 @@
 | **ID** | `BL-006` |
 | **Title** | Cognito Hosted UI sign-in / callback / logout |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | BA |
 | **Owner (Eng)** | — |
 | **Requested by** | Stakeholder |
 | **Related PRD / sprint** | `docs/prd/auth-cognito.md`; sprint-02 |
 | **Created** | 2026-08-19 |
 | **Ready date** | 2026-08-19 |
-| **Done date** | |
+| **Done date** | 2026-08-19 |
 
 ---
 
@@ -76,13 +76,13 @@ As an **investor**, I want to **sign in with Cognito (and sign out)**, so that *
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** With Cognito env set, user can complete Hosted UI login and see their profile in UserMenu.
-- [ ] **AC2** Portfolio loads with the stored ID token (no paste UI).
-- [ ] **AC3** Logout clears token and Cognito session (Hosted UI logout).
-- [ ] **AC4** Without Cognito env, paste fallback still works for local/fake auth.
-- [ ] **AC5** Callback works under `output: "export"` + `trailingSlash`.
-- [ ] **AC6** PKCE verifier never put in the URL; used only at token exchange.
-- [ ] **AC7** Unit tests for helpers + callback failure paths.
+- [x] **AC1** With Cognito env set, user can complete Hosted UI login and see their profile in UserMenu.
+- [x] **AC2** Portfolio loads with the stored ID token (no paste UI).
+- [x] **AC3** Logout clears token and Cognito session (Hosted UI logout).
+- [x] **AC4** Without Cognito env, paste fallback still works for local/fake auth.
+- [x] **AC5** Callback works under `output: "export"` + `trailingSlash`.
+- [x] **AC6** PKCE verifier never put in the URL; used only at token exchange.
+- [x] **AC7** Unit tests for helpers + callback failure paths.
 
 ---
 
@@ -136,4 +136,6 @@ As an **investor**, I want to **sign in with Cognito (and sign out)**, so that *
 
 ## 11. Implementation notes
 
-- Branch: `feat/BL-006-cognito-hosted-ui`
+- Approach: Option A Hosted UI + PKCE S256 in the browser. `lib/cognito.ts` builds `/oauth2/authorize` and `/logout`, keeps the verifier in `sessionStorage` (`artryx.pkce`), and exchanges `code` at Cognito `/oauth2/token` (no Next route handler). ID token is written to existing `artryx.accessToken`. Client page `app/auth/callback/page.tsx` reads the query after mount (`trailingSlash` → `/auth/callback/`). `UserMenu` loads name/email from `GET /api/auth/me` (no `MOCK_USER`). `AuthGate` hides paste when Cognito public env is set and keeps the BL-001 paste fallback otherwise.
+- PR / branch: `feat/BL-006-cognito-hosted-ui`
+- Verification: `cd frontend; npx vitest run lib/cognito.test.ts lib/auth.test.ts app/auth/callback/page.test.tsx components/auth/AuthGate.test.tsx components/UserMenu.test.tsx`. Full `npx vitest run` in `frontend/`.

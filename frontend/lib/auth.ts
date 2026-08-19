@@ -1,6 +1,27 @@
-/** Cognito/Bearer token helpers (BL-001 pragmatic auth gate). */
+/** Cognito/Bearer token helpers (BL-001 gate + BL-006 Hosted UI ID token). */
+
+import { apiBase } from "@/lib/api";
 
 export const AUTH_TOKEN_STORAGE_KEY = "artryx.accessToken";
+
+export type AuthProfile = {
+  userId: string;
+  email: string;
+  name: string | null;
+  role?: string;
+};
+
+export class AuthApiError extends Error {
+  status: number;
+  authRequired: boolean;
+
+  constructor(status: number, detail: string) {
+    super(detail || `HTTP ${status}`);
+    this.name = "AuthApiError";
+    this.status = status;
+    this.authRequired = status === 401 || status === 403;
+  }
+}
 
 export function readAuthToken(
   storage: Pick<Storage, "getItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
@@ -46,4 +67,39 @@ export function bearerHeader(token: string | null | undefined): Record<string, s
   const raw = (token || "").trim();
   if (!raw) return {};
   return { Authorization: raw.startsWith("Bearer ") ? raw : `Bearer ${raw}` };
+}
+
+export async function fetchAuthMe(options?: {
+  token?: string | null;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}): Promise<AuthProfile> {
+  const token = options?.token ?? readAuthToken();
+  const fetchImpl = options?.fetchImpl ?? fetch;
+  const res = await fetchImpl(`${apiBase()}/api/auth/me`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      ...bearerHeader(token),
+    },
+    signal: options?.signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new AuthApiError(res.status, `Profile HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as Partial<AuthProfile>;
+  if (!body || typeof body.userId !== "string" || !body.userId.trim()) {
+    throw new Error("Invalid profile payload");
+  }
+  return {
+    userId: body.userId,
+    email: typeof body.email === "string" ? body.email : "",
+    name: typeof body.name === "string" && body.name.trim() ? body.name : null,
+    role: typeof body.role === "string" ? body.role : undefined,
+  };
+}
+
+export function profileDisplayName(profile: AuthProfile): string {
+  return profile.name?.trim() || profile.email.trim() || "Account";
 }
