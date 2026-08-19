@@ -1,36 +1,16 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export {
+  displayFractionDigits,
+  formatPct,
+  formatPrice,
+  formatQty,
+  formatSigned,
+} from "./number-format";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
-}
-
-function fractionDigits(value: number, fallback = 2) {
-  const abs = Math.abs(value);
-  if (abs > 0 && abs < 0.01) return 6;
-  if (abs > 0 && abs < 1) return 4;
-  return fallback;
-}
-
-export function formatPrice(value: number, digits?: number) {
-  const max = digits ?? fractionDigits(value);
-  const min = Math.min(2, max);
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: min,
-    maximumFractionDigits: max,
-  });
-}
-
-export function formatSigned(value: number, digits?: number) {
-  const places = digits ?? fractionDigits(value);
-  const abs = Math.abs(value).toFixed(places);
-  if (value > 0) return `+${abs}`;
-  if (value < 0) return `-${abs}`;
-  return Number(0).toFixed(places);
-}
-
-export function formatPct(value: number, digits = 2) {
-  return `${formatSigned(value, digits)}%`;
 }
 
 export function changeTone(value: number) {

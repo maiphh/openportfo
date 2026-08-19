@@ -5,7 +5,7 @@ import AssetLink from "@/components/AssetLink";
 import { Button } from "@/components/ui/button";
 import type { PortfolioLine } from "@/lib/portfolio";
 import { parseMoney } from "@/lib/portfolio";
-import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
+import { cn, formatPct, formatPrice, formatQty, formatSigned } from "@/lib/utils";
 
 function Badge({ children, tone }: { children: ReactNode; tone: "warn" | "muted" }) {
   return (
@@ -82,7 +82,7 @@ export default function HoldingsTable({
                   </AssetLink>
                   <div className="text-xs capitalize text-gray-500">{line.assetType}</div>
                 </td>
-                <td className="px-3 py-3 tabular-nums text-gray-300">{line.qty}</td>
+                <td className="px-3 py-3 tabular-nums text-gray-300">{formatQty(line.qty)}</td>
                 <td className="px-3 py-3 tabular-nums text-gray-300">
                   {avg == null ? "—" : `${formatPrice(avg)} ${line.currency}`}
                 </td>

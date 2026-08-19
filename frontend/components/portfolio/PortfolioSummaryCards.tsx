@@ -8,6 +8,16 @@ function moneyLabel(value: number | null, currency: string): string {
   return `${formatPrice(value)} ${currency}`;
 }
 
+function formatNative(value: string | null | undefined): string {
+  const n = parseMoney(value);
+  return n == null ? "—" : formatPrice(n);
+}
+
+function formatNativeSigned(value: string | null | undefined): string {
+  const n = parseMoney(value);
+  return n == null ? "—" : formatSigned(n);
+}
+
 export default function PortfolioSummaryCards({
   data,
   fallbackCurrency,
@@ -67,7 +77,7 @@ export default function PortfolioSummaryCards({
         <div className="flex flex-wrap gap-2 text-xs text-gray-500">
           {Object.entries(data.totalsByCurrency).map(([cur, tot]) => (
             <span key={cur} className="rounded-md border border-gray-600 px-2 py-1">
-              {cur}: MV {tot.marketValue ?? "—"} · PnL {tot.pnl ?? "—"}
+              {cur}: MV {formatNative(tot.marketValue)} · PnL {formatNativeSigned(tot.pnl)}
             </span>
           ))}
         </div>
