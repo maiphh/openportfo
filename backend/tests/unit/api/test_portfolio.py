@@ -196,6 +196,8 @@ def test_get_portfolio_200_one_holding_shape() -> None:
     assert line["pnl"] == "10000"
     assert line["missingPrice"] is False
     assert line["stale"] is False
+    assert line["avgCostDisplay"] is None
+    assert line["priceDisplay"] is None
     assert isinstance(line["pnlPercent"], str)
     assert "crypto" in data["totalsByAssetClass"]
     assert data["totalsByAssetClass"]["crypto"]["marketValue"] == "40000"
@@ -326,6 +328,12 @@ def test_portfolio_with_stored_fx_display_currency() -> None:
     assert data["totalsDisplay"]["currency"] == "VND"
     assert data["totalsDisplay"]["marketValue"] == "1000000000"
     assert data["displayCurrency"] == "VND"
+    line = data["lines"][0]
+    assert line["avgCost"] == "30000"
+    assert line["price"] == "40000"
+    assert line["avgCostDisplay"] == "750000000"
+    assert line["priceDisplay"] == "1000000000"
+    assert line["marketValueDisplay"] == "1000000000"
 
 
 def test_admin_default_display_currency_when_user_pref_empty() -> None:

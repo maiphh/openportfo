@@ -10,6 +10,7 @@ import {
   PortfolioApiError,
   portfolioQuery,
   refreshPortfolio,
+  unitPriceInDisplay,
   updateHolding,
 } from "@/lib/portfolio";
 
@@ -35,6 +36,39 @@ describe("portfolio helpers", () => {
     expect(parseMoney("")).toBeNull();
     expect(parseMoney("12.5")).toBe(12.5);
     expect(parseMoney("nope")).toBeNull();
+  });
+
+  it("unitPriceInDisplay prefers API display fields", () => {
+    expect(
+      unitPriceInDisplay("30000", "27600", "USD", "EUR", () => 1),
+    ).toEqual({ amount: 27600, currency: "EUR" });
+  });
+
+  it("unitPriceInDisplay falls back to convertToDisplay when API field is absent", () => {
+    expect(
+      unitPriceInDisplay("30000", null, "USD", "EUR", (amt, src) => {
+        expect(src).toBe("USD");
+        return amt * 0.92;
+      }),
+    ).toEqual({ amount: 27600, currency: "EUR" });
+  });
+
+  it("unitPriceInDisplay keeps native amount and currency when FX is missing", () => {
+    expect(unitPriceInDisplay("30000", null, "USD", "EUR", () => null)).toEqual({
+      amount: 30000,
+      currency: "USD",
+    });
+    expect(unitPriceInDisplay("30000", null, "USD", "EUR")).toEqual({
+      amount: 30000,
+      currency: "USD",
+    });
+  });
+
+  it("unitPriceInDisplay shows em dash input as null amount when native is missing", () => {
+    expect(unitPriceInDisplay(null, null, "USD", "EUR")).toEqual({
+      amount: null,
+      currency: "USD",
+    });
   });
 
   it("pieSlices starts at 0° (12 o'clock) and covers 360", () => {

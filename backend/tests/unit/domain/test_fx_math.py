@@ -67,3 +67,76 @@ def test_apply_fx_converts_vnd_holding_to_eur_via_triangulation() -> None:
     assert out.market_value_display == Decimal("0.92")
     assert out.lines[0].market_value_display == Decimal("0.92")
     assert out.lines[0].display_currency == "EUR"
+    assert out.lines[0].avg_cost_display == Decimal("0.92")
+    assert out.lines[0].price_display == Decimal("0.92")
+    # PnL stays MV−cost in display, not qty × (price_display − avg_cost_display).
+    assert out.lines[0].pnl_display == (
+        out.lines[0].market_value_display - out.lines[0].cost_basis_display
+    )
+
+
+def test_apply_fx_sets_unit_display_fields_with_same_rate() -> None:
+    fx = _fx({"USD_VND": Decimal("25000")})
+    line = PortfolioLine(
+        user_id="u1",
+        asset_type="crypto",
+        symbol="BTC",
+        qty=Decimal("2"),
+        avg_cost=Decimal("30000"),
+        currency="USD",
+        price=Decimal("40000"),
+        market_value=Decimal("80000"),
+        cost_basis=Decimal("60000"),
+        pnl=Decimal("20000"),
+        missing_price=False,
+    )
+    out = apply_fx(PortfolioSummary(lines=[line], totals_by_currency={}), fx, "VND")
+    converted = out.lines[0]
+    assert converted.avg_cost_display == Decimal("750000000")
+    assert converted.price_display == Decimal("1000000000")
+    assert converted.market_value_display == Decimal("2000000000")
+    assert converted.pnl_display == Decimal("500000000")
+
+
+def test_apply_fx_missing_leaves_unit_display_none() -> None:
+    fx = _fx({}, status="missing")
+    line = PortfolioLine(
+        user_id="u1",
+        asset_type="crypto",
+        symbol="BTC",
+        qty=Decimal("1"),
+        avg_cost=Decimal("30000"),
+        currency="USD",
+        price=Decimal("40000"),
+        market_value=Decimal("40000"),
+        cost_basis=Decimal("30000"),
+        pnl=Decimal("10000"),
+        missing_price=False,
+    )
+    out = apply_fx(PortfolioSummary(lines=[line], totals_by_currency={}), fx, "VND")
+    assert out.fx_status == "missing"
+    assert out.lines[0].avg_cost_display is None
+    assert out.lines[0].price_display is None
+    assert out.lines[0].market_value_display is None
+
+
+def test_apply_fx_missing_price_still_converts_avg_cost() -> None:
+    fx = _fx({"USD_EUR": Decimal("0.92")})
+    line = PortfolioLine(
+        user_id="u1",
+        asset_type="crypto",
+        symbol="ETH",
+        qty=Decimal("1"),
+        avg_cost=Decimal("2000"),
+        currency="USD",
+        price=None,
+        market_value=None,
+        cost_basis=Decimal("2000"),
+        missing_price=True,
+    )
+    out = apply_fx(PortfolioSummary(lines=[line], totals_by_currency={}), fx, "EUR")
+    assert out.fx_status == "fresh"
+    assert out.market_value_display == Decimal("0")
+    assert out.lines[0].avg_cost_display == Decimal("1840")
+    assert out.lines[0].price_display is None
+    assert out.lines[0].market_value_display is None

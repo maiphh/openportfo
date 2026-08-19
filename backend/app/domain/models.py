@@ -89,6 +89,8 @@ class PortfolioLine:
     market_value_display: Optional[Decimal] = None
     cost_basis_display: Optional[Decimal] = None
     pnl_display: Optional[Decimal] = None
+    avg_cost_display: Optional[Decimal] = None
+    price_display: Optional[Decimal] = None
     allocation: Optional[Decimal] = None
 
 

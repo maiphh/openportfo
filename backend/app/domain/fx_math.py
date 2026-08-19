@@ -123,6 +123,14 @@ def apply_fx(
 
     for line in result.lines:
         if line.missing_price or line.market_value is None or line.cost_basis is None:
+            # Unit prices still convert when a rate exists; do not fail whole FX.
+            unit_rate = rates.get(line.currency.upper())
+            if unit_rate is None:
+                unit_rate = get_rate(fx, line.currency, display)
+            if unit_rate is not None:
+                line.avg_cost_display = line.avg_cost * unit_rate
+                if line.price is not None:
+                    line.price_display = line.price * unit_rate
             continue
         rate = rates[line.currency.upper()]
         mv_d = line.market_value * rate
@@ -132,6 +140,10 @@ def apply_fx(
         line.market_value_display = mv_d
         line.cost_basis_display = cost_d
         line.pnl_display = pnl_d
+        # Same rate as MV; do not recompute PnL from converted unit prices.
+        line.avg_cost_display = line.avg_cost * rate
+        if line.price is not None:
+            line.price_display = line.price * rate
         total_mv += mv_d
         total_cost += cost_d
 

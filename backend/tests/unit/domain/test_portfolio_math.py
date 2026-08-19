@@ -321,6 +321,8 @@ def test_apply_fx_missing_keeps_native_only() -> None:
     assert result.totals_by_currency["USD"].market_value == Decimal("20000")
     for line in result.lines:
         assert line.market_value_display is None
+        assert line.avg_cost_display is None
+        assert line.price_display is None
         assert line.allocation is None
 
 

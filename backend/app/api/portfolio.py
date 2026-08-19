@@ -69,6 +69,8 @@ def _line_to_dict(line: PortfolioLine) -> dict[str, Any]:
         "marketValueDisplay": _dec_str(line.market_value_display),
         "costBasisDisplay": _dec_str(line.cost_basis_display),
         "pnlDisplay": _dec_str(line.pnl_display),
+        "avgCostDisplay": _dec_str(line.avg_cost_display),
+        "priceDisplay": _dec_str(line.price_display),
         "allocation": _dec_str(line.allocation),
     }
 

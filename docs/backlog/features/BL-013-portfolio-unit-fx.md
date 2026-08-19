@@ -148,6 +148,6 @@ As an **authenticated investor**, I want **Avg cost and Price in my chosen displ
 
 ## 11. Implementation notes (Eng fills after `ready`)
 
-- Approach:
+- Approach: Additive `avg_cost_display` / `price_display` on `PortfolioLine`; `apply_fx` fills them with the same SRC→DST rate as market value (qty not re-valued; PnL still MV−cost). API `_line_to_dict` emits `avgCostDisplay` / `priceDisplay`. Holdings table prefers those fields + session `displayCurrency`; if absent, `convertToDisplay` fallback; FX missing stays native + `line.currency`.
 - PR / branch: `feat/BL-013-portfolio-unit-fx`
-- Verification:
+- Verification: `python -m pytest tests/unit/domain/test_fx_math.py tests/unit/domain/test_portfolio_math.py tests/unit/api/test_portfolio.py -q` (from `backend/`); `npm test` in `frontend/` (`unitPriceInDisplay` + `HoldingsTable`).
