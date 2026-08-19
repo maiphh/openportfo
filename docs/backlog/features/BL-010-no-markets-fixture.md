@@ -5,14 +5,14 @@
 | **ID** | `BL-010` |
 | **Title** | HTTP market clients must not serve catalog fixtures on `/api/markets/*` |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | BA |
-| **Owner (Eng)** | — |
+| **Owner (Eng)** | Eng |
 | **Requested by** | Stakeholder |
 | **Related PRD / sprint** | BL-004 (FE already dropped mock); adapter fallback still demo-like |
 | **Created** | 2026-08-19 |
 | **Ready date** | 2026-08-19 |
-| **Done date** | |
+| **Done date** | 2026-08-19 |
 
 ---
 
@@ -74,11 +74,11 @@ As a **visitor**, I want **heatmap/quotes to fail honestly when the provider is 
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** `MARKET_CLIENT_MODE=http` heatmap/quotes never return catalog fixture boards.
-- [ ] **AC2** Provider failure surfaces as HTTP 502 (or empty that FE already treats as error).
-- [ ] **AC3** `MARKET_CLIENT_MODE=fixture` unit tests still pass.
-- [ ] **AC4** Crypto and stock markets both covered.
-- [ ] **AC5** New/updated adapter + API tests prove no fallback in http mode.
+- [x] **AC1** `MARKET_CLIENT_MODE=http` heatmap/quotes never return catalog fixture boards.
+- [x] **AC2** Provider failure surfaces as HTTP 502 (or empty that FE already treats as error).
+- [x] **AC3** `MARKET_CLIENT_MODE=fixture` unit tests still pass.
+- [x] **AC4** Crypto and stock markets both covered.
+- [x] **AC5** New/updated adapter + API tests prove no fallback in http mode.
 
 ---
 
@@ -129,4 +129,13 @@ As a **visitor**, I want **heatmap/quotes to fail honestly when the provider is 
 
 ## 11. Implementation notes
 
-- Branch: `feat/BL-010-no-markets-fixture`
+- Approach:
+  - `MARKET_CLIENT_MODE=http` constructs `HttpVnstockClient` / `HttpCoinGeckoClient` with `use_fixture_fallback=False`. Construct exceptions are not swapped to `Fixture*Client` (client stays unset; next call retries).
+  - HTTP client default is now no catalog fallback. `get_heatmap` / `get_quotes` raise `MarketDataError` when live paths fail so existing `/api/markets/*` handlers return **502**, not fixture boards.
+  - `MARKET_CLIENT_MODE=fixture` still wires `Fixture*Client` for unit tests / local without keys.
+  - BL-011 shared `_quote_board` cache is unchanged (live vnstock batch still shared by heatmap+quotes; no fixture payloads persisted).
+- PR / branch: `feat/BL-010-no-markets-fixture`
+- Verification:
+  - From `backend/`: `.venv\Scripts\python.exe -m pytest tests/unit/adapters/test_vnstock_http.py tests/unit/adapters/test_coingecko_http.py tests/unit/api/test_markets.py tests/unit/api/test_markets_heatmap.py tests/unit/api/test_markets_quotes.py tests/unit/api/test_markets_crypto.py tests/unit/test_deps_market_clients.py tests/unit/services/test_market_service.py -q` (79 passed)
+  - Full `tests/unit` (excluding jobs): 323 passed
+

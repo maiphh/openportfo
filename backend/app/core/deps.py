@@ -239,16 +239,13 @@ def get_crypto_market_client() -> CryptoMarketClient:
         settings = get_settings()
         mode = (settings.market_client_mode or "fixture").lower()
         if mode == "http":
-            try:
-                from app.adapters.coingecko.http_client import HttpCoinGeckoClient
+            from app.adapters.coingecko.http_client import HttpCoinGeckoClient
 
-                _crypto_market_client = HttpCoinGeckoClient(
-                    api_key=settings.coingecko_api_key or None,
-                )
-            except Exception:
-                from app.adapters.coingecko.client import FixtureCoinGeckoClient
-
-                _crypto_market_client = FixtureCoinGeckoClient()
+            # Live boards must 502, not silently serve catalog fixtures.
+            _crypto_market_client = HttpCoinGeckoClient(
+                api_key=settings.coingecko_api_key or None,
+                use_fixture_fallback=False,
+            )
         else:
             from app.adapters.coingecko.client import FixtureCoinGeckoClient
 
@@ -269,16 +266,13 @@ def get_stock_market_client() -> StockMarketClient:
         settings = get_settings()
         mode = (settings.market_client_mode or "fixture").lower()
         if mode == "http":
-            try:
-                from app.adapters.vnstock.http_client import HttpVnstockClient
+            from app.adapters.vnstock.http_client import HttpVnstockClient
 
-                _stock_market_client = HttpVnstockClient(
-                    api_key=settings.vnstock_api_key or None,
-                )
-            except Exception:
-                from app.adapters.vnstock.client import FixtureVnstockClient
-
-                _stock_market_client = FixtureVnstockClient()
+            # Live boards must 502, not silently serve catalog fixtures.
+            _stock_market_client = HttpVnstockClient(
+                api_key=settings.vnstock_api_key or None,
+                use_fixture_fallback=False,
+            )
         else:
             from app.adapters.vnstock.client import FixtureVnstockClient
 

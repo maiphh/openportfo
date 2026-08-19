@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.vnstock.client import FixtureVnstockClient
+from app.adapters.vnstock.http_client import HttpVnstockClient
 from app.core.deps import get_stock_market_client, set_stock_market_client
 from app.main import create_app
 from app.ports.market import HeatmapSector, HeatmapStock
@@ -69,3 +70,33 @@ def test_heatmap_uses_injected_client() -> None:
     assert sectors[0]["name"] == "Ngân hàng"
     assert sectors[0]["stocks"][0]["symbol"] == "VCB"
     assert sectors[0]["stocks"][0]["changePct"] == 1.25
+
+
+def test_heatmap_provider_error_returns_502() -> None:
+    class Boom:
+        def get_heatmap(self, *, exchange: str = "HOSE", limit: int = 100):
+            raise RuntimeError("vnstock down")
+
+    stub = Boom()
+    set_stock_market_client(stub)  # type: ignore[arg-type]
+    app = create_app()
+    app.dependency_overrides[get_stock_market_client] = lambda: stub
+
+    res = TestClient(app).get("/api/markets/heatmap")
+    assert res.status_code == 502
+    assert "unavailable" in (res.json().get("detail") or "").lower()
+
+
+def test_http_heatmap_no_fallback_returns_502_not_catalog(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    client._live = True
+    monkeypatch.setattr(client, "_live_heatmap", lambda *_a, **_k: [])
+    set_stock_market_client(client)
+    app = create_app()
+    app.dependency_overrides[get_stock_market_client] = lambda: client
+
+    res = TestClient(app).get("/api/markets/heatmap")
+    assert res.status_code == 502
+    body = res.json()
+    assert "unavailable" in (body.get("detail") or "").lower()
+    assert "sectors" not in body
