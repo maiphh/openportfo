@@ -18,6 +18,7 @@ import {
   rateKey,
   type DisplayCurrency,
 } from "@/lib/currency";
+import { formatPrice } from "@/lib/utils";
 
 function formatAsOfShort(asOf: string | null): string {
   if (!asOf) return "asOf —";
@@ -45,28 +46,32 @@ function relevantRateLabel(
   }
   if (currency === "VND") {
     const usdVnd = getRate(rates, "USD", "VND", base);
-    if (usdVnd != null) return `1 USD = ${usdVnd.toLocaleString()} VND · ${formatAsOfShort(asOf)}`;
+    if (usdVnd != null) return `1 USD = ${formatPrice(usdVnd)} VND · ${formatAsOfShort(asOf)}`;
   }
   if (currency === "USD") {
     const vndUsd = getRate(rates, "VND", "USD", base);
     if (vndUsd != null) {
-      return `1 VND = ${vndUsd.toLocaleString(undefined, { maximumFractionDigits: 8 })} USD · ${formatAsOfShort(asOf)}`;
+      return `1 VND = ${formatPrice(vndUsd)} USD · ${formatAsOfShort(asOf)}`;
     }
     const usdVnd = getRate(rates, "USD", "VND", base);
-    if (usdVnd != null) return `1 USD = ${usdVnd.toLocaleString()} VND · ${formatAsOfShort(asOf)}`;
+    if (usdVnd != null) return `1 USD = ${formatPrice(usdVnd)} VND · ${formatAsOfShort(asOf)}`;
   }
   if (currency === "EUR") {
     const usdEur = getRate(rates, "USD", "EUR", base);
     if (usdEur != null) {
-      return `1 USD = ${usdEur.toLocaleString(undefined, { maximumFractionDigits: 6 })} EUR · ${formatAsOfShort(asOf)}`;
+      return `1 USD = ${formatPrice(usdEur)} EUR · ${formatAsOfShort(asOf)}`;
     }
     const eurUsd = getRate(rates, "EUR", "USD", base);
     if (eurUsd != null) {
-      return `1 EUR = ${eurUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })} USD · ${formatAsOfShort(asOf)}`;
+      return `1 EUR = ${formatPrice(eurUsd)} USD · ${formatAsOfShort(asOf)}`;
     }
   }
   const first = Object.keys(rates).sort()[0];
-  if (first) return `${first} ${rates[first]} · ${formatAsOfShort(asOf)}`;
+  if (first) {
+    const n = Number(rates[first]);
+    const shown = Number.isFinite(n) ? formatPrice(n) : rates[first];
+    return `${first} ${shown} · ${formatAsOfShort(asOf)}`;
+  }
   return `Rate unavailable · ${formatAsOfShort(asOf)}`;
 }
 
@@ -86,7 +91,7 @@ export default function CurrencySelect() {
     const direct = getRate(rates.rates, "USD", quoteTo, fxBase);
     const asOfBit = formatAsOfCompact(asOf);
     if (direct != null) {
-      return asOfBit ? `${pair} ${direct} · ${asOfBit}` : `${pair} ${direct}`;
+      return asOfBit ? `${pair} ${formatPrice(direct)} · ${asOfBit}` : `${pair} ${formatPrice(direct)}`;
     }
     if (fxStatus === "missing" || Object.keys(rates.rates).length === 0) return "FX n/a";
     return asOfBit ? `FX · ${asOfBit}` : "FX";

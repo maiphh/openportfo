@@ -93,11 +93,11 @@ As an **investor**, I want **prices, PnL, and other money amounts to always show
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** Default fraction digits are **2** for `formatPrice` / `formatSigned` / `formatPct`.
-- [ ] **AC2** Digit count is read from one helper/module, overridable by `NEXT_PUBLIC_DISPLAY_FRACTION_DIGITS`.
-- [ ] **AC3** Markets quotes, portfolio money columns/cards, and asset detail price use the shared formatters (no ad-hoc `toFixed` / `toLocaleString` for money).
-- [ ] **AC4** Existing tests updated; new tests cover default, override, invalid env.
-- [ ] **AC5** Domain/API payloads remain full precision; only display rounding changes.
+- [x] **AC1** Default fraction digits are **2** for `formatPrice` / `formatSigned` / `formatPct`.
+- [x] **AC2** Digit count is read from one helper/module, overridable by `NEXT_PUBLIC_DISPLAY_FRACTION_DIGITS`.
+- [x] **AC3** Markets quotes, portfolio money columns/cards, and asset detail price use the shared formatters (no ad-hoc `toFixed` / `toLocaleString` for money).
+- [x] **AC4** Existing tests updated; new tests cover default, override, invalid env.
+- [x] **AC5** Domain/API payloads remain full precision; only display rounding changes.
 
 ---
 
@@ -153,6 +153,6 @@ As an **investor**, I want **prices, PnL, and other money amounts to always show
 
 ## 11. Implementation notes (Eng fills after `ready`)
 
-- Approach:
+- Approach: New `frontend/lib/number-format.ts` is the display digit source of truth (`parseDisplayFractionDigits` + `NEXT_PUBLIC_DISPLAY_FRACTION_DIGITS`, default 2, clamp 0–8, invalid → 2). `formatPrice` / `formatSigned` / `formatPct` use min=max=config with `en-US` grouping; `utils.ts` re-exports so other BLs keep compiling. Routed FX readouts (CurrencySelect + FxRatesPanel), holdings qty (`formatQty`: integers stay whole), and per-currency summary chips through the same helpers. Did not rewrite HoldingsTable columns (BL-013). SVG `toFixed` / date `toLocaleString` left alone. Backend Decimal/API strings unchanged.
 - PR / branch: `feat/BL-012-number-format`
-- Verification:
+- Verification: `cd frontend; npx vitest run lib/` — 7 files, 63 passed (including `lib/number-format.test.ts`: default 2, env 0/4, invalid → 2, `%` suffix).

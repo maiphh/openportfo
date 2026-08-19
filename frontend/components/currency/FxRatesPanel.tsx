@@ -4,11 +4,17 @@ import { useEffect } from "react";
 import { X } from "lucide-react";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { Button } from "@/components/ui/button";
+import { formatPrice } from "@/lib/utils";
 
 function formatAsOf(asOf: string | null): string {
   if (!asOf) return "—";
   const d = new Date(asOf);
   return Number.isNaN(d.getTime()) ? asOf : d.toLocaleString();
+}
+
+function formatFxRate(rate: string): string {
+  const n = Number(rate);
+  return Number.isFinite(n) ? formatPrice(n) : rate;
 }
 
 function describeRatesError(ratesError: string | null): string | null {
@@ -123,7 +129,9 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
                   pairs.map(([pair, rate]) => (
                     <tr key={pair} className="border-t border-gray-700">
                       <td className="px-3 py-2 font-medium text-gray-200">{pair}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{rate}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-300">
+                        {formatFxRate(rate)}
+                      </td>
                     </tr>
                   ))
                 )}
