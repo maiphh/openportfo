@@ -1,4 +1,5 @@
 import type { HeatmapSector, QuoteGroup, QuoteRow } from "@/lib/mock-data";
+import type { DisplayCurrency } from "@/lib/currency";
 
 export type { QuoteGroup, QuoteRow };
 
@@ -9,6 +10,11 @@ export type MarketKind = "stock" | "crypto";
 export function apiBase(): string {
   const raw = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API).trim();
   return raw.replace(/\/$/, "");
+}
+
+/** Query value for portfolio `displayCurrency` / asset `currency` (BL-001/002). */
+export function displayCurrencyQuery(currency: DisplayCurrency): string {
+  return currency;
 }
 
 export type HeatmapResponse = {

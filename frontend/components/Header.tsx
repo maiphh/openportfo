@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import BrandLogo from "@/components/BrandLogo";
+import CurrencySelect from "@/components/CurrencySelect";
 import LanguageSelect from "@/components/LanguageSelect";
 import NavItems from "@/components/NavItems";
 import SearchDialog from "@/components/SearchDialog";
@@ -30,6 +31,7 @@ export default function Header() {
             <NavItems onSearch={() => setSearchOpen(true)} />
           </nav>
           <div className="flex items-center gap-2">
+            <CurrencySelect />
             <LanguageSelect />
             <UserMenu onSearch={() => setSearchOpen(true)} />
           </div>

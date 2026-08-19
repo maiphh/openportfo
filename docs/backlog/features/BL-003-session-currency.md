@@ -165,6 +165,6 @@ As an **authenticated investor**, I want to **pick VND, USD, or EUR in the heade
 
 ## 11. Implementation notes (Eng fills after start)
 
-- Approach:
-- PR / branch:
-- Verification:
+- Approach: FE `CurrencyProvider` + `useDisplayCurrency` (localStorage `artryx.displayCurrency`, default VND). Header `CurrencySelect` next to language with rate/asOf label + read-only `FxRatesPanel` via `GET /api/fx/rates` (optional Bearer from `artryx.accessToken`). Markets quotes convert client-side with stored rates; heatmap stays %-only. Portfolio/asset detail/holding forms not in this tree yet — helpers (`displayCurrencyQuery`, `holdingCostLabel`) ready for BL-001/002.
+- PR / branch: `execute-plan/6cc30007-pr-1-bl-003-session-currency`
+- Verification: `cd frontend && npm test` (currency/fx/provider unit tests)
