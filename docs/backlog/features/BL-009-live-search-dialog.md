@@ -71,12 +71,12 @@ As an **authenticated investor**, I want **header search to find real VN stocks 
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** SearchDialog does not read `SEARCH_UNIVERSE`.
-- [ ] **AC2** Queries hit `/api/assets/search` for stock and crypto.
-- [ ] **AC3** Empty query does not fetch.
-- [ ] **AC4** Unauthenticated: no mock list.
-- [ ] **AC5** Results use `AssetLink` with correct `assetType`.
-- [ ] **AC6** Tests cover client behaviour.
+- [x] **AC1** SearchDialog does not read `SEARCH_UNIVERSE`.
+- [x] **AC2** Queries hit `/api/assets/search` for stock and crypto.
+- [x] **AC3** Empty query does not fetch.
+- [x] **AC4** Unauthenticated: no mock list.
+- [x] **AC5** Results use `AssetLink` with correct `assetType`.
+- [x] **AC6** Tests cover client behaviour.
 
 ---
 
@@ -127,4 +127,6 @@ As an **authenticated investor**, I want **header search to find real VN stocks 
 
 ## 11. Implementation notes
 
-- Branch: `feat/BL-009-live-search-dialog`
+- Approach: FE-only. Header `SearchDialog` no longer reads `SEARCH_UNIVERSE` (export removed). After mount it reads `artryx.accessToken`, debounces ~250ms, aborts in-flight, and calls `searchLiveCatalog` — two parallel `searchAssets` GETs (`/api/assets/search?q&type=stock|crypto`). Empty `q` skips fetch and shows “Type to search”. Unauthenticated / 401 shows Sign in empty state (token paste CTA, no mock list). Results: symbol, name, type via `AssetLink` (`assetId` or symbol); price/chg% only if already on the payload. One type failing keeps the other + soft error. Holdings modal unchanged.
+- PR / branch: `feat/BL-009-live-search-dialog`
+- Verification: `cd frontend; npx vitest run lib/asset-search.test.ts lib/portfolio.test.ts components/SearchDialog.test.tsx` (empty q no fetch, `assetSearchQuery` / dual type, 401 sign-in). Full `npx vitest run` in `frontend/`.

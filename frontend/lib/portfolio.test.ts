@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiBase } from "@/lib/api";
 import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth";
 import {
+  assetSearchQuery,
   createHolding,
   describeDonutSlice,
   fetchPortfolio,
@@ -10,6 +11,7 @@ import {
   PortfolioApiError,
   portfolioQuery,
   refreshPortfolio,
+  searchAssets,
   unitPriceInDisplay,
   updateHolding,
 } from "@/lib/portfolio";
@@ -29,6 +31,11 @@ describe("portfolio helpers", () => {
       "displayCurrency=USD&assetType=crypto",
     );
     expect(portfolioQuery({ displayCurrency: "EUR", assetType: "all" })).toBe("displayCurrency=EUR");
+  });
+
+  it("assetSearchQuery builds q and required type", () => {
+    expect(assetSearchQuery({ q: "VNM", type: "stock" })).toBe("q=VNM&type=stock");
+    expect(assetSearchQuery({ q: "btc", type: "crypto" })).toBe("q=btc&type=crypto");
   });
 
   it("parseMoney handles nullish and numeric strings", () => {
@@ -160,6 +167,32 @@ describe("portfolio API client", () => {
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ detail: "Missing authorization header" }, 401));
 
     await expect(fetchPortfolio({ displayCurrency: "USD" })).rejects.toMatchObject({
+      name: "PortfolioApiError",
+      authRequired: true,
+      status: 401,
+    } satisfies Partial<PortfolioApiError>);
+  });
+
+  it("searchAssets GETs /api/assets/search with q and type", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse([]));
+
+    await searchAssets({ q: "VNM", type: "stock" });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${base}/api/assets/search?q=VNM&type=stock`,
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Authorization: "Bearer fake:alice",
+        }),
+      }),
+    );
+  });
+
+  it("searchAssets maps 401 to authRequired", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ detail: "Missing authorization header" }, 401));
+
+    await expect(searchAssets({ q: "btc", type: "crypto" })).rejects.toMatchObject({
       name: "PortfolioApiError",
       authRequired: true,
       status: 401,
