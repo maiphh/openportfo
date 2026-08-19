@@ -1,6 +1,7 @@
-"""Live vnstock client with fixture fallback when library/network fails.
+"""Live vnstock client (MARKET_CLIENT_MODE=http).
 
-MARKET_CLIENT_MODE=http. Unit tests keep FixtureVnstockClient.
+Fixture fallback is opt-in for tests. Production http mode must not serve
+catalog boards on heatmap/quotes — those paths raise MarketDataError (API 502).
 """
 
 from __future__ import annotations
@@ -168,13 +169,13 @@ def _group_heatmap(
 
 
 class HttpVnstockClient:
-    """Best-effort vnstock wrapper; falls back to fixtures on import/runtime failure."""
+    """vnstock wrapper. Catalog fallback is off unless tests opt in."""
 
     def __init__(
         self,
         *,
         api_key: Optional[str] = None,
-        use_fixture_fallback: bool = True,
+        use_fixture_fallback: bool = False,
     ) -> None:
         self._fallback = FixtureVnstockClient() if use_fixture_fallback else None
         self._listing_cache: Optional[list[AssetSearchResult]] = None
@@ -195,7 +196,10 @@ class HttpVnstockClient:
             self._apply_api_key(api_key)
             self._live = True
         except Exception:
-            logger.warning("vnstock is not importable; stock quotes use catalog fixtures")
+            if self._fallback is not None:
+                logger.warning("vnstock is not importable; stock quotes use catalog fixtures")
+            else:
+                logger.warning("vnstock is not importable; live stock quotes are unavailable")
             self._live = False
 
     def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
@@ -325,11 +329,18 @@ class HttpVnstockClient:
                 sectors = self._live_heatmap(board, cap)
             except Exception as exc:
                 logger.warning("vnstock heatmap failed: %s", exc)
+                if self._fallback is None:
+                    if isinstance(exc, MarketDataError):
+                        raise
+                    raise MarketDataError(f"vnstock heatmap failed: {exc}") from exc
                 sectors = []
 
-        if not sectors and self._fallback is not None:
-            logger.warning("vnstock heatmap unavailable; using catalog fixture")
-            sectors = self._fallback.get_heatmap(exchange=board, limit=cap)
+        if not sectors:
+            if self._fallback is not None:
+                logger.warning("vnstock heatmap unavailable; using catalog fixture")
+                sectors = self._fallback.get_heatmap(exchange=board, limit=cap)
+            else:
+                raise MarketDataError("vnstock heatmap unavailable")
 
         self._heatmap_cache = (board, cap, list(sectors))
         self._heatmap_cached_at = now
@@ -359,11 +370,18 @@ class HttpVnstockClient:
                 groups = self._live_quotes(board, cap)
             except Exception as exc:
                 logger.warning("vnstock quotes failed: %s", exc)
+                if self._fallback is None:
+                    if isinstance(exc, MarketDataError):
+                        raise
+                    raise MarketDataError(f"vnstock quotes failed: {exc}") from exc
                 groups = []
 
-        if not groups and self._fallback is not None:
-            logger.warning("vnstock quotes unavailable; using catalog fixture")
-            groups = self._fallback.get_quotes(exchange=board, limit=cap)
+        if not groups:
+            if self._fallback is not None:
+                logger.warning("vnstock quotes unavailable; using catalog fixture")
+                groups = self._fallback.get_quotes(exchange=board, limit=cap)
+            else:
+                raise MarketDataError("vnstock quotes unavailable")
 
         self._quotes_cache = (board, cap, list(groups))
         self._quotes_cached_at = now

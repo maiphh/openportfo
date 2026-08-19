@@ -13,7 +13,7 @@ from app.adapters.vnstock.catalog import fixture_heatmap_rows, stock_prices
 from app.adapters.vnstock.client import FixtureVnstockClient
 from app.adapters.vnstock import http_client as vnstock_http
 from app.adapters.vnstock.http_client import HttpVnstockClient, _industry_label
-from app.ports.market import AssetSearchResult
+from app.ports.market import AssetSearchResult, MarketDataError
 
 
 class _FakeQuoteDF:
@@ -132,6 +132,39 @@ def test_http_quotes_falls_back_to_fixture_when_live_empty(monkeypatch) -> None:
     groups = client.get_quotes(limit=15)
     assert groups
     assert sum(len(g.rows) for g in groups) <= 15
+
+
+def test_http_heatmap_no_fallback_raises_when_live_empty(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    client._live = True
+    monkeypatch.setattr(client, "_live_heatmap", lambda *_a, **_k: [])
+    with pytest.raises(MarketDataError, match="heatmap unavailable"):
+        client.get_heatmap(limit=15)
+
+
+def test_http_quotes_no_fallback_raises_when_live_empty(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    client._live = True
+    monkeypatch.setattr(client, "_live_quotes", lambda *_a, **_k: [])
+    with pytest.raises(MarketDataError, match="quotes unavailable"):
+        client.get_quotes(limit=15)
+
+
+def test_http_heatmap_no_fallback_raises_when_live_errors(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    client._live = True
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("vnstock down")
+
+    monkeypatch.setattr(client, "_live_heatmap", _boom)
+    with pytest.raises(MarketDataError, match="heatmap failed"):
+        client.get_heatmap(limit=15)
+
+
+def test_http_default_has_no_fixture_fallback() -> None:
+    client = HttpVnstockClient()
+    assert client._fallback is None
 
 
 def test_fixture_quotes_groups_by_industry_and_respects_limit() -> None:

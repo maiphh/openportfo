@@ -7,7 +7,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+import httpx
+
 from app.adapters.coingecko.client import FixtureCoinGeckoClient
+from app.adapters.coingecko.http_client import HttpCoinGeckoClient
 from app.core.deps import get_crypto_market_client, set_crypto_market_client
 from app.main import create_app
 from app.ports.market import HeatmapSector, HeatmapStock, QuoteGroup, QuoteRow
@@ -149,3 +152,27 @@ def test_crypto_provider_error_returns_502(path: str) -> None:
     res = TestClient(app).get(path)
     assert res.status_code == 502
     assert "unavailable" in (res.json().get("detail") or "").lower()
+
+
+@pytest.mark.parametrize(
+    "path",
+    ("/api/markets/crypto/heatmap", "/api/markets/crypto/quotes"),
+)
+def test_http_crypto_no_fallback_returns_502_not_catalog(path: str) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "down"})
+
+    client = HttpCoinGeckoClient(
+        transport=httpx.MockTransport(handler),
+        use_fixture_fallback=False,
+    )
+    set_crypto_market_client(client)
+    app = create_app()
+    app.dependency_overrides[get_crypto_market_client] = lambda: client
+
+    res = TestClient(app).get(path)
+    assert res.status_code == 502
+    body = res.json()
+    assert "unavailable" in (body.get("detail") or "").lower()
+    assert "sectors" not in body
+    assert "groups" not in body

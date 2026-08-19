@@ -112,7 +112,7 @@ def test_http_crypto_quotes_uses_markets_payload() -> None:
 
 
 def test_http_crypto_heatmap_falls_back_to_fixture(monkeypatch) -> None:
-    client = HttpCoinGeckoClient()
+    client = HttpCoinGeckoClient(use_fixture_fallback=True)
     monkeypatch.setattr(
         client,
         "_get",
@@ -124,7 +124,7 @@ def test_http_crypto_heatmap_falls_back_to_fixture(monkeypatch) -> None:
 
 
 def test_http_crypto_quotes_falls_back_to_fixture(monkeypatch) -> None:
-    client = HttpCoinGeckoClient()
+    client = HttpCoinGeckoClient(use_fixture_fallback=True)
     monkeypatch.setattr(
         client,
         "_get",
@@ -133,3 +133,30 @@ def test_http_crypto_quotes_falls_back_to_fixture(monkeypatch) -> None:
     groups = client.get_quotes(limit=6)
     assert groups
     assert sum(len(g.rows) for g in groups) <= 6
+
+
+def test_http_crypto_heatmap_no_fallback_raises(monkeypatch) -> None:
+    client = HttpCoinGeckoClient(use_fixture_fallback=False)
+    monkeypatch.setattr(
+        client,
+        "_get",
+        lambda *_a, **_k: (_ for _ in ()).throw(MarketDataError("down")),
+    )
+    with pytest.raises(MarketDataError):
+        client.get_heatmap(limit=6)
+
+
+def test_http_crypto_quotes_no_fallback_raises(monkeypatch) -> None:
+    client = HttpCoinGeckoClient(use_fixture_fallback=False)
+    monkeypatch.setattr(
+        client,
+        "_get",
+        lambda *_a, **_k: (_ for _ in ()).throw(MarketDataError("down")),
+    )
+    with pytest.raises(MarketDataError):
+        client.get_quotes(limit=6)
+
+
+def test_http_crypto_default_has_no_fixture_fallback() -> None:
+    client = HttpCoinGeckoClient()
+    assert client._fallback is None

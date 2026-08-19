@@ -1,6 +1,7 @@
-"""Live CoinGecko HTTP client (optional; MARKET_CLIENT_MODE=http).
+"""Live CoinGecko HTTP client (MARKET_CLIENT_MODE=http).
 
-Fixture client remains the unit-test default.
+Fixture fallback is opt-in for tests. Production http mode must not serve
+catalog boards on heatmap/quotes — those paths raise MarketDataError (API 502).
 """
 
 from __future__ import annotations
@@ -89,7 +90,7 @@ def _group_quotes(
 
 
 class HttpCoinGeckoClient:
-    """Minimal CoinGecko Demo/Pro REST client."""
+    """CoinGecko REST client. Catalog fallback is off unless tests opt in."""
 
     def __init__(
         self,
@@ -98,7 +99,7 @@ class HttpCoinGeckoClient:
         base_url: str = "https://api.coingecko.com/api/v3",
         timeout_seconds: float = 15.0,
         transport: Optional[httpx.BaseTransport] = None,
-        use_fixture_fallback: bool = True,
+        use_fixture_fallback: bool = False,
     ) -> None:
         self._api_key = (api_key or "").strip() or None
         self._base_url = base_url.rstrip("/")

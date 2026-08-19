@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.vnstock.client import FixtureVnstockClient
+from app.adapters.vnstock.http_client import HttpVnstockClient
 from app.core.deps import get_stock_market_client, set_stock_market_client
 from app.main import create_app
 from app.ports.market import QuoteGroup, QuoteRow
@@ -91,3 +92,18 @@ def test_quotes_provider_error_returns_502() -> None:
     res = TestClient(app).get("/api/markets/quotes")
     assert res.status_code == 502
     assert "unavailable" in (res.json().get("detail") or "").lower()
+
+
+def test_http_quotes_no_fallback_returns_502_not_catalog(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    client._live = True
+    monkeypatch.setattr(client, "_live_quotes", lambda *_a, **_k: [])
+    set_stock_market_client(client)
+    app = create_app()
+    app.dependency_overrides[get_stock_market_client] = lambda: client
+
+    res = TestClient(app).get("/api/markets/quotes")
+    assert res.status_code == 502
+    body = res.json()
+    assert "unavailable" in (body.get("detail") or "").lower()
+    assert "groups" not in body
