@@ -2,7 +2,8 @@
 
 Rate key convention: flat ``"{SRC}_{DST}"`` e.g. ``USD_VND``.
 ``get_rate`` returns 1 when src == dst; looks up direct key; falls back to
-inverse of ``DST_SRC`` when present.
+inverse of ``DST_SRC``; then triangulates via ``fx.base`` (default USD) when
+both legs exist — aligned with FE session currency conversion.
 
 If FX status is ``missing`` or required rates cannot convert all priced lines,
 display totals stay None and ``fx_status`` is ``missing`` (native kept).
@@ -17,10 +18,30 @@ from typing import Optional
 from app.domain.models import FxRates, PortfolioLine, PortfolioSummary
 from app.domain.portfolio_math import pnl_percent
 
+_DEFAULT_BASE = "USD"
+
 
 def rate_key(src: str, dst: str) -> str:
     """Canonical flat key for a currency pair."""
     return f"{src.upper()}_{dst.upper()}"
+
+
+def _lookup_direct_or_inverse(rates: dict[str, Decimal], src: str, dst: str) -> Optional[Decimal]:
+    """Direct SRC_DST or inverse DST_SRC only (no triangulation)."""
+    src_u = src.upper()
+    dst_u = dst.upper()
+    if src_u == dst_u:
+        return Decimal("1")
+
+    direct = rates.get(rate_key(src_u, dst_u))
+    if direct is not None:
+        return Decimal(direct)
+
+    inverse = rates.get(rate_key(dst_u, src_u))
+    if inverse is not None and inverse != 0:
+        return Decimal("1") / Decimal(inverse)
+
+    return None
 
 
 def get_rate(fx: FxRates, src: str, dst: str) -> Optional[Decimal]:
@@ -29,22 +50,29 @@ def get_rate(fx: FxRates, src: str, dst: str) -> Optional[Decimal]:
     - Same currency → ``Decimal("1")``
     - Direct ``SRC_DST`` key
     - Inverse of ``DST_SRC`` if only that exists
+    - Else triangulation via ``fx.base`` (default USD): ``src→base * base→dst``
     - Otherwise ``None``
     """
-    src_u = src.upper()
-    dst_u = dst.upper()
+    src_u = (src or "").strip().upper()
+    dst_u = (dst or "").strip().upper()
+    if not src_u or not dst_u:
+        return None
     if src_u == dst_u:
         return Decimal("1")
 
-    direct = fx.rates.get(rate_key(src_u, dst_u))
+    direct = _lookup_direct_or_inverse(fx.rates, src_u, dst_u)
     if direct is not None:
-        return Decimal(direct)
+        return direct
 
-    inverse = fx.rates.get(rate_key(dst_u, src_u))
-    if inverse is not None and inverse != 0:
-        return Decimal("1") / Decimal(inverse)
+    base_u = ((fx.base or _DEFAULT_BASE).strip().upper() or _DEFAULT_BASE)
+    if src_u == base_u or dst_u == base_u:
+        return None
 
-    return None
+    to_base = _lookup_direct_or_inverse(fx.rates, src_u, base_u)
+    from_base = _lookup_direct_or_inverse(fx.rates, base_u, dst_u)
+    if to_base is None or from_base is None:
+        return None
+    return to_base * from_base
 
 
 def _clone_line(line: PortfolioLine) -> PortfolioLine:

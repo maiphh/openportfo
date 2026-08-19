@@ -11,8 +11,24 @@ function formatAsOf(asOf: string | null): string {
   return Number.isNaN(d.getTime()) ? asOf : d.toLocaleString();
 }
 
+function describeRatesError(ratesError: string | null): string | null {
+  if (!ratesError) return null;
+  if (ratesError === "auth_required") return null; // handled by auth banner
+  if (ratesError.startsWith("http_")) return `Could not refresh rates (${ratesError.replace("http_", "HTTP ")}). Showing last loaded data.`;
+  if (ratesError === "fetch_failed") return "Could not refresh rates. Showing last loaded data.";
+  return `Could not refresh rates (${ratesError}). Showing last loaded data.`;
+}
+
 export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { rates, ratesLoading, ratesAuthRequired, refreshRates, fxStatus, asOf } = useDisplayCurrency();
+  const {
+    rates,
+    ratesLoading,
+    ratesAuthRequired,
+    ratesError,
+    refreshRates,
+    fxStatus,
+    asOf,
+  } = useDisplayCurrency();
 
   useEffect(() => {
     if (!open) return;
@@ -31,6 +47,8 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
   if (!open) return null;
 
   const pairs = Object.entries(rates.rates).sort(([a], [b]) => a.localeCompare(b));
+  const hasCachedPairs = pairs.length > 0;
+  const softError = describeRatesError(ratesError);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="fx-rates-title">
@@ -51,7 +69,15 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
         <div className="space-y-3 overflow-y-auto px-4 py-3 text-sm">
           {ratesAuthRequired ? (
             <p className="rounded-md border border-gray-600 bg-gray-900/60 px-3 py-2 text-gray-400">
-              Sign in to view stored FX rates.
+              {hasCachedPairs
+                ? "Sign in to refresh rates. Showing last loaded rates below."
+                : "Sign in to view stored FX rates."}
+            </p>
+          ) : null}
+
+          {!ratesAuthRequired && softError ? (
+            <p className="rounded-md border border-gray-600 bg-gray-900/60 px-3 py-2 text-xs text-amber-400/90">
+              {softError}
             </p>
           ) : null}
 
