@@ -46,6 +46,7 @@ describe("NavItems", () => {
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Markets" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Portfolio" })).toHaveAttribute("href", "/portfolio");
+    expect(screen.getByRole("link", { name: "Watchlist" })).toHaveAttribute("href", "/watchlist");
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
   });
 
@@ -54,6 +55,14 @@ describe("NavItems", () => {
     render(<NavItems />);
 
     expect(screen.getByRole("link", { name: "Portfolio" })).toHaveClass("text-gray-100");
+  });
+
+  it("marks Watchlist active on /watchlist", () => {
+    pathname.mockReturnValue("/watchlist");
+    render(<NavItems />);
+
+    expect(screen.getByRole("link", { name: "Watchlist" })).toHaveClass("text-gray-100");
+    expect(screen.getByRole("link", { name: "Portfolio" })).toHaveClass("text-gray-500");
   });
 
   it("reveals Stock and Crypto destinations on hover", () => {

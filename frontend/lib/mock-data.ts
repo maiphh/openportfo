@@ -20,6 +20,7 @@ export const NAV_ITEMS = [
     ],
   },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/watchlist", label: "Watchlist" },
   { href: "/search", label: "Search" },
 ] as const;
 
