@@ -25,6 +25,7 @@ from app.ports.holdings import (
     HoldingsRepo,
 )
 from app.ports.users import UserProfile
+from app.ports.market import MarketDataError
 from app.services.fx_service import FxService
 from app.services.holdings_service import HoldingsService, ValidationError
 from app.services.market_service import MarketService
@@ -156,6 +157,11 @@ def create_holding(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exc.detail,
         ) from exc
+    except MarketDataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=getattr(exc, "detail", None) or str(exc),
+        ) from exc
     except DuplicateHoldingError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -192,6 +198,11 @@ def update_holding(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exc.detail,
+        ) from exc
+    except MarketDataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=getattr(exc, "detail", None) or str(exc),
         ) from exc
     except HoldingNotFoundError as exc:
         raise HTTPException(

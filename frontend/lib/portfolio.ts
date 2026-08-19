@@ -231,14 +231,17 @@ export function parseMoney(value: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Slice angles for a simple SVG pie (values must be >= 0). */
+/**
+ * Slice angles for a simple SVG pie (values must be >= 0).
+ * Angles are degrees with 0 at 12 o'clock (consumed by polarToCartesian).
+ */
 export function pieSlices(
   items: { key: string; value: number; color: string }[],
 ): { key: string; color: string; startAngle: number; endAngle: number; value: number }[] {
   const positive = items.filter((i) => i.value > 0);
   const total = positive.reduce((sum, i) => sum + i.value, 0);
   if (total <= 0) return [];
-  let angle = -90;
+  let angle = 0;
   return positive.map((item) => {
     const sweep = (item.value / total) * 360;
     const startAngle = angle;
@@ -253,6 +256,19 @@ export function polarToCartesian(cx: number, cy: number, r: number, angleDeg: nu
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
+/** Full donut ring (SVG arcs collapse when start===end for a 360° sweep). */
+function describeFullDonut(cx: number, cy: number, outerR: number, innerR: number): string {
+  return [
+    `M ${cx - outerR} ${cy}`,
+    `A ${outerR} ${outerR} 0 1 1 ${cx + outerR} ${cy}`,
+    `A ${outerR} ${outerR} 0 1 1 ${cx - outerR} ${cy}`,
+    `M ${cx - innerR} ${cy}`,
+    `A ${innerR} ${innerR} 0 1 0 ${cx + innerR} ${cy}`,
+    `A ${innerR} ${innerR} 0 1 0 ${cx - innerR} ${cy}`,
+    "Z",
+  ].join(" ");
+}
+
 export function describeDonutSlice(
   cx: number,
   cy: number,
@@ -261,7 +277,11 @@ export function describeDonutSlice(
   startAngle: number,
   endAngle: number,
 ): string {
-  const large = endAngle - startAngle > 180 ? 1 : 0;
+  const sweep = endAngle - startAngle;
+  if (sweep >= 359.999) {
+    return describeFullDonut(cx, cy, outerR, innerR);
+  }
+  const large = sweep > 180 ? 1 : 0;
   const oStart = polarToCartesian(cx, cy, outerR, endAngle);
   const oEnd = polarToCartesian(cx, cy, outerR, startAngle);
   const iStart = polarToCartesian(cx, cy, innerR, startAngle);

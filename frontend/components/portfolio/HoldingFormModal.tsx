@@ -121,7 +121,7 @@ export default function HoldingFormModal({
             {mode === "create" ? "Add holding" : `Edit ${initial?.symbol ?? ""}`}
           </h2>
           <p className="mt-1 text-xs text-gray-500">
-            Cost is entered in session currency ({displayCurrency}) and stored in native units on save.
+            Cost is entered in {displayCurrency} and converted to native units (stock VND / crypto USD) on save.
           </p>
         </div>
 

@@ -13,7 +13,7 @@ from app.ports.holdings import (
     HoldingsRepo,
     utc_now,
 )
-from app.ports.market import AssetSearchResult
+from app.ports.market import AssetSearchResult, MarketDataError
 from app.services.fx_service import ConversionError, FxService
 
 
@@ -77,22 +77,58 @@ def _normalize_asset_type(asset_type: str) -> AssetType:
     return t  # type: ignore[return-value]
 
 
+def _provider_detail(exc: BaseException) -> str:
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, str) and detail.strip():
+        return detail.strip()
+    text = str(exc).strip()
+    return text or "Asset catalog temporarily unavailable"
+
+
 def resolve_holding_asset(
     market: AssetResolver,
     asset_type: str,
     symbol: str,
     asset_id: Optional[str] = None,
 ) -> AssetSearchResult:
-    """Resolve a holding against market search/catalog; raise if unknown."""
+    """Resolve a holding against market search/catalog.
+
+    Raises:
+        ValidationError: catalog answered successfully but symbol is absent (HTTP 400).
+        MarketDataError: search/catalog calls failed so validity is unknown (HTTP 503).
+    """
     at = _normalize_asset_type(asset_type)
     sym = _normalize_symbol(symbol)
     aid = (asset_id or "").strip() or None
 
-    hits: list[AssetSearchResult] = []
-    try:
-        hits = list(market.search(sym, at))
-    except Exception:  # noqa: BLE001 — treat provider/search failure as no hits
-        hits = []
+    lookup_ok = False
+    provider_err: Optional[BaseException] = None
+
+    def _safe_search(query: str) -> list[AssetSearchResult]:
+        nonlocal lookup_ok, provider_err
+        try:
+            results = list(market.search(query, at))
+            lookup_ok = True
+            return results
+        except MarketDataError as exc:
+            provider_err = provider_err or exc
+            return []
+        except Exception as exc:  # noqa: BLE001 — treat as provider failure
+            provider_err = provider_err or MarketDataError(_provider_detail(exc))
+            return []
+
+    def _safe_list() -> list[AssetSearchResult]:
+        nonlocal lookup_ok, provider_err
+        try:
+            results = list(market.list_assets(at, limit=500))
+            lookup_ok = True
+            return results
+        except MarketDataError as exc:
+            provider_err = provider_err or exc
+            return []
+        except Exception as exc:  # noqa: BLE001
+            provider_err = provider_err or MarketDataError(_provider_detail(exc))
+            return []
 
     def _exact(candidates: list[AssetSearchResult]) -> Optional[AssetSearchResult]:
         for c in candidates:
@@ -105,32 +141,38 @@ def resolve_holding_asset(
                     return c
         return None
 
+    hits = _safe_search(sym)
     hit = _exact(hits)
     if hit is None and aid:
-        try:
-            id_hits = list(market.search(aid, at))
-        except Exception:  # noqa: BLE001
-            id_hits = []
+        id_hits = _safe_search(aid)
         hit = _exact(id_hits) or next(
             (c for c in id_hits if c.asset_id.lower() == aid.lower()),
             None,
         )
 
     if hit is None:
-        try:
-            catalog = list(market.list_assets(at, limit=500))
-        except Exception:  # noqa: BLE001
-            catalog = []
+        catalog = _safe_list()
         hit = _exact(catalog)
         if hit is None:
             for c in catalog:
-                if c.symbol.upper() == sym or (
-                    aid and c.asset_id.lower() == aid.lower()
-                ):
+                sym_match = c.symbol.upper() == sym
+                id_match = bool(aid) and c.asset_id.lower() == aid.lower()
+                # When client supplies assetId, require it to match — do not
+                # accept a same-ticker hit with a different provider id.
+                if aid:
+                    if sym_match and id_match:
+                        hit = c
+                        break
+                    if id_match:
+                        hit = c
+                        break
+                elif sym_match:
                     hit = c
                     break
 
     if hit is None:
+        if not lookup_ok and provider_err is not None:
+            raise MarketDataError(_provider_detail(provider_err)) from provider_err
         raise ValidationError(f"Unknown or invalid asset: {at}/{sym}")
     return hit
 
@@ -263,13 +305,16 @@ class HoldingsService:
         at = _normalize_asset_type(asset_type)
         sym = _normalize_symbol(symbol)
 
-        # Re-check catalog when market is wired (rejects corrupted/unknown rows).
-        if self._market is not None:
+        # Trust existing row identity on soft edits (qty/note/cost). Re-resolve only
+        # when the client supplies a new assetId so outages do not block note/qty PUTs.
+        if self._market is not None and asset_id is not None:
             existing = self._repo.get(user_id, at, sym)
-            if existing is not None:
-                resolve_holding_asset(
-                    self._market, at, sym, asset_id or existing.asset_id
-                )
+            resolve_holding_asset(
+                self._market,
+                at,
+                sym,
+                asset_id or (existing.asset_id if existing else None),
+            )
 
         qty_d: Optional[Decimal] = None
         avg_d: Optional[Decimal] = None
@@ -331,6 +376,7 @@ __all__ = [
     "ValidationError",
     "DuplicateHoldingError",
     "HoldingNotFoundError",
+    "MarketDataError",
     "resolve_holding_asset",
     "native_currency_for_asset",
 ]

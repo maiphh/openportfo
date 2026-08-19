@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AllocationPie from "@/components/portfolio/AllocationPie";
 import HoldingFormModal from "@/components/portfolio/HoldingFormModal";
 import HoldingsTable from "@/components/portfolio/HoldingsTable";
@@ -22,6 +22,13 @@ import {
   type PortfolioResponse,
 } from "@/lib/portfolio";
 
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
 export default function PortfolioDashboard() {
   const { currency, convertToDisplay } = useDisplayCurrency();
   const [token, setToken] = useState<string | null>(null);
@@ -41,10 +48,26 @@ export default function PortfolioDashboard() {
   const [mutateBusy, setMutateBusy] = useState(false);
   const [mutateError, setMutateError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setToken(readAuthToken());
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      loadAbortRef.current?.abort();
+    };
+  }, []);
+
+  const handleAuthFailure = useCallback((detail?: string) => {
+    clearAuthToken();
+    setToken(null);
+    setAuthRequired(true);
+    setData(null);
+    setError(detail?.trim() || "Sign in required to view portfolio.");
+    setMutateError(null);
   }, []);
 
   const load = useCallback(
@@ -57,28 +80,45 @@ export default function PortfolioDashboard() {
         setError(null);
         return;
       }
+
+      loadAbortRef.current?.abort();
+      const controller = new AbortController();
+      loadAbortRef.current = controller;
+
       setLoading(true);
       setError(null);
       try {
         const next = opts?.force
-          ? await refreshPortfolio({ displayCurrency: currency, assetType: filter, token: t })
-          : await fetchPortfolio({ displayCurrency: currency, assetType: filter, token: t });
+          ? await refreshPortfolio({
+              displayCurrency: currency,
+              assetType: filter,
+              token: t,
+              signal: controller.signal,
+            })
+          : await fetchPortfolio({
+              displayCurrency: currency,
+              assetType: filter,
+              token: t,
+              signal: controller.signal,
+            });
+        if (controller.signal.aborted) return;
         setData(next);
         setAuthRequired(false);
       } catch (err) {
+        if (controller.signal.aborted || isAbortError(err)) return;
         if (err instanceof PortfolioApiError && err.authRequired) {
-          setAuthRequired(true);
-          setData(null);
-          setError("Sign in required to view portfolio.");
+          handleAuthFailure(err.detail);
         } else {
           setError(err instanceof Error ? err.message : "Failed to load portfolio");
         }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
-    [currency, filter],
+    [currency, filter, handleAuthFailure],
   );
 
   useEffect(() => {
@@ -153,8 +193,12 @@ export default function PortfolioDashboard() {
       await load();
     } catch (err) {
       if (err instanceof PortfolioApiError) {
-        setMutateError(err.detail);
-        if (err.authRequired) setAuthRequired(true);
+        if (err.authRequired) {
+          setModalOpen(false);
+          handleAuthFailure(err.detail);
+        } else {
+          setMutateError(err.detail);
+        }
       } else {
         setMutateError(err instanceof Error ? err.message : "Save failed");
       }
@@ -173,8 +217,11 @@ export default function PortfolioDashboard() {
       await load();
     } catch (err) {
       if (err instanceof PortfolioApiError) {
-        setError(err.detail);
-        if (err.authRequired) setAuthRequired(true);
+        if (err.authRequired) {
+          handleAuthFailure(err.detail);
+        } else {
+          setError(err.detail);
+        }
       } else {
         setError(err instanceof Error ? err.message : "Delete failed");
       }
@@ -192,9 +239,9 @@ export default function PortfolioDashboard() {
       <div className="mx-auto max-w-lg rounded-xl border border-gray-600 bg-gray-800/60 p-6">
         <h1 className="text-xl font-semibold text-gray-100">Portfolio</h1>
         <p className="mt-2 text-sm text-gray-400">
-          Cognito Bearer auth is required. Paste an access token (stored as{" "}
-          <code className="text-teal-400">artryx.accessToken</code>) to continue. Full Cognito Hosted UI can replace
-          this gate later.
+          Portfolio APIs require a Bearer access token. Paste a temporary token (saved as{" "}
+          <code className="text-teal-400">artryx.accessToken</code>). This is a provisional gate — Cognito Hosted UI
+          sign-in is not wired in this UI yet.
         </p>
         <input
           value={tokenInput}
@@ -209,11 +256,13 @@ export default function PortfolioDashboard() {
               writeAuthToken(tokenInput);
               setToken(readAuthToken());
               setTokenInput("");
+              setAuthRequired(false);
+              setError(null);
               void load();
             }}
             disabled={!tokenInput.trim()}
           >
-            Sign in
+            Continue with token
           </Button>
           <Button
             type="button"
@@ -222,6 +271,7 @@ export default function PortfolioDashboard() {
               clearAuthToken();
               setToken(null);
               setData(null);
+              setError(null);
             }}
           >
             Clear token

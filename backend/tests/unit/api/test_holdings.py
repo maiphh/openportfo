@@ -631,3 +631,132 @@ def test_service_rejects_unresolvable_when_market_wired() -> None:
             avg_cost="1",
             currency="USD",
         )
+
+
+def test_create_stock_converts_usd_session_cost_to_vnd() -> None:
+    """avgCost entered in session USD → stored native VND."""
+    client, _, _ = _make_client()
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            asset_type="stock",
+            symbol="VNM",
+            asset_id="VNM",
+            qty="10",
+            avg_cost="2",  # 2 USD * 25000 = 50000 VND
+            currency="USD",
+            note=None,
+        ),
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["currency"] == "VND"
+    assert Decimal(body["avgCost"]) == Decimal("50000")
+
+
+def test_create_stock_converts_eur_session_cost_to_vnd() -> None:
+    client, _, _ = _make_client()
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            asset_type="stock",
+            symbol="FPT",
+            asset_id="FPT",
+            qty="1",
+            avg_cost="0.92",  # 0.92 EUR → 1 USD → 25000 VND at seeded FX
+            currency="EUR",
+            note=None,
+        ),
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["currency"] == "VND"
+    # Triangulated EUR→USD→VND can leave a tiny Decimal residue.
+    assert abs(Decimal(body["avgCost"]) - Decimal("25000")) < Decimal("0.0001")
+
+
+def test_create_cross_currency_without_fx_returns_400() -> None:
+    empty_fx = InMemoryExchangeRateRepo()
+    client, h_repo, _ = _make_client(fx=empty_fx)
+    r = client.post(
+        "/api/holdings",
+        headers=_auth("alice"),
+        json=_holding_body(
+            symbol="BTC",
+            asset_id="bitcoin",
+            qty="1",
+            avg_cost="25000000",
+            currency="VND",
+            note=None,
+        ),
+    )
+    assert r.status_code == 400
+    detail = r.json()["detail"].lower()
+    assert "convert" in detail or "fx" in detail or "rate" in detail or "exchange" in detail
+    assert h_repo.list("alice") == []
+
+
+def test_update_note_skips_catalog_when_asset_id_omitted() -> None:
+    """Soft note/qty edits must not depend on live catalog availability."""
+    client, _, _ = _make_client()
+    assert (
+        client.post(
+            "/api/holdings",
+            headers=_auth("alice"),
+            json=_holding_body(qty="1", avg_cost="40000", currency="USD"),
+        ).status_code
+        == 201
+    )
+    r = client.put(
+        "/api/holdings/crypto/BTC",
+        headers=_auth("alice"),
+        json={"note": "hold"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["note"] == "hold"
+
+
+def test_update_with_unknown_asset_id_rejects() -> None:
+    client, _, _ = _make_client()
+    assert (
+        client.post(
+            "/api/holdings",
+            headers=_auth("alice"),
+            json=_holding_body(qty="1", avg_cost="40000", currency="USD"),
+        ).status_code
+        == 201
+    )
+    r = client.put(
+        "/api/holdings/crypto/BTC",
+        headers=_auth("alice"),
+        json={"assetId": "not-a-real-coin"},
+    )
+    assert r.status_code == 400
+    assert "invalid" in r.json()["detail"].lower() or "unknown" in r.json()["detail"].lower()
+
+
+def test_provider_failure_on_create_returns_503() -> None:
+    from app.ports.market import MarketDataError
+
+    class BoomMarket:
+        def search(self, q: str, asset_type: str) -> list:
+            raise MarketDataError("upstream down")
+
+        def list_assets(self, asset_type: str, *, limit: int = 250) -> list:
+            raise MarketDataError("upstream down")
+
+    fx_repo = InMemoryExchangeRateRepo()
+    _seed_fx(fx_repo)
+    svc = HoldingsService(InMemoryHoldingsRepo(), market=BoomMarket(), fx=FxService(fx_repo))
+    with pytest.raises(MarketDataError, match="upstream"):
+        svc.create_holding(
+            "u1",
+            asset_type="crypto",
+            symbol="BTC",
+            qty="1",
+            avg_cost="1",
+            currency="USD",
+            asset_id="bitcoin",
+        )
