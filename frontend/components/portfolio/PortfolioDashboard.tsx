@@ -7,8 +7,9 @@ import HoldingsTable from "@/components/portfolio/HoldingsTable";
 import PnlActivityHeatmap from "@/components/portfolio/PnlActivityHeatmap";
 import PortfolioSummaryCards from "@/components/portfolio/PortfolioSummaryCards";
 import PortfolioValueChart from "@/components/portfolio/PortfolioValueChart";
+import AuthGate from "@/components/auth/AuthGate";
 import { Button } from "@/components/ui/button";
-import { clearAuthToken, readAuthToken, writeAuthToken } from "@/lib/auth";
+import { clearAuthToken, readAuthToken } from "@/lib/auth";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import {
   createHolding,
@@ -34,7 +35,6 @@ function isAbortError(err: unknown): boolean {
 export default function PortfolioDashboard() {
   const { currency, convertToDisplay } = useDisplayCurrency();
   const [token, setToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [filter, setFilter] = useState<AssetTypeFilter>("all");
   const [data, setData] = useState<PortfolioResponse | null>(null);
@@ -242,49 +242,20 @@ export default function PortfolioDashboard() {
 
   if (authRequired || !token) {
     return (
-      <div className="mx-auto max-w-lg rounded-xl border border-gray-600 bg-gray-800/60 p-6">
-        <h1 className="text-xl font-semibold text-gray-100">Portfolio</h1>
-        <p className="mt-2 text-sm text-gray-400">
-          Portfolio APIs require a Bearer access token. Paste a temporary token (saved as{" "}
-          <code className="text-teal-400">artryx.accessToken</code>). This is a provisional gate — Cognito Hosted UI
-          sign-in is not wired in this UI yet.
-        </p>
-        <input
-          value={tokenInput}
-          onChange={(e) => setTokenInput(e.target.value)}
-          placeholder="Bearer token or fake:userId"
-          className="mt-4 h-10 w-full rounded-md border border-gray-600 bg-gray-900 px-3 text-sm text-gray-200 outline-none focus:border-teal-500"
-        />
-        <div className="mt-3 flex gap-2">
-          <Button
-            type="button"
-            onClick={() => {
-              writeAuthToken(tokenInput);
-              setToken(readAuthToken());
-              setTokenInput("");
-              setAuthRequired(false);
-              setError(null);
-              void load();
-            }}
-            disabled={!tokenInput.trim()}
-          >
-            Continue with token
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              clearAuthToken();
-              setToken(null);
-              setData(null);
-              setError(null);
-            }}
-          >
-            Clear token
-          </Button>
-        </div>
-        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
-      </div>
+      <AuthGate
+        title="Portfolio"
+        description={
+          'Portfolio APIs require a Bearer access token. Paste a temporary token (saved as artryx.accessToken). Cognito Hosted UI is not configured in this environment.'
+        }
+        error={error}
+        nextPath="/portfolio/"
+        onTokenSaved={() => {
+          setToken(readAuthToken());
+          setAuthRequired(false);
+          setError(null);
+          void load();
+        }}
+      />
     );
   }
 
