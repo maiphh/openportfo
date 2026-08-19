@@ -121,4 +121,6 @@ As an **admin**, I want to **refresh stored FX rates from the header rates panel
 
 ## 11. Implementation notes
 
-- Branch: `feat/BL-008-admin-fx-refresh`
+- Approach: Client `FxRatesPanel` loads `GET /api/auth/me` after open and shows **Refresh rates** only when `role === "admin"`. Click POSTs `/api/admin/fx/refresh` with Bearer (`lib/fx.ts` `refreshFxRates`). Success replaces session rates via `CurrencyProvider.replaceRates` (panel table + conversions). 502 keeps the previous table and shows `detail` / `lastRefreshError`. 403 hides the button (inline “Admin only”, no toast). Non-admin / unauthenticated stay read-only. Rate cells still use shared `formatPrice` (BL-012).
+- PR / branch: `feat/BL-008-admin-fx-refresh`
+- Verification: `cd frontend; npx vitest run lib/fx.test.ts components/currency` — 15 passed (role gate, POST + replace, 502 keeps prior rates).
