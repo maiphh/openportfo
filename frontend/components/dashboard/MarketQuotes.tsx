@@ -49,9 +49,16 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
     setSource("loading");
     setError(null);
     setGroups([]);
-    fetchMarketQuotes({ market, exchange: "HOSE", limit: 80, signal: controller.signal })
+    fetchMarketQuotes({
+      market,
+      limit: 80,
+      signal: controller.signal,
+      ...(market === "stock" ? { exchange: "HOSE" } : {}),
+    })
       .then((data) => {
-        if (!data.groups.length) {
+        if (controller.signal.aborted) return;
+        const hasRows = data.groups.some((group) => group.rows.length > 0);
+        if (!hasRows) {
           throw new Error("Empty quotes");
         }
         setGroups(data.groups);

@@ -19,6 +19,13 @@ const liveSectors = [
   },
 ];
 
+const cryptoSectors = [
+  {
+    name: "Layer 1",
+    stocks: [{ symbol: "BTC", name: "Bitcoin", changePct: 2.1, marketCap: 900 }],
+  },
+];
+
 describe("StockHeatmap", () => {
   beforeEach(() => {
     fetchMarketHeatmap.mockReset();
@@ -49,7 +56,7 @@ describe("StockHeatmap", () => {
     expect(screen.queryByText("NVDA")).not.toBeInTheDocument();
     expect(screen.queryByText("Demo data")).not.toBeInTheDocument();
     expect(fetchMarketHeatmap).toHaveBeenCalledWith(
-      expect.objectContaining({ market: "stock", exchange: "HOSE" }),
+      expect.objectContaining({ market: "stock", exchange: "HOSE", signal: expect.any(AbortSignal) }),
     );
 
     resolveFetch({ sectors: liveSectors, limit: 100, source: "vnstock" });
@@ -60,14 +67,9 @@ describe("StockHeatmap", () => {
     expect(screen.getByText("HOSE · vnstock")).toBeInTheDocument();
   });
 
-  it("loads crypto heatmap from the crypto market option", async () => {
+  it("loads crypto heatmap without a stock exchange option", async () => {
     fetchMarketHeatmap.mockResolvedValue({
-      sectors: [
-        {
-          name: "Layer 1",
-          stocks: [{ symbol: "BTC", name: "Bitcoin", changePct: 2.1, marketCap: 900 }],
-        },
-      ],
+      sectors: cryptoSectors,
       limit: 100,
       source: "coingecko",
     });
@@ -77,7 +79,10 @@ describe("StockHeatmap", () => {
     await waitFor(() => {
       expect(screen.getByText("BTC")).toBeInTheDocument();
     });
-    expect(fetchMarketHeatmap).toHaveBeenCalledWith(expect.objectContaining({ market: "crypto" }));
+    expect(fetchMarketHeatmap).toHaveBeenCalledWith(
+      expect.objectContaining({ market: "crypto", signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchMarketHeatmap.mock.calls[0]?.[0]).not.toHaveProperty("exchange");
     expect(screen.getByText("CoinGecko")).toBeInTheDocument();
   });
 
@@ -102,6 +107,22 @@ describe("StockHeatmap", () => {
     expect(fetchMarketHeatmap).toHaveBeenCalledTimes(2);
   });
 
+  it("treats sectors with no stocks as empty", async () => {
+    fetchMarketHeatmap.mockResolvedValue({
+      sectors: [{ name: "Banks", stocks: [] }],
+      limit: 100,
+      source: "vnstock",
+    });
+
+    render(<StockHeatmap market="stock" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("heatmap-error")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Empty heatmap/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
   it("shows error + Retry when the request fails", async () => {
     fetchMarketHeatmap.mockRejectedValue(new Error("Heatmap HTTP 502"));
 
@@ -113,5 +134,44 @@ describe("StockHeatmap", () => {
     expect(screen.getByText(/Heatmap HTTP 502/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByText("NVDA")).not.toBeInTheDocument();
+  });
+
+  it("ignores a late stock resolve after switching to crypto", async () => {
+    let resolveStock: (value: unknown) => void = () => {};
+    let resolveCrypto: (value: unknown) => void = () => {};
+
+    fetchMarketHeatmap
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveStock = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveCrypto = resolve;
+          }),
+      );
+
+    const { rerender } = render(<StockHeatmap market="stock" />);
+    expect(screen.getByTestId("heatmap-skeleton")).toBeInTheDocument();
+
+    rerender(<StockHeatmap market="crypto" />);
+    expect(screen.getByTestId("heatmap-skeleton")).toBeInTheDocument();
+    expect(fetchMarketHeatmap).toHaveBeenCalledTimes(2);
+
+    resolveStock({ sectors: liveSectors, limit: 100, source: "vnstock" });
+    await waitFor(() => {
+      expect(screen.queryByText("VCB")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("heatmap-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("heatmap-skeleton")).toBeInTheDocument();
+
+    resolveCrypto({ sectors: cryptoSectors, limit: 100, source: "coingecko" });
+    await waitFor(() => {
+      expect(screen.getByText("BTC")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("VCB")).not.toBeInTheDocument();
   });
 });

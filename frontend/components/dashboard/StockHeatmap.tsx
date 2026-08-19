@@ -76,9 +76,16 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
     setError(null);
     setSectorsData([]);
     setHover(null);
-    fetchMarketHeatmap({ market, exchange: "HOSE", limit: 100, signal: controller.signal })
+    fetchMarketHeatmap({
+      market,
+      limit: 100,
+      signal: controller.signal,
+      ...(market === "stock" ? { exchange: "HOSE" } : {}),
+    })
       .then((data) => {
-        if (!data.sectors.length) {
+        if (controller.signal.aborted) return;
+        const hasStocks = data.sectors.some((sector) => sector.stocks.length > 0);
+        if (!hasStocks) {
           throw new Error("Empty heatmap");
         }
         setSectorsData(data.sectors);
