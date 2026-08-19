@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import { fetchMarketHeatmap, type MarketKind } from "@/lib/api";
+import { readHeatmapCache, writeHeatmapCache } from "@/lib/markets-cache";
 import { layoutTreemap, type TreemapRect } from "@/lib/treemap";
 import type { HeatmapSector } from "@/types/markets";
 import { cn, formatPct, heatmapColor } from "@/lib/utils";
 
-type LoadState = "loading" | "live" | "error";
+type LoadState = "loading" | "updating" | "live" | "stale" | "error";
 
 function sectorNodes(sectors: HeatmapSector[]) {
   return sectors.map((sector) => ({
@@ -71,12 +72,22 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
     return () => observer.disconnect();
   }, [source]);
 
+  useLayoutEffect(() => {
+    const cached = readHeatmapCache(market);
+    if (cached) {
+      setSectorsData(cached.payload.sectors);
+      setSource("updating");
+      setError(null);
+    } else {
+      setSectorsData([]);
+      setSource("loading");
+      setError(null);
+    }
+    setHover(null);
+  }, [market, reloadKey]);
+
   useEffect(() => {
     const controller = new AbortController();
-    setSource("loading");
-    setError(null);
-    setSectorsData([]);
-    setHover(null);
     fetchMarketHeatmap({
       market,
       limit: 100,
@@ -89,17 +100,28 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
         if (!hasStocks) {
           throw new Error("Empty heatmap");
         }
+        writeHeatmapCache(market, data);
         setSectorsData(data.sectors);
         setSource("live");
+        setError(null);
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
+        const cached = readHeatmapCache(market);
+        if (cached) {
+          setSectorsData(cached.payload.sectors);
+          setSource("stale");
+          setError(err instanceof Error ? err.message : "Heatmap unavailable");
+          return;
+        }
         setSectorsData([]);
         setSource("error");
         setError(err instanceof Error ? err.message : "Heatmap unavailable");
       });
     return () => controller.abort();
   }, [market, reloadKey]);
+
+  const showBoard = source === "live" || source === "updating" || source === "stale";
 
   const laid = useMemo(
     () => layoutTreemap(sectorNodes(sectorsData), size.width, size.height, 2),
@@ -114,9 +136,16 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
         <h3 className="text-2xl font-semibold text-gray-100">
           {market === "crypto" ? "Crypto Heatmap" : "Stock Heatmap"}
         </h3>
-        <div className="text-[11px] text-gray-500">
+        <div className="flex items-center gap-2 text-[11px] text-gray-500">
           {source === "loading" ? (market === "crypto" ? "Loading crypto market…" : "Loading VN market…") : null}
+          {source === "updating" ? "cached (updating…)" : null}
+          {source === "stale" ? "cached (refresh failed)" : null}
           {source === "live" ? (market === "crypto" ? "CoinGecko" : "HOSE · vnstock") : null}
+          {source === "stale" ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+              Retry
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
@@ -132,7 +161,7 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
             </Button>
           </div>
         ) : null}
-        {source === "live" ? (
+        {showBoard ? (
           <>
             <div ref={hostRef} className="relative h-[min(72vh,820px)] min-h-[560px] w-full bg-[#141414]">
               {sectors.map((sector) => (

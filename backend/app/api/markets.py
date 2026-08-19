@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 
 from app.core.deps import get_crypto_market_client, get_stock_market_client
 from app.ports.market import (
@@ -16,6 +17,12 @@ from app.ports.market import (
 )
 
 router = APIRouter(tags=["markets"])
+
+_MARKETS_CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=120"
+
+
+def _ok(body: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(content=body, headers={"Cache-Control": _MARKETS_CACHE_CONTROL})
 
 
 def _sector_to_dict(sector: HeatmapSector) -> dict[str, Any]:
@@ -59,7 +66,7 @@ def market_heatmap(
     exchange: str = Query(default="HOSE"),
     limit: int = Query(default=100, ge=1, le=300),
     stock: StockMarketClient = Depends(get_stock_market_client),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Vietnam stock heatmap grouped by industry (vnstock-backed).
 
     Public endpoint for the dashboard treemap. Tile size uses market cap when
@@ -73,12 +80,12 @@ def market_heatmap(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Heatmap unavailable: {exc}",
         ) from exc
-    return {
+    return _ok({
         "exchange": board,
         "limit": limit,
         "sectors": [_sector_to_dict(s) for s in sectors],
         "source": "vnstock",
-    }
+    })
 
 
 @router.get("/api/markets/quotes")
@@ -86,7 +93,7 @@ def market_quotes(
     exchange: str = Query(default="HOSE"),
     limit: int = Query(default=80, ge=1, le=300),
     stock: StockMarketClient = Depends(get_stock_market_client),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Vietnam stock quote board grouped by industry (vnstock-backed)."""
     board = (exchange or "HOSE").strip().upper() or "HOSE"
     try:
@@ -96,19 +103,19 @@ def market_quotes(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Quotes unavailable: {exc}",
         ) from exc
-    return {
+    return _ok({
         "exchange": board,
         "limit": limit,
         "groups": [_group_to_dict(g) for g in groups],
         "source": "vnstock",
-    }
+    })
 
 
 @router.get("/api/markets/crypto/heatmap")
 def crypto_heatmap(
     limit: int = Query(default=100, ge=1, le=300),
     crypto: CryptoMarketClient = Depends(get_crypto_market_client),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Crypto heatmap grouped by category (CoinGecko-backed)."""
     try:
         sectors = crypto.get_heatmap(limit=limit)
@@ -117,18 +124,18 @@ def crypto_heatmap(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Heatmap unavailable: {exc}",
         ) from exc
-    return {
+    return _ok({
         "limit": limit,
         "sectors": [_sector_to_dict(s) for s in sectors],
         "source": "coingecko",
-    }
+    })
 
 
 @router.get("/api/markets/crypto/quotes")
 def crypto_quotes(
     limit: int = Query(default=80, ge=1, le=300),
     crypto: CryptoMarketClient = Depends(get_crypto_market_client),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Crypto quote board grouped by category (CoinGecko-backed, USD)."""
     try:
         groups = crypto.get_quotes(limit=limit)
@@ -137,8 +144,8 @@ def crypto_quotes(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Quotes unavailable: {exc}",
         ) from exc
-    return {
+    return _ok({
         "limit": limit,
         "groups": [_group_to_dict(g) for g in groups],
         "source": "coingecko",
-    }
+    })
