@@ -177,6 +177,6 @@ Default heatmap window: `from = today-371d`, `to = today`.
 
 ## 11. Implementation notes (Eng fills after `ready`)
 
-- Approach:
+- Approach: FE-only. Client widgets `PortfolioValueChart` (`GET /api/portfolio/performance`, default `1w`, tabs `1w|mtd|ytd|max`) and `PnlActivityHeatmap` (`GET /api/snapshots?from=&to=` last 371 days). Daily PnL is `MV[t]-MV[t-1]` after BL-003 session FX — never `totalsDisplay.pnl`. Heatmap is a 7×53 Sunday-start GitHub grid; intensity is 4 fixed buckets of `|dailyPnl| / maxAbs` (≤25/50/75/>75%) plus empty/flat. Charts fetch independently (skeleton + retry) so holdings still render if they fail. No backend DTO change.
 - PR / branch: `feat/BL-014-portfolio-charts`
-- Verification:
+- Verification: `cd frontend; npx vitest run lib/portfolio-charts.test.ts` (daily delta, color buckets, empty 53-week grid, range mapping, Bearer fetch). Full `npx vitest run` in `frontend/`.
