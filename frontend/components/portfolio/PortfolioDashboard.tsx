@@ -342,6 +342,7 @@ export default function PortfolioDashboard() {
           <HoldingsTable
             lines={lines}
             displayCurrency={currency}
+            convertToDisplay={convertToDisplay}
             onEdit={openEdit}
             onDelete={handleDelete}
             busyKey={busyKey}

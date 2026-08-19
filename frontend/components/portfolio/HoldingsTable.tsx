@@ -3,8 +3,8 @@
 import type { ReactNode } from "react";
 import AssetLink from "@/components/AssetLink";
 import { Button } from "@/components/ui/button";
-import type { PortfolioLine } from "@/lib/portfolio";
-import { parseMoney } from "@/lib/portfolio";
+import type { ConvertToDisplay, PortfolioLine } from "@/lib/portfolio";
+import { parseMoney, unitPriceInDisplay } from "@/lib/portfolio";
 import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
 
 function Badge({ children, tone }: { children: ReactNode; tone: "warn" | "muted" }) {
@@ -24,12 +24,14 @@ function Badge({ children, tone }: { children: ReactNode; tone: "warn" | "muted"
 export default function HoldingsTable({
   lines,
   displayCurrency,
+  convertToDisplay,
   onEdit,
   onDelete,
   busyKey,
 }: {
   lines: PortfolioLine[];
   displayCurrency: string;
+  convertToDisplay?: ConvertToDisplay;
   onEdit: (line: PortfolioLine) => void;
   onDelete: (line: PortfolioLine) => void;
   busyKey?: string | null;
@@ -65,8 +67,20 @@ export default function HoldingsTable({
             const pnl = parseMoney(line.pnlDisplay) ?? parseMoney(line.pnl);
             const pnlPct = parseMoney(line.pnlPercent);
             const alloc = parseMoney(line.allocation);
-            const price = parseMoney(line.price);
-            const avg = parseMoney(line.avgCost);
+            const avgShown = unitPriceInDisplay(
+              line.avgCost,
+              line.avgCostDisplay,
+              line.currency,
+              displayCurrency,
+              convertToDisplay,
+            );
+            const priceShown = unitPriceInDisplay(
+              line.price,
+              line.priceDisplay,
+              line.currency,
+              displayCurrency,
+              convertToDisplay,
+            );
             const showDisplay = line.marketValueDisplay != null;
             const moneyCur = showDisplay ? displayCurrency : line.currency;
 
@@ -84,10 +98,14 @@ export default function HoldingsTable({
                 </td>
                 <td className="px-3 py-3 tabular-nums text-gray-300">{line.qty}</td>
                 <td className="px-3 py-3 tabular-nums text-gray-300">
-                  {avg == null ? "—" : `${formatPrice(avg)} ${line.currency}`}
+                  {avgShown.amount == null
+                    ? "—"
+                    : `${formatPrice(avgShown.amount)} ${avgShown.currency}`}
                 </td>
                 <td className="px-3 py-3 tabular-nums text-gray-300">
-                  {price == null ? "—" : `${formatPrice(price)} ${line.currency}`}
+                  {priceShown.amount == null
+                    ? "—"
+                    : `${formatPrice(priceShown.amount)} ${priceShown.currency}`}
                 </td>
                 <td className="px-3 py-3 tabular-nums text-gray-200">
                   {mv == null ? "—" : `${formatPrice(mv)} ${moneyCur}`}

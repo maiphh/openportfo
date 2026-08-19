@@ -26,6 +26,8 @@ export type PortfolioLine = {
   marketValueDisplay?: string | null;
   costBasisDisplay?: string | null;
   pnlDisplay?: string | null;
+  avgCostDisplay?: string | null;
+  priceDisplay?: string | null;
   allocation?: string | null;
 };
 
@@ -229,6 +231,33 @@ export function parseMoney(value: string | null | undefined): number | null {
   if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+export type ConvertToDisplay = (amount: number, nativeCurrency: string) => number | null;
+
+/** Prefer API unit-price display; else convert native; else keep native + native ccy. */
+export function unitPriceInDisplay(
+  native: string | null | undefined,
+  apiDisplay: string | null | undefined,
+  nativeCurrency: string,
+  displayCurrency: string,
+  convertToDisplay?: ConvertToDisplay,
+): { amount: number | null; currency: string } {
+  const fromApi = parseMoney(apiDisplay);
+  if (fromApi != null) {
+    return { amount: fromApi, currency: displayCurrency };
+  }
+  const nativeAmt = parseMoney(native);
+  if (nativeAmt == null) {
+    return { amount: null, currency: nativeCurrency };
+  }
+  if (convertToDisplay) {
+    const converted = convertToDisplay(nativeAmt, nativeCurrency);
+    if (converted != null) {
+      return { amount: converted, currency: displayCurrency };
+    }
+  }
+  return { amount: nativeAmt, currency: nativeCurrency };
 }
 
 /**
