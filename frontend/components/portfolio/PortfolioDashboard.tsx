@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AllocationPie from "@/components/portfolio/AllocationPie";
 import HoldingFormModal from "@/components/portfolio/HoldingFormModal";
 import HoldingsTable from "@/components/portfolio/HoldingsTable";
+import PnlActivityHeatmap from "@/components/portfolio/PnlActivityHeatmap";
 import PortfolioSummaryCards from "@/components/portfolio/PortfolioSummaryCards";
+import PortfolioValueChart from "@/components/portfolio/PortfolioValueChart";
 import { Button } from "@/components/ui/button";
 import { clearAuthToken, readAuthToken, writeAuthToken } from "@/lib/auth";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
@@ -325,6 +327,11 @@ export default function PortfolioDashboard() {
         <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</div>
       )}
 
+      {data && !isEmpty ? <PortfolioSummaryCards data={data} fallbackCurrency={currency} /> : null}
+
+      <PortfolioValueChart token={token} />
+      <PnlActivityHeatmap token={token} />
+
       {loading && !data ? (
         <div className="py-16 text-center text-sm text-gray-500">Loading holdings…</div>
       ) : isEmpty ? (
@@ -337,7 +344,6 @@ export default function PortfolioDashboard() {
         </div>
       ) : data ? (
         <>
-          <PortfolioSummaryCards data={data} fallbackCurrency={currency} />
           <AllocationPie items={pieItems} currency={currency} />
           <HoldingsTable
             lines={lines}
