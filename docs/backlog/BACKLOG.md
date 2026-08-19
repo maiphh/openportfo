@@ -12,10 +12,10 @@
 
 | ID | Title | Priority | Status | Owner | Feature file | Notes |
 |----|-------|----------|--------|-------|--------------|-------|
-| BL-011 | Markets stale-while-revalidate + shared BE cache | P0 | `ready` | Eng | `features/BL-011-markets-stale-cache.md` | Stock slow; FE always reloads |
-| BL-012 | Configurable 2-decimal number format | P0 | `ready` | Eng | `features/BL-012-number-format.md` | App-wide display |
-| BL-013 | Portfolio Avg cost / Price in session FX | P0 | `ready` | Eng | `features/BL-013-portfolio-unit-fx.md` | Native-only columns |
-| BL-014 | Portfolio chart + GitHub-style PnL heatmap | P0 | `ready` | Eng | `features/BL-014-portfolio-charts.md` | Snapshots |
+| BL-011 | Markets stale-while-revalidate + shared BE cache | P0 | `done` | Eng | `features/BL-011-markets-stale-cache.md` | Merged to integration |
+| BL-012 | Configurable 2-decimal number format | P0 | `done` | Eng | `features/BL-012-number-format.md` | Merged to integration |
+| BL-013 | Portfolio Avg cost / Price in session FX | P0 | `done` | Eng | `features/BL-013-portfolio-unit-fx.md` | Merged to integration |
+| BL-014 | Portfolio chart + GitHub-style PnL heatmap | P0 | `done` | Eng | `features/BL-014-portfolio-charts.md` | Merged to integration |
 | BL-005 | Watchlist CRUD UI | P1 | `ready` | Eng | `features/BL-005-watchlist-ui.md` | APIs exist |
 | BL-006 | Cognito Hosted UI | P1 | `ready` | Eng | `features/BL-006-cognito-hosted-ui.md` | Replaces token paste |
 | BL-007 | TopStories → real news | P1 | `ready` | Eng | `features/BL-007-top-stories-news.md` | Drop mock headlines |
