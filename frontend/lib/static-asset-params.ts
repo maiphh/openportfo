@@ -37,10 +37,16 @@ export const STOCK_STATIC_SEED = [
   "SAB",
 ] as const;
 
+/** Static-export path segment: ASCII only (Windows + prerender-manifest safe). */
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
 function addParam(out: Set<string>, raw: unknown) {
   if (typeof raw !== "string") return;
   const id = raw.trim();
-  if (!id) return;
+  // Reject empty, route templates, and non-ASCII (e.g. CoinGecko display names).
+  if (!id || id.includes("[") || id.includes("]") || id.includes("/") || !SAFE_ID.test(id)) {
+    return;
+  }
   out.add(id);
 }
 
