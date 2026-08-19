@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { fetchMarketQuotes, type MarketKind } from "@/lib/api";
@@ -142,10 +143,17 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
                   {group.rows.map((row) => (
                     <tr key={`${group.name}-${row.symbol}`} className="border-t border-gray-700 hover:bg-gray-700/40">
                       <td className="px-3 py-2">
-                        <span className="flex items-center gap-2.5">
+                        <AssetLink
+                          assetType={market}
+                          id={row.symbol}
+                          className="flex items-center gap-2.5 text-gray-200 hover:text-teal-400"
+                        >
                           <CompanyLogo symbol={row.symbol} size={20} />
-                          <span className="text-gray-200">{row.name}</span>
-                        </span>
+                          <span>
+                            <span className="font-medium">{row.symbol}</span>
+                            <span className="ml-2 text-gray-400">{row.name}</span>
+                          </span>
+                        </AssetLink>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-200">{formatPrice(row.value)}</td>
                       <td className={cn("px-3 py-2 text-right tabular-nums", toneClass(row.change))}>

@@ -1,3 +1,4 @@
+import AssetLink from "@/components/AssetLink";
 import { TOP_STORIES } from "@/lib/mock-data";
 
 export default function TopStories() {
@@ -16,7 +17,20 @@ export default function TopStories() {
               </span>
               <div className="min-w-0">
                 <p className="mb-1 text-xs text-gray-500">{story.timeAgo}</p>
-                <p className="text-[15px] leading-snug text-gray-200">{story.headline}</p>
+                {story.symbol && story.assetType ? (
+                  <p className="text-[15px] leading-snug text-gray-200">
+                    <AssetLink assetType={story.assetType} id={story.symbol} className="font-semibold text-teal-400">
+                      {story.symbol}
+                    </AssetLink>
+                    <span className="text-gray-200">
+                      {story.headline.includes(":")
+                        ? story.headline.slice(story.headline.indexOf(":") + 1)
+                        : ` ${story.headline}`}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-[15px] leading-snug text-gray-200">{story.headline}</p>
+                )}
               </div>
             </li>
           ))}

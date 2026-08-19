@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { SEARCH_UNIVERSE } from "@/lib/mock-data";
 import { cn, formatPct, formatPrice } from "@/lib/utils";
@@ -52,10 +53,11 @@ export default function SearchDialog({
           ) : (
             results.map((row) => (
               <li key={row.symbol}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-gray-700/60"
+                <AssetLink
+                  assetType="stock"
+                  id={row.symbol}
                   onClick={onClose}
+                  className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-gray-700/60 hover:text-inherit"
                 >
                   <CompanyLogo symbol={row.symbol} size={24} />
                   <span className="w-16 font-semibold text-gray-200">{row.symbol}</span>
@@ -69,7 +71,7 @@ export default function SearchDialog({
                   >
                     {formatPct(row.changePct)}
                   </span>
-                </button>
+                </AssetLink>
               </li>
             ))
           )}

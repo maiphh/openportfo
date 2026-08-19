@@ -43,6 +43,9 @@ export type Story = {
   sourceColor: string;
   timeAgo: string;
   headline: string;
+  /** When set, headline surfaces use AssetLink click-through (BL-002). */
+  symbol?: string;
+  assetType?: "crypto" | "stock";
 };
 
 export const NAV_ITEMS = [
@@ -618,6 +621,8 @@ export const TOP_STORIES: Story[] = [
     sourceColor: "#0668e1",
     timeAgo: "2 hours ago",
     headline: "META: Meta's $1.4 Trillion Legal Nightmare Begins. Is the Stock at Risk?",
+    symbol: "META",
+    assetType: "stock",
   },
   {
     id: "3",
@@ -646,6 +651,8 @@ export const TOP_STORIES: Story[] = [
     sourceColor: "#e50914",
     timeAgo: "4 days ago",
     headline: "NFLX: Netflix Stock Jumps 5% as Bill Ackman Returns for the Streaming Trade",
+    symbol: "NFLX",
+    assetType: "stock",
   },
   {
     id: "7",
@@ -653,6 +660,8 @@ export const TOP_STORIES: Story[] = [
     sourceColor: "#555555",
     timeAgo: "5 days ago",
     headline: "AAPL: Apple Services Revenue Hits a Record as iPhone Cycle Steadies",
+    symbol: "AAPL",
+    assetType: "stock",
   },
   {
     id: "8",
@@ -660,6 +669,8 @@ export const TOP_STORIES: Story[] = [
     sourceColor: "#76b900",
     timeAgo: "5 days ago",
     headline: "NVDA: Data-center demand cools for a session as buyers wait on earnings",
+    symbol: "NVDA",
+    assetType: "stock",
   },
 ];
 

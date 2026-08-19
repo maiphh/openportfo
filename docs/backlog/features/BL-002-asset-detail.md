@@ -194,6 +194,6 @@ Slug resolve accepts **symbol or assetId** (e.g. `/crypto/btc` and `/crypto/bitc
 
 ## 11. Implementation notes (Eng fills after start)
 
-- Approach:
-- PR / branch:
-- Verification:
+- Approach: FE-first on existing `GET /api/assets/{type}/{slug}` + `/history`. Shared `AssetLink` + `assetDetailHref`; detail shell in `AssetDetailView` with type-specific stats (nulls hidden), chart ranges 7d/30d/90d/1y, Add Holding modal prefill (qty blank). No backend changes.
+- PR / branch: `execute-plan/6cc30007-pr-4-bl-002-asset-detail`
+- Verification: `cd frontend && npx vitest run` (asset href/helpers + API client tests)

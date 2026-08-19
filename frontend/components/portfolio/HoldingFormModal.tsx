@@ -17,6 +17,7 @@ export default function HoldingFormModal({
   mode,
   displayCurrency,
   initial,
+  prefill,
   busy,
   error,
   onClose,
@@ -26,6 +27,8 @@ export default function HoldingFormModal({
   mode: Mode;
   displayCurrency: DisplayCurrency;
   initial?: PortfolioLine | null;
+  /** Create-mode asset preselection (BL-002 detail CTA). Does not invent qty. */
+  prefill?: AssetSearchHit | null;
   busy?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -40,6 +43,7 @@ export default function HoldingFormModal({
   const [note, setNote] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const lockedPrefill = mode === "create" && Boolean(prefill);
 
   useEffect(() => {
     if (!open) return;
@@ -59,6 +63,17 @@ export default function HoldingFormModal({
       setSearchError(null);
       return;
     }
+    if (mode === "create" && prefill) {
+      setAssetType(prefill.assetType);
+      setSelected(prefill);
+      setQuery(prefill.symbol);
+      setQty("");
+      setAvgCost("");
+      setNote("");
+      setHits([]);
+      setSearchError(null);
+      return;
+    }
     setAssetType("stock");
     setQuery("");
     setHits([]);
@@ -67,10 +82,10 @@ export default function HoldingFormModal({
     setAvgCost("");
     setNote("");
     setSearchError(null);
-  }, [open, mode, initial]);
+  }, [open, mode, initial, prefill]);
 
   useEffect(() => {
-    if (!open || mode === "edit") return;
+    if (!open || mode === "edit" || lockedPrefill) return;
     const q = query.trim();
     if (q.length < 1) {
       setHits([]);
@@ -99,7 +114,7 @@ export default function HoldingFormModal({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query, assetType, open, mode]);
+  }, [query, assetType, open, mode, lockedPrefill]);
 
   const canSubmit = useMemo(() => {
     if (!selected) return false;
@@ -126,7 +141,7 @@ export default function HoldingFormModal({
         </div>
 
         <div className="space-y-4 px-5 py-4">
-          {mode === "create" && (
+          {mode === "create" && !lockedPrefill && (
             <div className="flex gap-2">
               {(["stock", "crypto"] as const).map((t) => (
                 <Button
@@ -146,7 +161,12 @@ export default function HoldingFormModal({
             </div>
           )}
 
-          {mode === "create" ? (
+          {mode === "create" && lockedPrefill && selected ? (
+            <p className="text-sm text-gray-300">
+              {selected.symbol} · <span className="capitalize">{selected.assetType}</span>
+              <span className="ml-2 text-xs text-gray-500">({selected.assetId})</span>
+            </p>
+          ) : mode === "create" ? (
             <div>
               <label className="mb-1 block text-xs text-gray-500">Search asset</label>
               <input

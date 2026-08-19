@@ -1,10 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import AssetLink from "@/components/AssetLink";
+import { Button } from "@/components/ui/button";
 import type { PortfolioLine } from "@/lib/portfolio";
 import { parseMoney } from "@/lib/portfolio";
 import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 function Badge({ children, tone }: { children: ReactNode; tone: "warn" | "muted" }) {
   return (
@@ -72,7 +73,13 @@ export default function HoldingsTable({
             return (
               <tr key={key} className="border-t border-gray-700/80 hover:bg-gray-800/50">
                 <td className="px-3 py-3">
-                  <div className="font-semibold text-gray-100">{line.symbol}</div>
+                  <AssetLink
+                    assetType={line.assetType}
+                    id={line.assetId || line.symbol}
+                    className="font-semibold text-gray-100"
+                  >
+                    {line.symbol}
+                  </AssetLink>
                   <div className="text-xs capitalize text-gray-500">{line.assetType}</div>
                 </td>
                 <td className="px-3 py-3 tabular-nums text-gray-300">{line.qty}</td>

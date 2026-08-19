@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { fetchMarketHeatmap, type MarketKind } from "@/lib/api";
 import { CRYPTO_HEATMAP_SECTORS, HEATMAP_SECTORS, type HeatmapSector } from "@/lib/mock-data";
@@ -113,12 +114,13 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
             const showSymbol = cell.width > 42 && cell.height > 32;
             const showPct = cell.width > 54 && cell.height > 44;
             return (
-              <button
+              <AssetLink
                 key={cell.id}
-                type="button"
+                assetType={market}
+                id={cell.symbol!}
                 onMouseEnter={() => setHover(cell)}
                 onMouseLeave={() => setHover((current) => (current?.id === cell.id ? null : current))}
-                className="absolute overflow-hidden text-left transition-opacity hover:brightness-125"
+                className="absolute overflow-hidden text-left text-inherit transition-opacity hover:brightness-125 hover:text-inherit"
                 style={{
                   left: cell.x,
                   top: cell.y,
@@ -126,6 +128,7 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
                   height: cell.height,
                   background: heatmapColor(pct),
                 }}
+                title={cell.symbol}
               >
                 <span className="flex h-full flex-col items-center justify-center gap-1 px-1 text-center">
                   {showLogo ? <CompanyLogo symbol={cell.symbol!} size={28} /> : null}
@@ -136,7 +139,7 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
                     <span className="text-[11px] font-medium leading-none text-white/90">{formatPct(pct)}</span>
                   ) : null}
                 </span>
-              </button>
+              </AssetLink>
             );
           })}
           {hover?.symbol ? (
