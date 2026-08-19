@@ -5,14 +5,14 @@
 | **ID** | `BL-007` |
 | **Title** | Markets Top Stories uses `GET /api/news` |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | BA |
-| **Owner (Eng)** | — |
+| **Owner (Eng)** | Eng |
 | **Requested by** | Stakeholder |
 | **Related PRD / sprint** | BL-004 deferred mock headlines; sprint-08 news |
 | **Created** | 2026-08-19 |
 | **Ready date** | 2026-08-19 |
-| **Done date** | |
+| **Done date** | 2026-08-19 |
 
 ---
 
@@ -69,12 +69,12 @@ As a **signed-in investor**, I want **live news next to the quote board**, so th
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** Authenticated markets page loads news from `/api/news`, not `TOP_STORIES`.
-- [ ] **AC2** Unauthenticated: no mock headlines.
-- [ ] **AC3** Skeleton then live list; error + Retry.
-- [ ] **AC4** `TOP_STORIES` removed if unreferenced.
-- [ ] **AC5** Symbols use `AssetLink` when type can be inferred; otherwise title-only.
-- [ ] **AC6** Tests cover client mapping and 401 empty path.
+- [x] **AC1** Authenticated markets page loads news from `/api/news`, not `TOP_STORIES`.
+- [x] **AC2** Unauthenticated: no mock headlines.
+- [x] **AC3** Skeleton then live list; error + Retry.
+- [x] **AC4** `TOP_STORIES` removed if unreferenced.
+- [x] **AC5** Symbols use `AssetLink` when type can be inferred; otherwise title-only.
+- [x] **AC6** Tests cover client mapping and 401 empty path.
 
 ---
 
@@ -125,4 +125,6 @@ As a **signed-in investor**, I want **live news next to the quote board**, so th
 
 ## 11. Implementation notes
 
-- Branch: `feat/BL-007-top-stories-news`
+- Approach: FE-only. New `frontend/lib/news.ts` fetches `GET /api/news?limit=20` with Bearer (`NewsApiError.authRequired` on 401/403). `mapNewsItems` maps `title` / `url` / `source` / `publishedAt` / `symbols[]`, sorts newest first, and only links symbols when type is inferable (known crypto from `CRYPTO_STATIC_SEED` first so BTC is not a stock; else 3–4 letter ticker → stock; else skip). `TopStories` is a client widget: fetch after mount, no mock seed; skeleton → live list; empty → “No stories yet”; 401 → “Sign in to see news”; other errors → Retry. Missing / non-http(s) `url` renders title as text. External headlines use `target="_blank"` `rel="noopener noreferrer"`. Removed unused `TOP_STORIES` + `Story` from `mock-data.ts`.
+- PR / branch: `feat/BL-007-top-stories-news`
+- Verification: `cd frontend; npx vitest run lib/news.test.ts components/dashboard/TopStories.test.tsx` — 20 passed (mapping, infer stock/crypto/skip, 401 `authRequired` without mock, skeleton, empty, retry, AssetLink + new-tab rel).

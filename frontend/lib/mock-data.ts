@@ -10,17 +10,6 @@ export type LogoSpec = {
   mark: string;
 };
 
-export type Story = {
-  id: string;
-  source: string;
-  sourceColor: string;
-  timeAgo: string;
-  headline: string;
-  /** When set, headline surfaces use AssetLink click-through (BL-002). */
-  symbol?: string;
-  assetType?: "crypto" | "stock";
-};
-
 export const NAV_ITEMS = [
   {
     href: "/markets/stock",
@@ -273,73 +262,6 @@ export const OVERVIEW_TABS: Record<OverviewTab, QuoteRow[]> = {
     { symbol: "V", name: "Visa", value: 342.18, change: 1.44, changePct: 0.42, open: 340.5, high: 343.9, low: 339.8, prev: 340.74 },
   ],
 };
-
-export const TOP_STORIES: Story[] = [
-  {
-    id: "1",
-    source: "Y",
-    sourceColor: "#ef4444",
-    timeAgo: "2 hours ago",
-    headline: "UNTREE: Robot Maker Explodes 62% in Shanghai Debut. Price Discovery Malfunctions",
-  },
-  {
-    id: "2",
-    source: "M",
-    sourceColor: "#0668e1",
-    timeAgo: "2 hours ago",
-    headline: "META: Meta's $1.4 Trillion Legal Nightmare Begins. Is the Stock at Risk?",
-    symbol: "META",
-    assetType: "stock",
-  },
-  {
-    id: "3",
-    source: "S",
-    sourceColor: "#22c55e",
-    timeAgo: "yesterday",
-    headline: "SPGX: SpaceX Stock Jumps 4% as Harvard, Nvidia, Norway Reveal Stakes",
-  },
-  {
-    id: "4",
-    source: "S",
-    sourceColor: "#f97316",
-    timeAgo: "yesterday",
-    headline: "SMHX: Sandisk Jumps 9% as Anthropic's Revenue Run Rate Hits Warp Speed",
-  },
-  {
-    id: "5",
-    source: "R",
-    sourceColor: "#fb923c",
-    timeAgo: "4 days ago",
-    headline: "RDDT: Reddit Stock Rockets 12% on S&P 500 Promotion. Passive Funds Must Buy",
-  },
-  {
-    id: "6",
-    source: "N",
-    sourceColor: "#e50914",
-    timeAgo: "4 days ago",
-    headline: "NFLX: Netflix Stock Jumps 5% as Bill Ackman Returns for the Streaming Trade",
-    symbol: "NFLX",
-    assetType: "stock",
-  },
-  {
-    id: "7",
-    source: "A",
-    sourceColor: "#555555",
-    timeAgo: "5 days ago",
-    headline: "AAPL: Apple Services Revenue Hits a Record as iPhone Cycle Steadies",
-    symbol: "AAPL",
-    assetType: "stock",
-  },
-  {
-    id: "8",
-    source: "N",
-    sourceColor: "#76b900",
-    timeAgo: "5 days ago",
-    headline: "NVDA: Data-center demand cools for a session as buyers wait on earnings",
-    symbol: "NVDA",
-    assetType: "stock",
-  },
-];
 
 export const SEARCH_UNIVERSE: QuoteRow[] = [
   ...OVERVIEW_TABS.Financial,
