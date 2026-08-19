@@ -28,6 +28,15 @@ export type PkceSession = {
 
 type EnvLike = Record<string, string | undefined>;
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+.
+function publicCognitoEnv(): EnvLike {
+  return {
+    NEXT_PUBLIC_COGNITO_DOMAIN: process.env.NEXT_PUBLIC_COGNITO_DOMAIN,
+    NEXT_PUBLIC_COGNITO_CLIENT_ID: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID,
+    NEXT_PUBLIC_COGNITO_REGION: process.env.NEXT_PUBLIC_COGNITO_REGION,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  };
+}
 
 export function normalizeCognitoDomain(raw: string): string {
   return raw.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
@@ -52,7 +61,7 @@ export function safeNextPath(raw: string | null | undefined): string {
   return value;
 }
 
-export function readCognitoPublicParts(env: EnvLike = process.env as EnvLike): {
+export function readCognitoPublicParts(env: EnvLike = publicCognitoEnv()): {
   domain: string;
   clientId: string;
   region: string | null;
@@ -64,11 +73,11 @@ export function readCognitoPublicParts(env: EnvLike = process.env as EnvLike): {
   return { domain, clientId, region };
 }
 
-export function isCognitoConfigured(env: EnvLike = process.env as EnvLike): boolean {
+export function isCognitoConfigured(env: EnvLike = publicCognitoEnv()): boolean {
   return readCognitoPublicParts(env) != null;
 }
 
-export function readCognitoConfig(env: EnvLike = process.env as EnvLike): CognitoPublicConfig | null {
+export function readCognitoConfig(env: EnvLike = publicCognitoEnv()): CognitoPublicConfig | null {
   const parts = readCognitoPublicParts(env);
   if (!parts) return null;
   let appUrl = normalizeAppUrl(env.NEXT_PUBLIC_APP_URL || "");
@@ -182,7 +191,7 @@ export async function prepareHostedUiLogin(options?: {
   sessionStorage?: StorageLike | null;
   crypto?: Crypto;
 }): Promise<{ url: string; verifier: string; state: string; next: string }> {
-  const config = options?.config ?? readCognitoConfig(options?.env ?? (process.env as EnvLike));
+  const config = options?.config ?? readCognitoConfig(options?.env ?? publicCognitoEnv());
   if (!config) {
     throw new Error("Cognito is not configured");
   }
@@ -210,7 +219,7 @@ export function logoutFromApp(options?: {
 }): { cognitoLogoutUrl: string | null } {
   clearAuthToken(options?.tokenStorage);
   clearPkceSession(options?.pkceStorage);
-  const config = readCognitoConfig(options?.env ?? (process.env as EnvLike));
+  const config = readCognitoConfig(options?.env ?? publicCognitoEnv());
   return { cognitoLogoutUrl: config ? buildLogoutUrl(config) : null };
 }
 
@@ -305,7 +314,7 @@ export async function completeHostedUiCallback(options: {
     return finishError("Invalid sign-in state. Try signing in again.");
   }
 
-  const config = options.config ?? readCognitoConfig(options.env ?? (process.env as EnvLike));
+  const config = options.config ?? readCognitoConfig(options.env ?? publicCognitoEnv());
   if (!config) {
     return finishError("Cognito is not configured.");
   }

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
+import AuthGate from "@/components/auth/AuthGate";
 import { Button } from "@/components/ui/button";
 import AddWatchlistModal from "@/components/watchlist/AddWatchlistModal";
 import WatchlistTable from "@/components/watchlist/WatchlistTable";
-import { clearAuthToken, readAuthToken, writeAuthToken } from "@/lib/auth";
+import { clearAuthToken, readAuthToken } from "@/lib/auth";
 import type { AssetSearchHit } from "@/lib/portfolio";
 import {
   addWatchlist,
@@ -42,7 +43,6 @@ function WatchlistSkeleton() {
 export default function WatchlistView() {
   const { currency, convertToDisplay } = useDisplayCurrency();
   const [token, setToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [items, setItems] = useState<WatchlistItem[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -181,49 +181,18 @@ export default function WatchlistView() {
 
   if (authRequired || !token) {
     return (
-      <div className="mx-auto max-w-lg rounded-xl border border-gray-600 bg-gray-800/60 p-6">
-        <h1 className="text-xl font-semibold text-gray-100">Watchlist</h1>
-        <p className="mt-2 text-sm text-gray-400">
-          Watchlist APIs require a Bearer access token. Paste a temporary token (saved as{" "}
-          <code className="text-teal-400">artryx.accessToken</code>). This is a provisional gate — Cognito Hosted UI
-          sign-in is not wired in this UI yet.
-        </p>
-        <input
-          value={tokenInput}
-          onChange={(e) => setTokenInput(e.target.value)}
-          placeholder="Bearer token or fake:userId"
-          className="mt-4 h-10 w-full rounded-md border border-gray-600 bg-gray-900 px-3 text-sm text-gray-200 outline-none focus:border-teal-500"
-        />
-        <div className="mt-3 flex gap-2">
-          <Button
-            type="button"
-            onClick={() => {
-              writeAuthToken(tokenInput);
-              setToken(readAuthToken());
-              setTokenInput("");
-              setAuthRequired(false);
-              setError(null);
-              void load();
-            }}
-            disabled={!tokenInput.trim()}
-          >
-            Continue with token
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              clearAuthToken();
-              setToken(null);
-              setItems(null);
-              setError(null);
-            }}
-          >
-            Clear token
-          </Button>
-        </div>
-        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
-      </div>
+      <AuthGate
+        title="Watchlist"
+        description="Watchlist APIs require a Bearer access token. Paste a temporary token (saved as artryx.accessToken). Cognito Hosted UI is not configured in this environment."
+        error={error}
+        nextPath="/watchlist/"
+        onTokenSaved={() => {
+          setToken(readAuthToken());
+          setAuthRequired(false);
+          setError(null);
+          void load();
+        }}
+      />
     );
   }
 
