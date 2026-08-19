@@ -54,7 +54,7 @@ export default function SearchDialog({
             results.map((row) => (
               <li key={row.symbol}>
                 <AssetLink
-                  assetType="stock"
+                  assetType={row.assetType ?? "stock"}
                   id={row.symbol}
                   onClick={onClose}
                   className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-gray-700/60 hover:text-inherit"

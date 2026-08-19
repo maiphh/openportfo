@@ -140,6 +140,8 @@ export default function PortfolioDashboard() {
           key: `${line.assetType}:${line.symbol}`,
           label: line.symbol,
           value: value ?? 0,
+          assetType: line.assetType,
+          assetId: line.assetId || line.symbol,
         };
       })
       .filter((i) => i.value > 0);

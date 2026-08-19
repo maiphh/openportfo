@@ -1,5 +1,7 @@
 "use client";
 
+import AssetLink from "@/components/AssetLink";
+import type { AssetKind } from "@/lib/asset";
 import { describeDonutSlice, pieSlices } from "@/lib/portfolio";
 import { formatPct, formatPrice } from "@/lib/utils";
 
@@ -9,6 +11,8 @@ export type PieItem = {
   key: string;
   label: string;
   value: number;
+  assetType?: AssetKind;
+  assetId?: string | null;
 };
 
 export default function AllocationPie({
@@ -57,11 +61,18 @@ export default function AllocationPie({
             .filter((i) => i.value > 0)
             .map((item) => {
               const pct = total > 0 ? (item.value / total) * 100 : 0;
+              const linkId = item.assetId || item.label;
               return (
                 <li key={item.key} className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="inline-block size-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
-                    <span className="truncate text-gray-300">{item.label}</span>
+                    {item.assetType ? (
+                      <AssetLink assetType={item.assetType} id={linkId} className="truncate text-gray-300">
+                        {item.label}
+                      </AssetLink>
+                    ) : (
+                      <span className="truncate text-gray-300">{item.label}</span>
+                    )}
                   </span>
                   <span className="shrink-0 tabular-nums text-gray-400">
                     {formatPct(pct)} · {formatPrice(item.value)} {currency}

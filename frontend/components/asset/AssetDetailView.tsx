@@ -152,6 +152,8 @@ export default function AssetDetailView({
       const controller = new AbortController();
       historyAbortRef.current = controller;
 
+      // Drop prior series so range tabs never paint mismatched labels vs points (AC6).
+      setHistory(null);
       setHistoryLoading(true);
       try {
         const series = await fetchAssetHistory({
@@ -203,8 +205,14 @@ export default function AssetDetailView({
     [detail],
   );
   const links = useMemo(() => (detail ? buildExternalLinks(detail.profile) : []), [detail]);
+  const historyReady =
+    history != null && parseChartRange(String(history.range)) === range && !historyLoading;
   const preferDisplay = Boolean(history?.fx?.rate) || detail?.fx?.status !== "missing";
-  const series = useMemo(() => historySeries(history, preferDisplay), [history, preferDisplay]);
+  const series = useMemo(
+    () => (historyReady ? historySeries(history, preferDisplay) : []),
+    [history, historyReady, preferDisplay],
+  );
+  const chartRange = historyReady ? parseChartRange(String(history?.range)) : range;
 
   const price = detail?.quote
     ? parseNum(detail.quote.priceDisplay) ?? parseNum(detail.quote.price)
@@ -212,6 +220,7 @@ export default function AssetDetailView({
   const priceCurrency =
     detail?.quote?.priceDisplay != null ? detail.displayCurrency : detail?.quote?.currency || detail?.nativeCurrency;
   const changePct = parseNum(detail?.quote?.changePercent24h);
+  const priceRefreshing = loading && detail != null;
 
   const openAddHolding = () => {
     if (!detail) return;
@@ -254,7 +263,8 @@ export default function AssetDetailView({
         <h1 className="text-xl font-semibold text-gray-100">Asset detail</h1>
         <p className="mt-2 text-sm text-gray-400">
           Asset detail APIs require a Bearer access token. Paste a temporary token (saved as{" "}
-          <code className="text-teal-400">artryx.accessToken</code>).
+          <code className="text-teal-400">artryx.accessToken</code>). This is a provisional gate — Cognito Hosted UI
+          sign-in is not wired in this UI yet.
         </p>
         <input
           value={tokenInput}
@@ -347,7 +357,12 @@ export default function AssetDetailView({
               <span className="font-medium text-gray-500">{detail.symbol}</span>
             </h1>
             <div className="mt-2 flex flex-wrap items-baseline gap-3">
-              <span className="text-3xl font-semibold tabular-nums text-gray-100">
+              <span
+                className={cn(
+                  "text-3xl font-semibold tabular-nums text-gray-100",
+                  priceRefreshing && "opacity-50",
+                )}
+              >
                 {price == null ? "—" : `${formatPrice(price)} ${priceCurrency || ""}`.trim()}
               </span>
               {changePct != null && (
@@ -357,9 +372,15 @@ export default function AssetDetailView({
                     changePct > 0 && "text-teal-400",
                     changePct < 0 && "text-red-500",
                     changePct === 0 && "text-gray-400",
+                    priceRefreshing && "opacity-50",
                   )}
                 >
                   {formatPct(changePct)} 24h
+                </span>
+              )}
+              {priceRefreshing && (
+                <span className="rounded bg-gray-700/80 px-2 py-0.5 text-[11px] uppercase tracking-wide text-gray-400">
+                  Updating {currency}…
                 </span>
               )}
             </div>
@@ -400,10 +421,10 @@ export default function AssetDetailView({
             ))}
           </div>
         </div>
-        {historyLoading && series.length === 0 ? (
+        {!historyReady ? (
           <div className="py-16 text-center text-sm text-gray-500">Loading chart…</div>
         ) : (
-          <AssetHistoryChart data={series} range={range} />
+          <AssetHistoryChart data={series} range={chartRange} />
         )}
       </section>
 

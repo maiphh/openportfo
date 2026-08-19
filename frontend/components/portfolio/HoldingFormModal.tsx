@@ -12,6 +12,22 @@ import {
 
 type Mode = "create" | "edit";
 
+/** Shared submit gate for create/edit (and BL-002 prefill tests). */
+export function holdingFormCanSubmit(
+  selected: AssetSearchHit | null | undefined,
+  qty: string,
+  avgCost: string,
+): boolean {
+  if (!selected) return false;
+  const qtyRaw = String(qty ?? "").trim();
+  const costRaw = String(avgCost ?? "").trim();
+  // Reject blanks — Number("") is 0 and would otherwise look "valid".
+  if (!qtyRaw || !costRaw) return false;
+  const q = Number(qtyRaw);
+  const c = Number(costRaw);
+  return Number.isFinite(q) && q > 0 && Number.isFinite(c) && c >= 0;
+}
+
 export default function HoldingFormModal({
   open,
   mode,
@@ -116,12 +132,7 @@ export default function HoldingFormModal({
     };
   }, [query, assetType, open, mode, lockedPrefill]);
 
-  const canSubmit = useMemo(() => {
-    if (!selected) return false;
-    const q = Number(qty);
-    const c = Number(avgCost);
-    return Number.isFinite(q) && q > 0 && Number.isFinite(c) && c >= 0;
-  }, [selected, qty, avgCost]);
+  const canSubmit = useMemo(() => holdingFormCanSubmit(selected, qty, avgCost), [selected, qty, avgCost]);
 
   if (!open) return null;
 
@@ -217,8 +228,11 @@ export default function HoldingFormModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs text-gray-500">Quantity</label>
+              <label htmlFor="holding-qty" className="mb-1 block text-xs text-gray-500">
+                Quantity
+              </label>
               <input
+                id="holding-qty"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
                 inputMode="decimal"
@@ -226,8 +240,11 @@ export default function HoldingFormModal({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-gray-500">{holdingCostLabel(displayCurrency)}</label>
+              <label htmlFor="holding-avg-cost" className="mb-1 block text-xs text-gray-500">
+                {holdingCostLabel(displayCurrency)}
+              </label>
               <input
+                id="holding-avg-cost"
                 value={avgCost}
                 onChange={(e) => setAvgCost(e.target.value)}
                 inputMode="decimal"
