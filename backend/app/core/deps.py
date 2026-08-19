@@ -24,13 +24,18 @@ from app.ports.snapshots import SnapshotRepo
 from app.ports.storage import ObjectStorage
 from app.ports.users import UserProfile, UserProfileRepo
 from app.ports.watchlist import WatchlistRepo
+from app.ports.llm import LlmProvider
 from app.services.fx_service import FxService
 from app.services.history_service import HistoryService
+from app.services.holdings_service import HoldingsService
 from app.services.market_service import MarketService
 from app.services.news_service import NewsService
 from app.services.asset_detail_service import AssetDetailService
+from app.services.llm.chat_service import ChatService
+from app.services.llm.registry import ToolRegistry
 from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
+from app.services.watchlist_service import WatchlistService
 
 # Process-local stores (until set / first get)
 _user_profile_repo: Optional[UserProfileRepo] = None
@@ -55,6 +60,8 @@ _job_runs_repo: Optional[JobRunsRepo] = None
 _snapshot_repo: Optional[SnapshotRepo] = None
 _snapshot_service: Optional[SnapshotService] = None
 _rss_fetcher: Optional[RssFetcher] = None
+_llm_provider: Optional[LlmProvider] = None
+_tool_registry: Optional[ToolRegistry] = None
 
 
 def settings_dep() -> Settings:
@@ -685,6 +692,65 @@ def get_rss_fetcher() -> RssFetcher:
 def set_rss_fetcher(fetcher: Optional[RssFetcher]) -> None:
     global _rss_fetcher
     _rss_fetcher = fetcher
+
+
+# ---------------------------------------------------------------------------
+# LLM / Chat
+# ---------------------------------------------------------------------------
+
+
+def get_holdings_service() -> HoldingsService:
+    return HoldingsService(get_holdings_repo())
+
+
+def get_watchlist_service() -> WatchlistService:
+    return WatchlistService(get_watchlist_repo())
+
+
+def get_llm_provider() -> Optional[LlmProvider]:
+    global _llm_provider
+    if _llm_provider is None:
+        from app.adapters.llm.factory import build_llm_provider
+
+        built = build_llm_provider(get_settings())
+        if built is not None:
+            _llm_provider = built
+        return built
+    return _llm_provider
+
+
+def set_llm_provider(provider: Optional[LlmProvider]) -> None:
+    global _llm_provider
+    _llm_provider = provider
+
+
+def get_tool_registry() -> ToolRegistry:
+    global _tool_registry
+    if _tool_registry is None:
+        from app.services.llm.tools import build_default_registry
+
+        _tool_registry = build_default_registry()
+    return _tool_registry
+
+
+def set_tool_registry(registry: Optional[ToolRegistry]) -> None:
+    global _tool_registry
+    _tool_registry = registry
+
+
+def get_chat_service() -> ChatService:
+    settings = get_settings()
+    return ChatService(
+        get_llm_provider(),
+        get_tool_registry(),
+        settings,
+        get_holdings_service(),
+        get_watchlist_service(),
+        get_portfolio_service(),
+        get_market_service(),
+        asset_detail=get_asset_detail_service(),
+        news=get_news_service(),
+    )
 
 
 def build_job_context(settings: Optional[Settings] = None):

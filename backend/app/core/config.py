@@ -89,6 +89,33 @@ class Settings(BaseSettings):
     coingecko_api_key: str = Field(default="", alias="COINGECKO_API_KEY", repr=False)
     vnstock_api_key: str = Field(default="", alias="VNSTOCK_API_KEY", repr=False)
 
+    # LLM / chatbot (OpenRouter by default; swap LLM_PROVIDER + LLM_BASE_URL + key)
+    llm_provider: str = Field(default="openrouter", alias="LLM_PROVIDER")
+    llm_base_url: str = Field(default="", alias="LLM_BASE_URL")
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY", repr=False)
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY", repr=False)
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY", repr=False)
+    xai_api_key: str = Field(default="", alias="XAI_API_KEY", repr=False)
+    llm_default_model: str = Field(default="openrouter/free", alias="LLM_DEFAULT_MODEL")
+    llm_fallback_models: str = Field(
+        default=(
+            "openrouter/free,"
+            "meta-llama/llama-3.3-70b-instruct:free,"
+            "qwen/qwen3-32b:free,"
+            "mistralai/mistral-small-3.1-24b-instruct:free,"
+            "google/gemma-3-27b-it:free"
+        ),
+        alias="LLM_FALLBACK_MODELS",
+    )
+    llm_free_only: bool = Field(default=True, alias="LLM_FREE_ONLY")
+    llm_timeout_seconds: float = Field(default=90.0, alias="LLM_TIMEOUT_SECONDS")
+    llm_max_tool_rounds: int = Field(default=8, alias="LLM_MAX_TOOL_ROUNDS")
+    llm_max_tokens: int = Field(default=2048, alias="LLM_MAX_TOKENS")
+    llm_retry_max: int = Field(default=2, alias="LLM_RETRY_MAX")
+    llm_retry_max_sleep: float = Field(default=8.0, alias="LLM_RETRY_MAX_SLEEP")
+    llm_http_referer: str = Field(default="https://openportfo.local", alias="LLM_HTTP_REFERER")
+    llm_app_title: str = Field(default="OpenPortfo", alias="LLM_APP_TITLE")
+
     # Market client mode: fixture (default for tests) | http (live HTTP when aws/prod)
     market_client_mode: str = Field(default="fixture", alias="MARKET_CLIENT_MODE")
 
@@ -98,6 +125,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def llm_fallback_model_list(self) -> List[str]:
+        return [m.strip() for m in (self.llm_fallback_models or "").split(",") if m.strip()]
 
     def aws_adapters_enabled(self) -> bool:
         """True when production AWS adapters should be used (not unit-test fakes)."""

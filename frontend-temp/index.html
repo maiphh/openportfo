@@ -29,6 +29,7 @@
       <button data-tab="holdings">Holdings</button>
       <button data-tab="watchlist">Watchlist</button>
       <button data-tab="portfolio">Portfolio</button>
+      <button data-tab="chat">Chat</button>
       <button data-tab="asset">Asset</button>
       <button data-tab="market">Market</button>
       <button data-tab="fx">FX</button>
@@ -125,6 +126,35 @@
         <div id="portfolioTable"></div>
         <div id="perfChart"></div>
         <pre id="outPortfolio" class="out"></pre>
+      </section>
+
+      <section id="tab-chat" class="panel">
+        <h2>Chatbot</h2>
+        <p class="muted">
+          Uses your Bearer token. Tools run as you (add/remove holdings, analyze coins and portfolio).
+          Free OpenRouter models by default. Try:
+          <code>Add btc, price 50000, amount 10 usd</code>
+          · <code>Analyze bitcoin</code>
+          · <code>Analyze my portfolio</code>
+        </p>
+        <div class="row form">
+          <label>
+            Model
+            <select id="chatModel"><option value="">default</option></select>
+          </label>
+          <button id="btnChatModels" class="secondary" type="button">Refresh models</button>
+          <label class="inline">
+            <input id="chatFreeOnly" type="checkbox" checked />
+            free only
+          </label>
+          <button id="btnChatClear" class="secondary" type="button">Clear</button>
+        </div>
+        <div id="chatLog" class="chat-log" aria-live="polite"></div>
+        <div class="row form chat-compose">
+          <textarea id="chatInput" rows="2" placeholder="Add btc, price 50000, amount 10 usd"></textarea>
+          <button id="btnChatSend" type="button">Send</button>
+        </div>
+        <pre id="outChat" class="out"></pre>
       </section>
 
       <section id="tab-fx" class="panel">

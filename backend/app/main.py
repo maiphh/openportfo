@@ -10,6 +10,7 @@ from app.api.dynamodb_viewer import router as dynamodb_viewer_router
 from app.api.s3_viewer import router as s3_viewer_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
+from app.api.chat import router as chat_router
 from app.api.fx import router as fx_router
 from app.api.health import router as health_router
 from app.api.history import router as history_router
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(snapshots_router)
     app.include_router(fx_router)
     app.include_router(news_router)
+    app.include_router(chat_router)
     app.include_router(admin_router)
     if env in {"local", "test"}:
         app.include_router(s3_viewer_router)

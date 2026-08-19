@@ -20,6 +20,10 @@ function saveAuth() {
   sessionStorage.setItem(TOKEN_KEY, getToken());
   sessionStorage.setItem(API_KEY, getApiBase());
   updateAuthPill();
+  if (typeof chatHistory !== "undefined") {
+    chatHistory.length = 0;
+    if ($("chatLog")) renderChatLog();
+  }
 }
 
 function loadAuth() {
@@ -424,7 +428,10 @@ $("btnSaveAuth").onclick = saveAuth;
 
 document.getElementById("tabs").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-tab]");
-  if (btn) switchTab(btn.dataset.tab);
+  if (btn) {
+    switchTab(btn.dataset.tab);
+    if (btn.dataset.tab === "chat") loadChatModels();
+  }
 });
 
 $("btnHealth").onclick = async () => {
@@ -910,6 +917,159 @@ $("btnDynamoScan").onclick = async () => {
     show($("outDynamo"), { error: e.message, body: e.body });
   }
 };
+
+// ---- Chat ----
+
+const chatHistory = [];
+let chatModelsLoaded = false;
+
+function renderChatLog() {
+  const host = $("chatLog");
+  if (!chatHistory.length) {
+    host.innerHTML = "<p class='muted'>No messages yet.</p>";
+    return;
+  }
+  host.innerHTML = chatHistory
+    .map((msg) => {
+      if (msg.role === "pending") {
+        return `<div class="chat-bubble pending">Thinking…</div>`;
+      }
+      const tools = (msg.toolCalls || [])
+        .map((tc) => {
+          const ok = tc.ok !== false;
+          return `<span class="chat-tool ${ok ? "ok" : "err"}">${escapeHtml(tc.name || "tool")}${
+            ok ? "" : " failed"
+          }</span>`;
+        })
+        .join("");
+      const meta = msg.model
+        ? `<div class="muted" style="margin-top:0.35rem;font-size:0.72rem">${escapeHtml(msg.model)}</div>`
+        : "";
+      return `<div class="chat-bubble ${escapeHtml(msg.role)}">${escapeHtml(
+        msg.content || ""
+      )}${tools ? `<div class="chat-tools">${tools}</div>` : ""}${meta}</div>`;
+    })
+    .join("");
+  host.scrollTop = host.scrollHeight;
+}
+
+async function loadChatModels() {
+  const select = $("chatModel");
+  const previous = select.value;
+  try {
+    const free = $("chatFreeOnly").checked;
+    const data = await api(`/api/chat/models?free=${free ? "true" : "false"}&tools=true`);
+    const models = data.models || [];
+    const opts = [`<option value="">default (${escapeHtml(data.defaultModel || "provider")})</option>`];
+    for (const m of models) {
+      const label = `${m.id}${m.free ? " · free" : ""}${m.tools ? "" : " · no-tools"}`;
+      opts.push(`<option value="${escapeHtml(m.id)}">${escapeHtml(label)}</option>`);
+    }
+    select.innerHTML = opts.join("");
+    if (previous && models.some((m) => m.id === previous)) select.value = previous;
+    chatModelsLoaded = true;
+    const status = data.configured
+      ? `${models.length} models · ${data.provider}`
+      : "LLM not configured (set OPENROUTER_API_KEY)";
+    show($("outChat"), { ...data, status });
+  } catch (e) {
+    show($("outChat"), { error: e.message, body: e.body });
+  }
+}
+
+async function sendChat() {
+  const input = $("chatInput");
+  const text = (input.value || "").trim();
+  if (!text) return;
+  if (!getToken()) {
+    show($("outChat"), { error: "Set a Bearer token first (e.g. fake:alice)" });
+    return;
+  }
+  input.value = "";
+  chatHistory.push({ role: "user", content: text });
+  chatHistory.push({ role: "pending", content: "" });
+  renderChatLog();
+  $("btnChatSend").disabled = true;
+  const historyPayload = chatHistory
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-16)
+    .map((m) => ({ role: m.role, content: m.content }));
+  // last user is also `message`; don't duplicate it in history
+  if (historyPayload.length && historyPayload[historyPayload.length - 1].role === "user") {
+    historyPayload.pop();
+  }
+  const body = {
+    message: text,
+    history: historyPayload,
+    freeOnly: $("chatFreeOnly").checked,
+  };
+  const model = $("chatModel").value.trim();
+  if (model) body.model = model;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 240000);
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${getApiBase()}/api/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const raw = await res.text();
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      data = raw;
+    }
+    chatHistory.pop();
+    if (!res.ok) {
+      chatHistory.push({
+        role: "assistant",
+        content: `Error HTTP ${res.status}: ${typeof data === "string" ? data : JSON.stringify(data)}`,
+      });
+      show($("outChat"), { error: `HTTP ${res.status}`, body: data });
+    } else {
+      chatHistory.push({
+        role: "assistant",
+        content: data.reply || "",
+        toolCalls: data.toolCalls || [],
+        model: data.model,
+      });
+      show($("outChat"), data);
+    }
+    renderChatLog();
+  } catch (e) {
+    chatHistory.pop();
+    chatHistory.push({
+      role: "assistant",
+      content: e.name === "AbortError" ? "Request timed out." : e.message,
+    });
+    renderChatLog();
+    show($("outChat"), { error: e.message, body: e.body });
+  } finally {
+    clearTimeout(timer);
+    $("btnChatSend").disabled = false;
+  }
+}
+
+$("btnChatModels").onclick = () => loadChatModels();
+$("chatFreeOnly").onchange = () => loadChatModels();
+$("btnChatClear").onclick = () => {
+  chatHistory.length = 0;
+  renderChatLog();
+  show($("outChat"), { cleared: true });
+};
+$("btnChatSend").onclick = () => sendChat();
+$("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+renderChatLog();
 
 loadAuth();
 
