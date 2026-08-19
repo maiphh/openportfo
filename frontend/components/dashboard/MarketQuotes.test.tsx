@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MarketQuotes from "@/components/dashboard/MarketQuotes";
+import { writeQuotesCache } from "@/lib/markets-cache";
 
 const fetchMarketQuotes = vi.fn();
 
@@ -82,11 +83,13 @@ const cryptoGroups = [
 
 describe("MarketQuotes", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     fetchMarketQuotes.mockReset();
   });
 
   afterEach(() => {
     cleanup();
+    sessionStorage.clear();
   });
 
   it("shows a skeleton while loading and never seeds mock tickers", async () => {
@@ -220,5 +223,55 @@ describe("MarketQuotes", () => {
       expect(screen.getByText("Bitcoin")).toBeInTheDocument();
     });
     expect(screen.queryByText("Vietcombank")).not.toBeInTheDocument();
+  });
+
+  it("paints a session-cached board without a skeleton and writes cache after live fetch", async () => {
+    fetchMarketQuotes.mockResolvedValue({
+      groups: liveGroups,
+      limit: 80,
+      source: "vnstock",
+    });
+
+    const { unmount } = render(<MarketQuotes market="stock" />);
+    await waitFor(() => {
+      expect(screen.getByText("Vietcombank")).toBeInTheDocument();
+    });
+    expect(sessionStorage.getItem("artryx.markets.quotes.stock")).toBeTruthy();
+    unmount();
+
+    fetchMarketQuotes.mockReturnValue(new Promise(() => {}));
+    render(<MarketQuotes market="stock" />);
+    expect(screen.getByText("Vietcombank")).toBeInTheDocument();
+    expect(screen.queryByTestId("quotes-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByText("cached (updating…)")).toBeInTheDocument();
+  });
+
+  it("keeps the cached board and offers Retry when revalidation fails", async () => {
+    writeQuotesCache("stock", { groups: liveGroups, limit: 80, source: "vnstock" });
+    fetchMarketQuotes.mockRejectedValue(new Error("Quotes HTTP 503"));
+
+    render(<MarketQuotes market="stock" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("cached (refresh failed)")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Vietcombank")).toBeInTheDocument();
+    expect(screen.queryByTestId("quotes-skeleton")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("quotes-error")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByText("Apple")).not.toBeInTheDocument();
+  });
+
+  it("treats an empty live payload as failure and keeps the cached board", async () => {
+    writeQuotesCache("stock", { groups: liveGroups, limit: 80, source: "vnstock" });
+    fetchMarketQuotes.mockResolvedValue({ groups: [], limit: 80, source: "vnstock" });
+
+    render(<MarketQuotes market="stock" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("cached (refresh failed)")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Vietcombank")).toBeInTheDocument();
+    expect(screen.queryByTestId("quotes-error")).not.toBeInTheDocument();
   });
 });

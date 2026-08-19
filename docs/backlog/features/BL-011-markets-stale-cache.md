@@ -177,5 +177,9 @@ Value: `{ savedAt: ISO, payload: HeatmapResponse | QuotesResponse }`.
 ## 11. Implementation notes (Eng fills after `ready`)
 
 - Approach:
+  - FE: `lib/markets-cache.ts` persists last heatmap/quotes JSON in `sessionStorage` (`artryx.markets.{widget}.{market}`). `StockHeatmap` / `MarketQuotes` hydrate after mount via `useLayoutEffect` (no skeleton flash, no hydration mismatch), revalidate in the background, write on success, and keep the cached board + Retry when live/empty fetch fails.
+  - BE: `HttpVnstockClient` shares a 120s `_quote_board` snapshot (industry map, exchange listing, batch `Market.quote`) so heatmap and quotes do not re-batch vnstock in the same TTL window. `/api/markets/*` sets `Cache-Control: public, max-age=60, stale-while-revalidate=120` (FE still uses `cache: "no-store"` + session SWR).
 - PR / branch: `feat/BL-011-markets-stale-cache`
 - Verification:
+  - `cd frontend; npx vitest run lib/markets-cache.test.ts components/dashboard/StockHeatmap.test.tsx components/dashboard/MarketQuotes.test.tsx`
+  - `cd backend; python -m pytest tests/unit/adapters/test_vnstock_http.py tests/unit/api/test_markets.py tests/unit/api/test_markets_heatmap.py tests/unit/api/test_markets_quotes.py tests/unit/api/test_markets_crypto.py -q`

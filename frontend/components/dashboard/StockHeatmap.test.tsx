@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StockHeatmap from "@/components/dashboard/StockHeatmap";
+import { writeHeatmapCache } from "@/lib/markets-cache";
 
 const fetchMarketHeatmap = vi.fn();
 
@@ -42,6 +43,7 @@ const cryptoSectors = [
 
 describe("StockHeatmap", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     fetchMarketHeatmap.mockReset();
     class ResizeObserverMock {
       observe() {}
@@ -53,6 +55,7 @@ describe("StockHeatmap", () => {
 
   afterEach(() => {
     cleanup();
+    sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -187,5 +190,55 @@ describe("StockHeatmap", () => {
       expect(screen.getByText("BTC")).toBeInTheDocument();
     });
     expect(screen.queryByText("VCB")).not.toBeInTheDocument();
+  });
+
+  it("paints a session-cached board without a skeleton and writes cache after live fetch", async () => {
+    fetchMarketHeatmap.mockResolvedValue({
+      sectors: liveSectors,
+      limit: 100,
+      source: "vnstock",
+    });
+
+    const { unmount } = render(<StockHeatmap market="stock" />);
+    await waitFor(() => {
+      expect(screen.getByText("VCB")).toBeInTheDocument();
+    });
+    expect(sessionStorage.getItem("artryx.markets.heatmap.stock")).toBeTruthy();
+    unmount();
+
+    fetchMarketHeatmap.mockReturnValue(new Promise(() => {}));
+    render(<StockHeatmap market="stock" />);
+    expect(screen.getByText("VCB")).toBeInTheDocument();
+    expect(screen.queryByTestId("heatmap-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByText("cached (updating…)")).toBeInTheDocument();
+  });
+
+  it("keeps the cached board and offers Retry when revalidation fails", async () => {
+    writeHeatmapCache("stock", { sectors: liveSectors, limit: 100, source: "vnstock" });
+    fetchMarketHeatmap.mockRejectedValue(new Error("Heatmap HTTP 502"));
+
+    render(<StockHeatmap market="stock" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("cached (refresh failed)")).toBeInTheDocument();
+    });
+    expect(screen.getByText("VCB")).toBeInTheDocument();
+    expect(screen.queryByTestId("heatmap-skeleton")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("heatmap-error")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByText("NVDA")).not.toBeInTheDocument();
+  });
+
+  it("treats an empty live payload as failure and keeps the cached board", async () => {
+    writeHeatmapCache("stock", { sectors: liveSectors, limit: 100, source: "vnstock" });
+    fetchMarketHeatmap.mockResolvedValue({ sectors: [], limit: 100, source: "vnstock" });
+
+    render(<StockHeatmap market="stock" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("cached (refresh failed)")).toBeInTheDocument();
+    });
+    expect(screen.getByText("VCB")).toBeInTheDocument();
+    expect(screen.queryByTestId("heatmap-error")).not.toBeInTheDocument();
   });
 });

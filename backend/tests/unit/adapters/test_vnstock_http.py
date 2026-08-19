@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import sys
 import types
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
 from app.adapters.vnstock.catalog import fixture_heatmap_rows, stock_prices
 from app.adapters.vnstock.client import FixtureVnstockClient
+from app.adapters.vnstock import http_client as vnstock_http
 from app.adapters.vnstock.http_client import HttpVnstockClient, _industry_label
 from app.ports.market import AssetSearchResult
 
@@ -185,3 +187,126 @@ def test_live_history_scaled_from_thousands_of_vnd(monkeypatch) -> None:
     points = client.get_history("VNM", "7d")
     assert len(points) == 1
     assert points[0][1] == Decimal("61600")
+
+
+_QUOTE_BOARD_ROWS = {
+    "VNM": {
+        "value": 61600,
+        "change": 600,
+        "change_pct": 0.98,
+        "open": 61100,
+        "high": 62000,
+        "low": 60800,
+        "prev": 61000,
+        "size": 1e11,
+    },
+    "VCB": {
+        "value": 91000,
+        "change": 500,
+        "change_pct": 0.55,
+        "open": 90500,
+        "high": 91500,
+        "low": 90200,
+        "prev": 90500,
+        "size": 2e11,
+    },
+}
+
+
+def _wire_shared_quote_board(client: HttpVnstockClient, monkeypatch, calls: dict[str, int]) -> None:
+    client._live = True
+    monkeypatch.setattr(client, "_insights_heatmap", lambda *_a, **_k: [])
+    monkeypatch.setattr(client, "_industry_map", lambda: {"VNM": "Thực phẩm", "VCB": "Ngân hàng"})
+    monkeypatch.setattr(client, "_exchange_symbols", lambda *_a, **_k: {"VNM", "VCB"})
+    monkeypatch.setattr(client, "_symbol_name_map", lambda: {"VNM": "Vinamilk", "VCB": "Vietcombank"})
+
+    def _batch(symbols):
+        calls["batch"] += 1
+        return {sym: dict(_QUOTE_BOARD_ROWS[sym]) for sym in symbols if sym in _QUOTE_BOARD_ROWS}
+
+    monkeypatch.setattr(client, "_batch_quote_rows", _batch)
+
+
+def test_heatmap_then_quotes_shares_quote_board_batch(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    calls = {"batch": 0}
+    _wire_shared_quote_board(client, monkeypatch, calls)
+
+    sectors = client.get_heatmap(exchange="HOSE", limit=10)
+    groups = client.get_quotes(exchange="HOSE", limit=8)
+
+    assert calls["batch"] == 1
+    assert sum(len(s.stocks) for s in sectors) == 2
+    assert sum(len(g.rows) for g in groups) == 2
+
+
+def test_quotes_then_heatmap_shares_quote_board_batch(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    calls = {"batch": 0}
+    _wire_shared_quote_board(client, monkeypatch, calls)
+
+    client.get_quotes(exchange="HOSE", limit=8)
+    client.get_heatmap(exchange="HOSE", limit=10)
+
+    assert calls["batch"] == 1
+
+
+def test_quote_board_cache_expires_after_ttl(monkeypatch) -> None:
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    calls = {"batch": 0}
+    _wire_shared_quote_board(client, monkeypatch, calls)
+    clock = {"now": datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)}
+    monkeypatch.setattr(vnstock_http, "_utc_now", lambda: clock["now"])
+
+    client.get_heatmap(exchange="HOSE", limit=10)
+    client.get_quotes(exchange="HOSE", limit=8)
+    assert calls["batch"] == 1
+
+    clock["now"] = clock["now"] + timedelta(seconds=121)
+    client.get_quotes(exchange="HOSE", limit=8)
+    assert calls["batch"] == 2
+
+
+def test_industry_map_cached_within_ttl(monkeypatch) -> None:
+    calls: list[int] = []
+
+    class FakeListing:
+        def symbols_by_industries(self):
+            calls.append(1)
+            return [{"symbol": "VNM", "icb_name3": "Food"}]
+
+    mod = sys.modules.get("vnstock")
+    if mod is None:
+        mod = types.ModuleType("vnstock")
+        monkeypatch.setitem(sys.modules, "vnstock", mod)
+    monkeypatch.setattr(mod, "Listing", FakeListing, raising=False)
+
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    first = client._industry_map()
+    second = client._industry_map()
+    assert first == {"VNM": "Food"}
+    assert second is first
+    assert len(calls) == 1
+
+
+def test_industry_map_cache_expires_after_ttl(monkeypatch) -> None:
+    calls: list[int] = []
+
+    class FakeListing:
+        def symbols_by_industries(self):
+            calls.append(1)
+            return [{"symbol": "VNM", "icb_name3": "Food"}]
+
+    mod = sys.modules.get("vnstock")
+    if mod is None:
+        mod = types.ModuleType("vnstock")
+        monkeypatch.setitem(sys.modules, "vnstock", mod)
+    monkeypatch.setattr(mod, "Listing", FakeListing, raising=False)
+
+    clock = {"now": datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)}
+    monkeypatch.setattr(vnstock_http, "_utc_now", lambda: clock["now"])
+    client = HttpVnstockClient(use_fixture_fallback=False)
+    client._industry_map()
+    clock["now"] = clock["now"] + timedelta(seconds=121)
+    client._industry_map()
+    assert len(calls) == 2

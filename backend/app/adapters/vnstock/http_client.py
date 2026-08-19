@@ -6,6 +6,7 @@ MARKET_CLIENT_MODE=http. Unit tests keep FixtureVnstockClient.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional, Sequence
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 _LISTING_TTL_SECONDS = 3600
 _HEATMAP_TTL_SECONDS = 120
 _HEATMAP_QUOTE_CHUNK = 40
+# Default heatmap (100) and quotes (80) both need ≤200 batch quotes; first widget warms both.
+_SHARED_QUOTE_FLOOR = 200
 # vnstock Quote.history close is in thousands of VND (61.6 → 61_600).
 _VNSTOCK_PRICE_SCALE = Decimal("1000")
 
@@ -126,6 +129,19 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+@dataclass
+class _QuoteBoardSnapshot:
+    """One TTL window of industry + listing + Market.quote work."""
+
+    exchange: str
+    quote_cap: int
+    complete: bool
+    industry_map: dict[str, str]
+    name_map: dict[str, str]
+    quotes: dict[str, dict[str, float]]
+    cached_at: datetime
+
+
 def _group_heatmap(
     stocks: list[tuple[str, HeatmapStock]],
     *,
@@ -167,6 +183,11 @@ class HttpVnstockClient:
         self._heatmap_cached_at: Optional[datetime] = None
         self._quotes_cache: Optional[tuple[str, int, list[QuoteGroup]]] = None
         self._quotes_cached_at: Optional[datetime] = None
+        self._industry_map_cache: Optional[dict[str, str]] = None
+        self._industry_map_cached_at: Optional[datetime] = None
+        self._exchange_symbols_cache: Optional[tuple[str, set[str]]] = None
+        self._exchange_symbols_cached_at: Optional[datetime] = None
+        self._quote_board_cache: Optional[_QuoteBoardSnapshot] = None
         self._live = False
         try:
             import vnstock  # type: ignore  # noqa: F401
@@ -556,12 +577,25 @@ class HttpVnstockClient:
             )
         return _group_heatmap(paired, limit=limit)
 
-    def _quote_board_heatmap(self, exchange: str, limit: int) -> list[HeatmapSector]:
-        """Build heatmap from industry listing + Market.quote board (free vnstock)."""
+    def _quote_board(self, exchange: str, limit: int) -> Optional[_QuoteBoardSnapshot]:
+        """Shared industry + listing + batch-quote snapshot for heatmap and quotes."""
+        board = (exchange or "HOSE").strip().upper() or "HOSE"
+        cap = max(1, min(int(limit), 300))
+        want = max(cap * 2, cap + 40, _SHARED_QUOTE_FLOOR)
+        now = _utc_now()
+        cached = self._quote_board_cache
+        if (
+            cached is not None
+            and cached.exchange == board
+            and (now - cached.cached_at).total_seconds() < _HEATMAP_TTL_SECONDS
+            and (cached.quote_cap >= want or cached.complete)
+        ):
+            return cached
+
         industry_map = self._industry_map()
         if not industry_map:
-            return []
-        allowed = self._exchange_symbols(exchange)
+            return None
+        allowed = self._exchange_symbols(board)
         name_map = self._symbol_name_map()
         candidates = [
             sym
@@ -571,8 +605,7 @@ class HttpVnstockClient:
         if not candidates:
             candidates = list(industry_map.keys())
         # Quote more than ``limit`` so low-activity names can be dropped later.
-        quote_cap = min(len(candidates), max(limit * 2, limit + 40))
-        # Prefer known liquid names first (catalog order), then the rest.
+        quote_cap = min(len(candidates), want)
         preferred = [
             item.symbol
             for item in stock_catalog()
@@ -581,19 +614,35 @@ class HttpVnstockClient:
         preferred_set = set(preferred)
         rest = [s for s in candidates if s not in preferred_set]
         symbols = (preferred + rest)[:quote_cap]
+        quotes = self._batch_quote_rows(symbols)
+        snapshot = _QuoteBoardSnapshot(
+            exchange=board,
+            quote_cap=len(symbols),
+            complete=len(symbols) >= len(candidates),
+            industry_map=industry_map,
+            name_map=name_map,
+            quotes=quotes,
+            cached_at=now,
+        )
+        self._quote_board_cache = snapshot
+        return snapshot
 
-        quotes = self._batch_quotes(symbols)
+    def _quote_board_heatmap(self, exchange: str, limit: int) -> list[HeatmapSector]:
+        """Build heatmap from the shared quote-board snapshot (free vnstock)."""
+        snap = self._quote_board(exchange, limit)
+        if snap is None:
+            return []
         paired: list[tuple[str, HeatmapStock]] = []
-        for symbol, q in quotes.items():
+        for symbol, q in snap.quotes.items():
             size = q["size"]
             if size <= 0:
                 continue
             paired.append(
                 (
-                    industry_map.get(symbol, "Khác"),
+                    snap.industry_map.get(symbol, "Khác"),
                     HeatmapStock(
                         symbol=symbol,
-                        name=name_map.get(symbol) or symbol,
+                        name=snap.name_map.get(symbol) or symbol,
                         change_pct=round(q["change_pct"], 4),
                         market_cap=size,
                     ),
@@ -602,40 +651,20 @@ class HttpVnstockClient:
         return _group_heatmap(paired, limit=limit)
 
     def _live_quotes(self, exchange: str, limit: int) -> list[QuoteGroup]:
-        industry_map = self._industry_map()
-        if not industry_map:
+        snap = self._quote_board(exchange, limit)
+        if snap is None:
             return []
-        allowed = self._exchange_symbols(exchange)
-        name_map = self._symbol_name_map()
-        candidates = [
-            sym
-            for sym in industry_map
-            if not allowed or sym in allowed
-        ]
-        if not candidates:
-            candidates = list(industry_map.keys())
-        quote_cap = min(len(candidates), max(limit * 2, limit + 40))
-        preferred = [
-            item.symbol
-            for item in stock_catalog()
-            if item.symbol in industry_map and (not allowed or item.symbol in allowed)
-        ]
-        preferred_set = set(preferred)
-        rest = [s for s in candidates if s not in preferred_set]
-        symbols = (preferred + rest)[:quote_cap]
-
-        quotes = self._batch_quote_rows(symbols)
         paired: list[tuple[str, QuoteRow]] = []
-        for symbol, q in quotes.items():
+        for symbol, q in snap.quotes.items():
             value = q["value"]
             if value <= 0:
                 continue
             paired.append(
                 (
-                    industry_map.get(symbol, "Khác"),
+                    snap.industry_map.get(symbol, "Khác"),
                     QuoteRow(
                         symbol=symbol,
-                        name=name_map.get(symbol) or symbol,
+                        name=snap.name_map.get(symbol) or symbol,
                         value=value,
                         change=q["change"],
                         change_pct=round(q["change_pct"], 4),
@@ -649,6 +678,13 @@ class HttpVnstockClient:
         return group_quote_rows(paired, limit=limit)
 
     def _industry_map(self) -> dict[str, str]:
+        now = _utc_now()
+        if (
+            self._industry_map_cache is not None
+            and self._industry_map_cached_at is not None
+            and (now - self._industry_map_cached_at).total_seconds() < _HEATMAP_TTL_SECONDS
+        ):
+            return self._industry_map_cache
         try:
             from vnstock import Listing  # type: ignore
 
@@ -666,6 +702,9 @@ class HttpVnstockClient:
             industry = _industry_label(rec)
             if symbol and industry:
                 out[symbol] = industry
+        if out:
+            self._industry_map_cache = out
+            self._industry_map_cached_at = now
         return out
 
     def _symbol_name_map(self) -> dict[str, str]:
@@ -689,6 +728,14 @@ class HttpVnstockClient:
 
     def _exchange_symbols(self, exchange: str) -> set[str]:
         board = (exchange or "HOSE").strip().upper()
+        now = _utc_now()
+        if (
+            self._exchange_symbols_cache is not None
+            and self._exchange_symbols_cached_at is not None
+            and self._exchange_symbols_cache[0] == board
+            and (now - self._exchange_symbols_cached_at).total_seconds() < _HEATMAP_TTL_SECONDS
+        ):
+            return set(self._exchange_symbols_cache[1])
         try:
             from vnstock import Listing  # type: ignore
 
@@ -708,6 +755,8 @@ class HttpVnstockClient:
             symbol = _pick(rec, _SYM_KEYS).upper()
             if symbol:
                 out.add(symbol)
+        self._exchange_symbols_cache = (board, out)
+        self._exchange_symbols_cached_at = now
         return out
 
     def _batch_quotes(self, symbols: Sequence[str]) -> dict[str, dict[str, float]]:

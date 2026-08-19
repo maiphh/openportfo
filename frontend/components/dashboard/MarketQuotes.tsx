@@ -1,18 +1,19 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { Button } from "@/components/ui/button";
 import { fetchMarketQuotes, type MarketKind } from "@/lib/api";
 import { convertAmount, DEFAULT_FX_BASE, nativeCurrencyForMarket } from "@/lib/currency";
+import { readQuotesCache, writeQuotesCache } from "@/lib/markets-cache";
 import type { QuoteGroup, QuoteRow } from "@/types/markets";
 import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
 
 const COLUMNS = ["Name", "Value", "Change", "Chg%", "Open", "High", "Low", "Prev"] as const;
 
-type LoadState = "loading" | "live" | "error";
+type LoadState = "loading" | "updating" | "live" | "stale" | "error";
 
 function toneClass(value: number) {
   if (value > 0) return "text-emerald-400";
@@ -94,11 +95,21 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  useLayoutEffect(() => {
+    const cached = readQuotesCache(market);
+    if (cached) {
+      setGroups(cached.payload.groups);
+      setSource("updating");
+      setError(null);
+    } else {
+      setGroups([]);
+      setSource("loading");
+      setError(null);
+    }
+  }, [market, reloadKey]);
+
   useEffect(() => {
     const controller = new AbortController();
-    setSource("loading");
-    setError(null);
-    setGroups([]);
     fetchMarketQuotes({
       market,
       limit: 80,
@@ -111,17 +122,28 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
         if (!hasRows) {
           throw new Error("Empty quotes");
         }
+        writeQuotesCache(market, data);
         setGroups(data.groups);
         setSource("live");
+        setError(null);
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
+        const cached = readQuotesCache(market);
+        if (cached) {
+          setGroups(cached.payload.groups);
+          setSource("stale");
+          setError(err instanceof Error ? err.message : "Quotes unavailable");
+          return;
+        }
         setGroups([]);
         setSource("error");
         setError(err instanceof Error ? err.message : "Quotes unavailable");
       });
     return () => controller.abort();
   }, [market, reloadKey]);
+
+  const showBoard = source === "live" || source === "updating" || source === "stale";
 
   const displayGroups = useMemo(() => {
     return groups.map((group) => ({
@@ -141,10 +163,17 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
           Market Quotes
           <span className="ml-2 text-sm font-medium text-gray-500">{currency}</span>
         </h3>
-        <div className="text-[11px] text-gray-500">
+        <div className="flex items-center gap-2 text-[11px] text-gray-500">
           {source === "loading" ? (market === "crypto" ? "Loading crypto quotes…" : "Loading VN quotes…") : null}
+          {source === "updating" ? "cached (updating…)" : null}
+          {source === "stale" ? "cached (refresh failed)" : null}
           {source === "live" ? (market === "crypto" ? "CoinGecko" : "HOSE · vnstock") : null}
           {showNativeFallback ? ` · showing ${native} (rate unavailable)` : null}
+          {source === "stale" ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+              Retry
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
@@ -174,7 +203,7 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
                 </tr>
               </thead>
               {source === "loading" ? <QuotesSkeleton /> : null}
-              {source === "live" ? (
+              {showBoard ? (
                 <tbody>
                   {displayGroups.map((group) => (
                     <Fragment key={group.name}>
