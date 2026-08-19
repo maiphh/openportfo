@@ -5,14 +5,14 @@
 | **ID** | `BL-005` |
 | **Title** | Watchlist page + add/remove (existing APIs) |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | BA |
-| **Owner (Eng)** | — |
+| **Owner (Eng)** | Eng |
 | **Requested by** | Stakeholder |
 | **Related PRD / sprint** | Deferred from BL-001; sprint-03 watchlist APIs |
 | **Created** | 2026-08-19 |
 | **Ready date** | 2026-08-19 |
-| **Done date** | |
+| **Done date** | 2026-08-19 |
 
 ---
 
@@ -74,14 +74,14 @@ As an **authenticated investor**, I want **a watchlist of stocks and crypto I ca
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** Authenticated user can open `/watchlist` and see their items.
-- [ ] **AC2** Unauthenticated user cannot read/write watchlist data.
-- [ ] **AC3** Add only search-resolved stock or crypto.
-- [ ] **AC4** Duplicate add shows conflict error; list unchanged.
-- [ ] **AC5** Remove deletes the row after 204.
-- [ ] **AC6** Symbols use `AssetLink`.
-- [ ] **AC7** Nav includes Watchlist.
-- [ ] **AC8** Unit tests for API client + add/remove happy/409 paths.
+- [x] **AC1** Authenticated user can open `/watchlist` and see their items.
+- [x] **AC2** Unauthenticated user cannot read/write watchlist data.
+- [x] **AC3** Add only search-resolved stock or crypto.
+- [x] **AC4** Duplicate add shows conflict error; list unchanged.
+- [x] **AC5** Remove deletes the row after 204.
+- [x] **AC6** Symbols use `AssetLink`.
+- [x] **AC7** Nav includes Watchlist.
+- [x] **AC8** Unit tests for API client + add/remove happy/409 paths.
 
 ---
 
@@ -133,4 +133,10 @@ As an **authenticated investor**, I want **a watchlist of stocks and crypto I ca
 
 ## 11. Implementation notes
 
-- Branch: `feat/BL-005-watchlist-ui`
+- Approach:
+  - FE-only on existing watchlist APIs. Thin `app/watchlist/page.tsx` + `"use client"` `WatchlistView` (same Bearer paste gate as `/portfolio`; `readAuthToken` / `bearerHeader`; no fetch without a token).
+  - Client: `lib/watchlist.ts` (`GET/POST /api/watchlist`, `DELETE /api/watchlist/{assetType}/{symbol}`). Add modal reuses holdings `searchAssets` debounce + catalog pick (no free-text). Duplicate POST 409 stays inline and does not refetch. Remove drops the row after 204.
+  - Quotes: cache-first native `price`/`currency`/`stale` from GET; session FX via `useDisplayCurrency().convertToDisplay` (same idea as MarketQuotes). Missing quote → `—` + Missing badge; stale → Stale badge.
+  - Nav: `Watchlist` after Portfolio. Symbols use `AssetLink` (`assetId` or symbol). Empty CTA / skeleton / error+retry. Optional detail Watch button skipped (not cheap: extra membership fetch).
+- PR / branch: `feat/BL-005-watchlist-ui`
+- Verification: `cd frontend; npx vitest run lib/watchlist.test.ts components/watchlist/WatchlistTable.test.tsx components/watchlist/WatchlistView.test.tsx components/NavItems.test.tsx` — 4 files, 28 passed.
