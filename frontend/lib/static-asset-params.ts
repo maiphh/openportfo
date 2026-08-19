@@ -50,7 +50,8 @@ function addParam(out: Set<string>, raw: unknown) {
   out.add(id);
 }
 
-const BUILD_FETCH_TIMEOUT_MS = 2500;
+// Production static export needs a full HOSE/crypto set; allow slower adapters.
+const BUILD_FETCH_TIMEOUT_MS = 15_000;
 
 async function fetchJson(url: string): Promise<unknown | null> {
   const controller = new AbortController();

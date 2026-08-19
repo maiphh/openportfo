@@ -19,7 +19,7 @@ describe("buildStaticAssetParams", () => {
       expect(ids).toContain("bitcoin");
       expect(ids.length).toBeGreaterThanOrEqual(CRYPTO_STATIC_SEED.length);
     },
-    15_000,
+    35_000,
   );
 
   it(
@@ -31,7 +31,7 @@ describe("buildStaticAssetParams", () => {
       expect(ids).toContain("VCB");
       expect(ids.length).toBeGreaterThanOrEqual(STOCK_STATIC_SEED.length);
     },
-    15_000,
+    35_000,
   );
 
   it("drops non-ASCII and unsafe symbols from market payloads", async () => {

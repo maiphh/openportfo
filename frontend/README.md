@@ -18,10 +18,11 @@ Open [http://localhost:3000](http://localhost:3000).
 - Markets `/markets` — stub
 - Search — mock symbol palette from the header
 
-Static export (`output: "export"`) is enabled for later S3 + CloudFront.
+Static export (`output: "export"`) is enabled on **`next build` only** (for S3 + CloudFront).
+`next dev` omits it so `/stock/[id]` and `/crypto/[id]` work for any ticker without pre-listing.
 
 ```powershell
 npm run build
 ```
 
-Output is written to `out/`.
+Output is written to `out/`. Asset detail HTML is generated from `generateStaticParams()` (markets API + seed fallbacks).
