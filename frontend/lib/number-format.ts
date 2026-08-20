@@ -37,6 +37,24 @@ export function formatPrice(value: number, digits?: number): string {
   });
 }
 
+/** Currency-aware display formatting; API values remain unrounded strings. */
+export function formatMoney(
+  value: number | string,
+  currency: string,
+  options?: { crypto?: boolean },
+): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "—";
+  const code = String(currency || "").trim().toUpperCase();
+  if (code === "VND") {
+    return n.toLocaleString(LOCALE, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  if (options?.crypto && Math.abs(n) > 0 && Math.abs(n) < 0.01) {
+    return n.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 8 });
+  }
+  return n.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function formatSigned(value: number, digits?: number): string {
   const places = resolveDigits(digits);
   if (!Number.isFinite(value) || value === 0) {

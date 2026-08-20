@@ -459,6 +459,7 @@ def get_fx_service(
         _fx_service = FxService(
             get_exchange_rate_repo(),
             client=get_exchange_rate_client(settings),
+            stale_after_seconds=settings.fx_stale_after_seconds,
         )
     return _fx_service
 

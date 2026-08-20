@@ -63,10 +63,11 @@ def _client(
     return TestClient(create_app()), repo, fx_client, profiles
 
 
-def test_get_rates_requires_auth() -> None:
+def test_get_rates_is_public_for_frontend_display_conversion() -> None:
     client, _, _, _ = _client()
     r = client.get("/api/fx/rates")
-    assert r.status_code == 401
+    assert r.status_code == 200
+    assert r.json()["status"] == "missing"
 
 
 def test_get_rates_does_not_call_provider() -> None:
@@ -81,10 +82,12 @@ def test_get_rates_does_not_call_provider() -> None:
             last_refresh_status="success",
         )
     )
-    r = client.get("/api/fx/rates", headers=_auth("u1"))
+    r = client.get("/api/fx/rates")
     assert r.status_code == 200
     body = r.json()
     assert body["rates"]["USD_VND"] == "25000"
+    assert "lastRefreshError" not in body
+    assert "updatedBy" not in body
     assert fx_client.fetch_calls == 0
 
 

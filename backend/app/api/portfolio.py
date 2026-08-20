@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.deps import (
     get_current_user,
+    get_fx_service,
     get_portfolio_service,
     get_settings_repo,
     get_snapshot_service,
@@ -20,6 +21,12 @@ from app.ports.market import MarketDataError
 from app.ports.users import UserProfile
 from app.services.portfolio_service import PortfolioService, PortfolioView, ValidationError
 from app.services.snapshot_service import SnapshotService, SnapshotValidationError
+from app.services.currency_service import (
+    CurrencyValidationError,
+    normalize_stored_currency,
+    resolve_currency,
+)
+from app.services.fx_service import FxService
 
 router = APIRouter(tags=["portfolio"])
 
@@ -120,30 +127,37 @@ def portfolio_view_to_response(view: PortfolioView) -> dict[str, Any]:
 
 @router.get("/api/portfolio")
 def get_portfolio(
+    currency: Optional[str] = Query(default=None),
     displayCurrency: Optional[str] = Query(default=None),  # noqa: N803 — API camelCase
     assetType: Optional[str] = Query(default=None),  # noqa: N803
     user: UserProfile = Depends(get_current_user),
     svc: PortfolioService = Depends(get_portfolio_service),
+    fx: FxService = Depends(get_fx_service),
 ) -> dict[str, Any]:
     """Aggregate holdings + cache-first prices; optional stored FX conversion."""
-    preferred = (
-        user.preferred_currency
-        or get_settings_repo().get().default_display_currency
-        or "USD"
-    )
+    settings_default = get_settings_repo().get().default_display_currency
+    preferred = normalize_stored_currency(user.preferred_currency) or normalize_stored_currency(settings_default) or "USD"
     try:
+        requested = (
+            resolve_currency(currency, legacy=displayCurrency, preferred=preferred)
+            if currency is not None or displayCurrency is not None
+            else None
+        )
         view = svc.get_portfolio(
             user.user_id,
-            display_currency=displayCurrency,
+            display_currency=requested,
             preferred_currency=preferred,
             asset_type=assetType,
             force_refresh=False,
+            fx_context=fx.get_context(),
         )
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exc.detail,
         ) from exc
+    except CurrencyValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail) from exc
     except MarketDataError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -154,33 +168,40 @@ def get_portfolio(
 
 @router.post("/api/portfolio/refresh")
 def refresh_portfolio(
+    currency: Optional[str] = Query(default=None),
     displayCurrency: Optional[str] = Query(default=None),  # noqa: N803
     assetType: Optional[str] = Query(default=None),  # noqa: N803
     user: UserProfile = Depends(get_current_user),
     svc: PortfolioService = Depends(get_portfolio_service),
+    fx: FxService = Depends(get_fx_service),
 ) -> dict[str, Any]:
     """Force market fetch for user's holding symbols; return same portfolio shape.
 
     Does **not** call any FX HTTP provider — only MarketService with force=True.
     """
-    preferred = (
-        user.preferred_currency
-        or get_settings_repo().get().default_display_currency
-        or "USD"
-    )
+    settings_default = get_settings_repo().get().default_display_currency
+    preferred = normalize_stored_currency(user.preferred_currency) or normalize_stored_currency(settings_default) or "USD"
     try:
+        requested = (
+            resolve_currency(currency, legacy=displayCurrency, preferred=preferred)
+            if currency is not None or displayCurrency is not None
+            else None
+        )
         view = svc.get_portfolio(
             user.user_id,
-            display_currency=displayCurrency,
+            display_currency=requested,
             preferred_currency=preferred,
             asset_type=assetType,
             force_refresh=True,
+            fx_context=fx.get_context(),
         )
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=exc.detail,
         ) from exc
+    except CurrencyValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail) from exc
     except MarketDataError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -192,12 +213,13 @@ def refresh_portfolio(
 @router.get("/api/portfolio/performance")
 def get_portfolio_performance(
     range: str = Query(default="1w"),  # noqa: A002 — API name
+    currency: Optional[str] = Query(default=None),
     user: UserProfile = Depends(get_current_user),
     snaps: SnapshotService = Depends(get_snapshot_service),
 ) -> dict[str, Any]:
     """Equity curve from stored snapshots (1d, 1w, mtd, ytd, max)."""
     try:
-        return snaps.performance(user.user_id, range_=range)
+        return snaps.performance(user.user_id, range_=range, currency=currency)
     except SnapshotValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

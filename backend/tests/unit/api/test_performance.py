@@ -119,6 +119,38 @@ def test_performance_single_point_has_no_change() -> None:
     assert body["changePercent"] is None
 
 
+def test_requested_currency_uses_native_totals_before_legacy_display() -> None:
+    repo = InMemorySnapshotRepo()
+    repo.put(
+        SnapshotRecord(
+            user_id="alice",
+            date="2026-08-15",
+            payload={
+                "totalsByCurrency": {"USD": {"marketValue": "100"}},
+                # Deliberately inconsistent legacy derived data. Native totals
+                # must remain the source of truth for historical conversion.
+                "totalsDisplay": {"currency": "VND", "marketValue": "1"},
+                "fx": {
+                    "base": "USD",
+                    "status": "fresh",
+                    "rates": {"USD_VND": "25000"},
+                },
+            },
+            created_at=datetime(2026, 8, 15, tzinfo=timezone.utc),
+        )
+    )
+
+    body = SnapshotService(repo).performance(
+        "alice",
+        range_="1w",
+        today=date(2026, 8, 16),
+        currency="VND",
+    )
+
+    assert body["endValue"] == "2500000"
+    assert body["currency"] == "VND"
+
+
 def test_performance_bad_range_400() -> None:
     client = _client(InMemorySnapshotRepo())
     r = client.get(

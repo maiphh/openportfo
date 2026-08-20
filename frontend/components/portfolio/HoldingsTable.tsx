@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import AssetLink from "@/components/AssetLink";
 import { Button } from "@/components/ui/button";
 import type { ConvertToDisplay, PortfolioLine } from "@/lib/portfolio";
-import { parseMoney, unitPriceInDisplay } from "@/lib/portfolio";
-import { cn, formatPct, formatPrice, formatQty, formatSigned } from "@/lib/utils";
+import { parseMoney } from "@/lib/portfolio";
+import { cn, formatMoney, formatPct, formatQty } from "@/lib/utils";
 
 function Badge({ children, tone }: { children: ReactNode; tone: "warn" | "muted" }) {
   return (
@@ -24,7 +24,6 @@ function Badge({ children, tone }: { children: ReactNode; tone: "warn" | "muted"
 export default function HoldingsTable({
   lines,
   displayCurrency,
-  convertToDisplay,
   onEdit,
   onDelete,
   busyKey,
@@ -67,20 +66,8 @@ export default function HoldingsTable({
             const pnl = parseMoney(line.pnlDisplay) ?? parseMoney(line.pnl);
             const pnlPct = parseMoney(line.pnlPercent);
             const alloc = parseMoney(line.allocation);
-            const avgShown = unitPriceInDisplay(
-              line.avgCost,
-              line.avgCostDisplay,
-              line.currency,
-              displayCurrency,
-              convertToDisplay,
-            );
-            const priceShown = unitPriceInDisplay(
-              line.price,
-              line.priceDisplay,
-              line.currency,
-              displayCurrency,
-              convertToDisplay,
-            );
+            const avgShown = { amount: parseMoney(line.avgCostDisplay) ?? parseMoney(line.avgCost), currency: line.avgCostDisplay != null ? displayCurrency : line.currency };
+            const priceShown = { amount: parseMoney(line.priceDisplay) ?? parseMoney(line.price), currency: line.priceDisplay != null ? displayCurrency : line.currency };
             const showDisplay = line.marketValueDisplay != null;
             const moneyCur = showDisplay ? displayCurrency : line.currency;
 
@@ -100,15 +87,15 @@ export default function HoldingsTable({
                 <td className="px-3 py-3 tabular-nums text-gray-300">
                   {avgShown.amount == null
                     ? "—"
-                    : `${formatPrice(avgShown.amount)} ${avgShown.currency}`}
+                    : `${formatMoney(avgShown.amount, avgShown.currency, { crypto: line.assetType === "crypto" })} ${avgShown.currency}`}
                 </td>
                 <td className="px-3 py-3 tabular-nums text-gray-300">
                   {priceShown.amount == null
                     ? "—"
-                    : `${formatPrice(priceShown.amount)} ${priceShown.currency}`}
+                    : `${formatMoney(priceShown.amount, priceShown.currency, { crypto: line.assetType === "crypto" })} ${priceShown.currency}`}
                 </td>
                 <td className="px-3 py-3 tabular-nums text-gray-200">
-                  {mv == null ? "—" : `${formatPrice(mv)} ${moneyCur}`}
+                  {mv == null ? "—" : `${formatMoney(mv, moneyCur, { crypto: line.assetType === "crypto" })} ${moneyCur}`}
                 </td>
                 <td
                   className={cn(
@@ -119,7 +106,7 @@ export default function HoldingsTable({
                     pnl === 0 && "text-gray-300",
                   )}
                 >
-                  {pnl == null ? "—" : `${formatSigned(pnl)} ${moneyCur}`}
+                  {pnl == null ? "—" : `${pnl > 0 ? "+" : pnl < 0 ? "-" : ""}${formatMoney(Math.abs(pnl), moneyCur, { crypto: line.assetType === "crypto" })} ${moneyCur}`}
                   {pnlPct != null && (
                     <div className="text-xs opacity-80">{formatPct(pnlPct * 100)}</div>
                   )}

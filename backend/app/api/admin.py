@@ -23,6 +23,7 @@ from app.ports.admin import (
     SystemSettings,
 )
 from app.ports.users import UserProfile
+from app.services.currency_service import CurrencyValidationError, normalize_currency, normalize_stored_currency
 
 router = APIRouter(tags=["admin"])
 
@@ -47,7 +48,7 @@ def settings_to_dict(s: SystemSettings) -> dict[str, Any]:
             "email": s.jobs_email,
             "price": s.jobs_price,
         },
-        "defaultDisplayCurrency": s.default_display_currency,
+        "defaultDisplayCurrency": normalize_stored_currency(s.default_display_currency) or "USD",
     }
 
 
@@ -133,7 +134,13 @@ def put_admin_settings(
     if "jobs_price" in data and data["jobs_price"] is not None:
         current.jobs_price = data["jobs_price"]
     if "default_display_currency" in data and data["default_display_currency"] is not None:
-        current.default_display_currency = data["default_display_currency"]
+        try:
+            current.default_display_currency = normalize_currency(
+                data["default_display_currency"],
+                field="defaultDisplayCurrency",
+            ) or "USD"
+        except CurrencyValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail) from exc
     saved = repo.save(current)
     set_market_service(None)
     return settings_to_dict(saved)

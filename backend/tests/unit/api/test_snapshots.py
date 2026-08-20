@@ -114,3 +114,46 @@ def test_snapshot_bad_date_400() -> None:
         ).status_code
         == 400
     )
+
+
+def test_requested_currency_adds_derived_overlay_without_changing_native_totals() -> None:
+    repo = InMemorySnapshotRepo()
+    repo.put(
+        SnapshotRecord(
+            user_id="alice",
+            date="2026-08-01",
+            payload={
+                "totalsByCurrency": {
+                    "USD": {"marketValue": "100", "costBasis": "80", "pnl": "20"},
+                    "VND": {
+                        "marketValue": "2500000",
+                        "costBasis": "2000000",
+                        "pnl": "500000",
+                    },
+                },
+                "fx": {
+                    "base": "USD",
+                    "status": "fresh",
+                    "rates": {"USD_EUR": "0.9", "VND_EUR": "0.000036"},
+                },
+            },
+            created_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        )
+    )
+    client, _ = _make_client(repo)
+
+    response = client.get(
+        "/api/snapshots/2026-08-01",
+        params={"currency": "EUR"},
+        headers=_auth("alice"),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["payload"]
+    assert payload["totalsByCurrency"]["USD"]["marketValue"] == "100"
+    assert payload["totalsDisplay"] == {
+        "currency": "EUR",
+        "marketValue": "180.000000",
+        "costBasis": "144.000000",
+        "pnl": "36.000000",
+    }

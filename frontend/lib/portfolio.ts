@@ -130,10 +130,16 @@ async function apiFetch<T>(
 
 export function portfolioQuery(params: {
   displayCurrency: DisplayCurrency;
+  currency?: DisplayCurrency;
   assetType?: AssetTypeFilter;
 }): string {
   const q = new URLSearchParams();
-  q.set("displayCurrency", displayCurrencyQuery(params.displayCurrency));
+  // New callers use the canonical ``currency`` parameter.  Keep the legacy
+  // spelling for older integrations and tests that do not opt in yet.
+  q.set(
+    params.currency ? "currency" : "displayCurrency",
+    displayCurrencyQuery(params.currency ?? params.displayCurrency),
+  );
   if (params.assetType && params.assetType !== "all") {
     q.set("assetType", params.assetType);
   }
@@ -142,12 +148,14 @@ export function portfolioQuery(params: {
 
 export async function fetchPortfolio(options: {
   displayCurrency: DisplayCurrency;
+  currency?: DisplayCurrency;
   assetType?: AssetTypeFilter;
   token?: string | null;
   signal?: AbortSignal;
 }): Promise<PortfolioResponse> {
   const qs = portfolioQuery({
     displayCurrency: options.displayCurrency,
+    currency: options.currency,
     assetType: options.assetType,
   });
   return apiFetch<PortfolioResponse>(`/api/portfolio?${qs}`, {
@@ -158,12 +166,14 @@ export async function fetchPortfolio(options: {
 
 export async function refreshPortfolio(options: {
   displayCurrency: DisplayCurrency;
+  currency?: DisplayCurrency;
   assetType?: AssetTypeFilter;
   token?: string | null;
   signal?: AbortSignal;
 }): Promise<PortfolioResponse> {
   const qs = portfolioQuery({
     displayCurrency: options.displayCurrency,
+    currency: options.currency,
     assetType: options.assetType,
   });
   return apiFetch<PortfolioResponse>(`/api/portfolio/refresh?${qs}`, {

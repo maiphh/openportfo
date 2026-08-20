@@ -11,7 +11,7 @@ import {
   fetchPortfolioPerformance,
   isAbortError,
   parsePerformanceRange,
-  valuedPointsInDisplay,
+  backendValuedPoints,
   type PerformanceRange,
   type PerformanceResponse,
 } from "@/lib/portfolio-charts";
@@ -34,7 +34,7 @@ function formatSignedMoney(value: number): string {
 }
 
 export default function PortfolioValueChart({ token }: { token: string | null }) {
-  const { currency, convertToDisplay } = useDisplayCurrency();
+  const { currency } = useDisplayCurrency();
   const [range, setRange] = useState<PerformanceRange>(DEFAULT_PERFORMANCE_RANGE);
   const [data, setData] = useState<PerformanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +54,7 @@ export default function PortfolioValueChart({ token }: { token: string | null })
     setLoading(true);
     setError(null);
     try {
-      const next = await fetchPortfolioPerformance({ range, token, signal: controller.signal });
+      const next = await fetchPortfolioPerformance({ range, currency, token, signal: controller.signal });
       if (controller.signal.aborted) return;
       setData(next);
     } catch (err) {
@@ -64,7 +64,7 @@ export default function PortfolioValueChart({ token }: { token: string | null })
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [range, token]);
+  }, [currency, range, token]);
 
   useEffect(() => {
     void load();
@@ -72,8 +72,8 @@ export default function PortfolioValueChart({ token }: { token: string | null })
   }, [load, reloadKey]);
 
   const valued = useMemo(
-    () => valuedPointsInDisplay(data?.points ?? [], currency, convertToDisplay),
-    [convertToDisplay, currency, data?.points],
+    () => backendValuedPoints(data?.points ?? [], currency),
+    [currency, data?.points],
   );
 
   const series = valued.map((point) => point.marketValue);

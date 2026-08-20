@@ -139,6 +139,7 @@ class Settings(BaseSettings):
         return (init_settings, env_settings, dotenv_settings, file_secret_settings)
 
     app_name: str = Field(default="OpenPortfo", alias="APP_NAME")
+    fx_stale_after_seconds: int = Field(default=30 * 86400, ge=0, alias="FX_STALE_AFTER_SECONDS")
     app_env: AppEnvironment = Field(default=AppEnvironment.LOCAL, alias="APP_ENV")
     auth_mode: AuthMode = Field(default=AuthMode.FAKE, alias="AUTH_MODE")
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")

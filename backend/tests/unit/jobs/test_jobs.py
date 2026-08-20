@@ -616,6 +616,13 @@ def test_snapshot_repo_failure_leaves_retry_safe_object_and_other_users_continue
     assert snapshots.get("u2", date) is not None
     assert ctx.object_storage.get_json(u2_key) is not None
     assert snapshots.get("u2", date).payload == ctx.object_storage.get_json(u2_key)
+    payload = snapshots.get("u2", date).payload
+    assert "totalsByCurrency" in payload
+    assert "totalsDisplay" not in payload
+    assert "displayCurrency" not in payload
+    assert "rates" not in payload
+    assert "rates" in payload["fx"]
+    assert all("marketValueDisplay" not in line for line in payload["lines"])
 
     # A retry on the same date converges to one object and one upserted row.
     snapshots.fail = False

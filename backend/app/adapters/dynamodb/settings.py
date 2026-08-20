@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from app.adapters.dynamodb.base import get_table, sanitize_for_dynamo
 from app.ports.admin import SystemSettings
+from app.services.currency_service import normalize_stored_currency
 
 SETTINGS_PK = "SETTINGS"
 SETTINGS_SK = "GLOBAL"
@@ -28,7 +29,7 @@ def settings_to_item(settings: SystemSettings) -> dict[str, Any]:
             "jobsSnapshot": bool(settings.jobs_snapshot),
             "jobsEmail": bool(settings.jobs_email),
             "jobsPrice": bool(settings.jobs_price),
-            "defaultDisplayCurrency": settings.default_display_currency or "USD",
+            "defaultDisplayCurrency": normalize_stored_currency(settings.default_display_currency) or "USD",
         }
     )
 
@@ -45,7 +46,7 @@ def item_to_settings(item: Optional[dict[str, Any]]) -> SystemSettings:
         jobs_snapshot=bool(item.get("jobsSnapshot", True)),
         jobs_email=bool(item.get("jobsEmail", False)),
         jobs_price=bool(item.get("jobsPrice", True)),
-        default_display_currency=str(item.get("defaultDisplayCurrency") or "USD"),
+        default_display_currency=normalize_stored_currency(item.get("defaultDisplayCurrency")) or "USD",
     )
 
 

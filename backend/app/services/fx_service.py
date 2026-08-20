@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 
 from app.ports.fx import (
     ExchangeRateClient,
@@ -90,9 +90,13 @@ class FxService:
         self,
         repo: ExchangeRateRepo,
         client: Optional[ExchangeRateClient] = None,
+        stale_after_seconds: int = 30 * 86400,
+        clock: Optional[Callable[[], datetime]] = None,
     ) -> None:
         self._repo = repo
         self._client = client
+        self._stale_after_seconds = stale_after_seconds
+        self._clock = clock
 
     def get_rates(self) -> Optional[StoredRates]:
         """Stored rates only — never calls ExchangeRateClient."""
@@ -100,7 +104,7 @@ class FxService:
 
     def get_context(self) -> FxContext:
         """Capture one immutable request/job FX snapshot from the store."""
-        return fx_context_from_stored(self._repo.get_latest())
+        return fx_context_from_stored(self._repo.get_latest(), stale_after_seconds=self._stale_after_seconds, now=self._clock() if self._clock else None)
 
     def convert(self, amount: object, source: str, target: str) -> tuple[Decimal, Decimal]:
         """Convert an amount using stored rates only; never calls the provider."""
@@ -115,6 +119,9 @@ class FxService:
             dst = normalize_currency(target, field="targetCurrency")
         except ValueError as exc:
             raise ConversionError(str(exc)) from exc
+        # Identity conversion is valid even when the FX store is unavailable.
+        if src == dst:
+            return value, Decimal("1")
         stored = self._repo.get_latest()
         if stored is None or stored.status == "missing":
             raise ConversionError("exchange rates are not available")

@@ -11,7 +11,7 @@ import {
   fetchSnapshots,
   heatmapDateWindow,
   isAbortError,
-  snapshotsToDailyPnl,
+  backendSnapshotsToDailyPnl,
   type HeatmapCell,
   type SnapshotDto,
 } from "@/lib/portfolio-charts";
@@ -53,7 +53,7 @@ function HeatmapSkeleton() {
 }
 
 export default function PnlActivityHeatmap({ token }: { token: string | null }) {
-  const { currency, convertToDisplay } = useDisplayCurrency();
+  const { currency } = useDisplayCurrency();
   const [snapshots, setSnapshots] = useState<SnapshotDto[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +79,7 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
       const next = await fetchSnapshots({
         from: windowDates.from,
         to: windowDates.to,
+        currency,
         token,
         signal: controller.signal,
       });
@@ -91,7 +92,7 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [token, windowDates.from, windowDates.to]);
+  }, [currency, token, windowDates.from, windowDates.to]);
 
   useEffect(() => {
     void load();
@@ -99,8 +100,8 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
   }, [load, reloadKey]);
 
   const series = useMemo(
-    () => snapshotsToDailyPnl(snapshots ?? [], currency, convertToDisplay),
-    [convertToDisplay, currency, snapshots],
+    () => backendSnapshotsToDailyPnl(snapshots ?? [], currency),
+    [currency, snapshots],
   );
 
   const grid = useMemo(() => buildPnlHeatmapGrid({ series }), [series]);

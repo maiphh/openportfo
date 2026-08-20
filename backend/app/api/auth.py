@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.deps import get_current_user, get_user_profile_repo
 from app.core.config import Settings, get_settings
 from app.ports.users import UserProfile, UserProfileRepo
+from app.services.currency_service import CurrencyValidationError, normalize_currency, normalize_stored_currency
 
 router = APIRouter(tags=["auth"])
 
@@ -30,7 +31,7 @@ def profile_to_response(profile: UserProfile) -> dict[str, Any]:
         "role": profile.role,
         "newsKeywords": list(profile.news_keywords),
         "emailOptIn": profile.email_opt_in,
-        "preferredCurrency": profile.preferred_currency,
+        "preferredCurrency": normalize_stored_currency(profile.preferred_currency),
         "createdAt": _iso(profile.created_at),
         "updatedAt": _iso(profile.updated_at),
     }
@@ -72,7 +73,7 @@ def get_user_settings(user: UserProfile = Depends(get_current_user)) -> dict[str
     return {
         "newsKeywords": list(user.news_keywords),
         "emailOptIn": user.email_opt_in,
-        "preferredCurrency": user.preferred_currency,
+        "preferredCurrency": normalize_stored_currency(user.preferred_currency),
     }
 
 
@@ -83,10 +84,18 @@ def put_settings(
     repo: UserProfileRepo = Depends(get_user_profile_repo),
 ) -> dict[str, Any]:
     """Update newsKeywords, emailOptIn, preferredCurrency."""
+    try:
+        preferred = (
+            normalize_currency(body.preferred_currency, field="preferredCurrency", allow_none=True)
+            if body.preferred_currency is not None
+            else None
+        )
+    except CurrencyValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail) from exc
     updated = repo.update_settings(
         user.user_id,
         news_keywords=body.news_keywords,
         email_opt_in=body.email_opt_in,
-        preferred_currency=body.preferred_currency,
+        preferred_currency=preferred,
     )
     return profile_to_response(updated)

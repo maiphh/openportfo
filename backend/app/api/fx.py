@@ -25,12 +25,15 @@ class FxConversionRequest(BaseModel):
 
 @router.get("/api/fx/rates")
 def get_fx_rates(
-    user: UserProfile = Depends(get_current_user),
     fx: FxService = Depends(get_fx_service),
 ) -> dict[str, Any]:
-    """Return stored FX rates only — zero provider HTTP calls."""
-    _ = user
-    return stored_to_api(fx.get_rates())
+    """Return public, read-only stored FX rates with zero provider HTTP calls."""
+    body = stored_to_api(fx.get_rates())
+    # Operational errors and the administrator identifier are not part of
+    # the public display-rate contract.
+    body.pop("lastRefreshError", None)
+    body.pop("updatedBy", None)
+    return body
 
 
 @router.post("/api/fx/convert")

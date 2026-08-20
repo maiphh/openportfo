@@ -1,21 +1,23 @@
 "use client";
 
 import { parseMoney, type PortfolioResponse } from "@/lib/portfolio";
-import { cn, formatPct, formatPrice, formatSigned } from "@/lib/utils";
+import { cn, formatMoney, formatPct } from "@/lib/utils";
 
 function moneyLabel(value: number | null, currency: string): string {
   if (value == null) return "—";
-  return `${formatPrice(value)} ${currency}`;
+  return `${formatMoney(value, currency)} ${currency}`;
 }
 
-function formatNative(value: string | null | undefined): string {
+function formatNative(value: string | null | undefined, currency: string): string {
   const n = parseMoney(value);
-  return n == null ? "—" : formatPrice(n);
+  return n == null ? "—" : formatMoney(n, currency);
 }
 
-function formatNativeSigned(value: string | null | undefined): string {
+function formatNativeSigned(value: string | null | undefined, currency: string): string {
   const n = parseMoney(value);
-  return n == null ? "—" : formatSigned(n);
+  return n == null
+    ? "—"
+    : `${n > 0 ? "+" : n < 0 ? "-" : ""}${formatMoney(Math.abs(n), currency)}`;
 }
 
 export default function PortfolioSummaryCards({
@@ -38,7 +40,7 @@ export default function PortfolioSummaryCards({
     { label: "Cost basis", value: moneyLabel(cost, currency) },
     {
       label: "PnL",
-      value: pnl == null ? "—" : `${formatSigned(pnl)} ${currency}`,
+      value: pnl == null ? "—" : `${pnl > 0 ? "+" : pnl < 0 ? "-" : ""}${formatMoney(Math.abs(pnl), currency)} ${currency}`,
       tone: pnl == null ? "flat" : pnl > 0 ? "up" : pnl < 0 ? "down" : "flat",
     },
     {
@@ -77,7 +79,7 @@ export default function PortfolioSummaryCards({
         <div className="flex flex-wrap gap-2 text-xs text-gray-500">
           {Object.entries(data.totalsByCurrency).map(([cur, tot]) => (
             <span key={cur} className="rounded-md border border-gray-600 px-2 py-1">
-              {cur}: MV {formatNative(tot.marketValue)} · PnL {formatNativeSigned(tot.pnl)}
+              {cur}: MV {formatNative(tot.marketValue, cur)} · PnL {formatNativeSigned(tot.pnl, cur)}
             </span>
           ))}
         </div>

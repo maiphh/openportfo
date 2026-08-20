@@ -9,9 +9,10 @@ fetching and persisting rates.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from types import MappingProxyType
 from typing import Mapping, Optional
 
 from app.domain.fx_math import get_rate
@@ -114,14 +115,18 @@ class FxContext:
     """Immutable FX state captured once for one request/job operation."""
 
     base: str = "USD"
-    rates: Mapping[str, Decimal] = None  # type: ignore[assignment]
+    rates: Mapping[str, Decimal] = field(default_factory=dict)
     status: str = "missing"
     as_of: Optional[datetime] = None
     provider: Optional[str] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "base", (self.base or "USD").strip().upper() or "USD")
-        object.__setattr__(self, "rates", _decimal_rates(self.rates))
+        object.__setattr__(self, "rates", MappingProxyType(_decimal_rates(self.rates)))
+        status = str(self.status or "missing").strip().lower()
+        if status not in {"missing", "stale_ok", "fresh"}:
+            status = "fresh" if self.rates else "missing"
+        object.__setattr__(self, "status", status)
         if not self.rates and self.status != "missing":
             object.__setattr__(self, "status", "missing")
 
@@ -149,12 +154,20 @@ class FxContext:
         rate = self.rate(source, target)
         return value * rate if rate is not None else None
 
+    def status_for(self, source: str, target: str) -> str:
+        """Return the status for one pair, accounting for same/missing FX."""
+        if self.rate(source, target) is None:
+            return "missing"
+        if source.strip().upper() == target.strip().upper():
+            return "fresh"
+        return self.status if self.status != "missing" else "missing"
+
     @property
     def is_available(self) -> bool:
         return self.status != "missing" and bool(self.rates)
 
 
-def fx_context_from_stored(stored: Optional[StoredRates]) -> FxContext:
+def fx_context_from_stored(stored: Optional[StoredRates], *, stale_after_seconds: int = 30 * 86400, now: Optional[datetime] = None) -> FxContext:
     """Map a repository snapshot into a request-safe context."""
     if stored is None:
         return FxContext()
@@ -162,10 +175,22 @@ def fx_context_from_stored(stored: Optional[StoredRates]) -> FxContext:
     if status not in {"missing", "stale_ok", "fresh"}:
         status = "fresh" if stored.rates else "missing"
     rates = _decimal_rates(stored.rates)
+    effective = status
+    if not rates:
+        effective = "missing"
+    elif stored.last_refresh_status == "error":
+        effective = "stale_ok"
+    elif stored.as_of is None:
+        effective = "stale_ok"
+    else:
+        current = now or datetime.now(timezone.utc)
+        as_of = stored.as_of if stored.as_of.tzinfo else stored.as_of.replace(tzinfo=timezone.utc)
+        if (current - as_of).total_seconds() > max(0, stale_after_seconds):
+            effective = "stale_ok"
     return FxContext(
         base=stored.base or "USD",
         rates=rates,
-        status="missing" if not rates else status,
+        status=effective,
         as_of=stored.as_of,
         provider=stored.provider,
     )

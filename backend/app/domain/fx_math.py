@@ -100,10 +100,6 @@ def apply_fx(
         fx_base=fx.base,
     )
 
-    if fx.status == "missing" or not fx.rates:
-        result.fx_status = "missing"
-        return result
-
     # Resolve rates per native currency among priced lines
     currencies_needed = {
         ln.currency.upper()
@@ -118,6 +114,32 @@ def apply_fx(
             return result
         rates[cur] = r
 
+    # A same-currency request does not require an FX row.  This is important
+    # for a new/empty FX store: native values are still authoritative display
+    # values when the requested currency matches the quote currency.
+    if not currencies_needed:
+        # Missing-price lines can still expose converted unit costs.  They do
+        # not produce display totals because there is no valued market line.
+        converted_any = False
+        for line in result.lines:
+            unit_rate = get_rate(fx, line.currency, display)
+            if unit_rate is not None:
+                converted_any = True
+                line.display_currency = display
+                line.avg_cost_display = line.avg_cost * unit_rate
+                if line.price is not None:
+                    line.price_display = line.price * unit_rate
+        result.market_value_display = Decimal("0")
+        result.cost_basis_display = Decimal("0")
+        result.pnl_display = Decimal("0")
+        result.pnl_percent_display = None
+        result.fx_status = "fresh" if converted_any else "missing"
+        return result
+    if all(cur.upper() == display for cur in currencies_needed):
+        result.fx_status = "fresh"
+    elif fx.status == "missing" or not fx.rates:
+        result.fx_status = "missing"
+
     total_mv = Decimal("0")
     total_cost = Decimal("0")
 
@@ -128,6 +150,7 @@ def apply_fx(
             if unit_rate is None:
                 unit_rate = get_rate(fx, line.currency, display)
             if unit_rate is not None:
+                line.display_currency = display
                 line.avg_cost_display = line.avg_cost * unit_rate
                 if line.price is not None:
                     line.price_display = line.price * unit_rate

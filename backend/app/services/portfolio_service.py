@@ -18,6 +18,12 @@ from app.domain.portfolio_math import compute_asset_class_totals, compute_native
 from app.ports.fx import ExchangeRateRepo, StoredRates
 from app.ports.holdings import HoldingRecord, HoldingsRepo
 from app.services.market_service import MarketService, QuoteKey
+from app.services.currency_service import (
+    CurrencyValidationError,
+    FxContext,
+    normalize_stored_currency,
+    resolve_currency,
+)
 
 _ALLOWED_ASSET_TYPES = frozenset({"crypto", "stock"})
 
@@ -66,6 +72,16 @@ def stored_rates_to_domain(stored: StoredRates) -> FxRates:
     )
 
 
+def fx_context_to_domain(context: FxContext) -> FxRates:
+    """Map the request snapshot to the pure domain FX model."""
+    return FxRates(
+        base=context.base,
+        rates=dict(context.rates),
+        status=context.status if context.status in {"missing", "stale_ok", "fresh"} else "missing",  # type: ignore[arg-type]
+        as_of=context.as_of,
+    )
+
+
 def _normalize_asset_type_filter(asset_type: Optional[str]) -> Optional[str]:
     if asset_type is None or str(asset_type).strip() == "":
         return None
@@ -102,6 +118,7 @@ class PortfolioService:
         preferred_currency: Optional[str] = None,
         asset_type: Optional[str] = None,
         force_refresh: bool = False,
+        fx_context: Optional[FxContext] = None,
     ) -> PortfolioView:
         """Load holdings, resolve quotes, run domain math, optionally apply FX.
 
@@ -130,16 +147,42 @@ class PortfolioService:
         native = compute_native_portfolio(domain_holdings, quotes)
         as_of = _quotes_as_of(quotes)
 
-        display = (display_currency or preferred_currency or "").strip().upper() or None
+        try:
+            display = resolve_currency(
+                display_currency,
+                preferred=preferred_currency,
+                # Keep the historical service default for callers that do
+                # not pass an API settings object.  The HTTP route supplies
+                # its configured default explicitly through preferred.
+                default="USD",
+            )
+        except CurrencyValidationError as exc:
+            raise ValidationError(exc.detail) from exc
+        explicit_display = display_currency is not None and bool(str(display_currency).strip())
 
         stored: Optional[StoredRates] = None
         if self._fx is not None:
-            stored = self._fx.get_latest()
+            # A route can pass one request-scoped context.  Direct service
+            # callers retain the old repo-only wiring for compatibility.
+            if fx_context is None:
+                stored = self._fx.get_latest()
 
-        if stored is not None and display:
-            fx_domain = stored_rates_to_domain(stored)
+        context = fx_context
+        if context is None and stored is not None:
+            from app.services.currency_service import fx_context_from_stored
+
+            context = fx_context_from_stored(stored)
+
+        # Explicit display requests must still work when no FX row exists if
+        # every priced line is already in that same currency.  A preference
+        # fallback with no stored rates keeps the legacy native-only shape.
+        if display and (
+            explicit_display
+            or (context is not None and context.status != "missing")
+        ):
+            fx_domain = fx_context_to_domain(context or FxContext())
             summary = apply_fx(native, fx_domain, display)
-            rates_out = dict(stored.rates)
+            rates_out = dict(context.rates) if context is not None else {}
             summary.totals_by_asset_class = compute_asset_class_totals(summary)
             return PortfolioView(summary=summary, fx_rates=rates_out, as_of=as_of)
 
@@ -147,12 +190,12 @@ class PortfolioService:
         summary = native
         if summary.fx_status is None:
             summary.fx_status = "missing"
-        rates_out: dict[str, Decimal] = dict(stored.rates) if stored is not None else {}
-        if stored is not None:
-            summary.fx_as_of = stored.as_of
-            summary.fx_base = stored.base
+        rates_out: dict[str, Decimal] = dict(context.rates) if context is not None else {}
+        if context is not None:
+            summary.fx_as_of = context.as_of
+            summary.fx_base = context.base
             # Still missing conversion path (no display currency or empty rates)
-            if not stored.rates or not display:
+            if not context.rates or not display:
                 summary.fx_status = "missing"
         summary.totals_by_asset_class = compute_asset_class_totals(summary)
         return PortfolioView(summary=summary, fx_rates=rates_out, as_of=as_of)
@@ -164,4 +207,5 @@ __all__ = [
     "ValidationError",
     "holding_record_to_domain",
     "stored_rates_to_domain",
+    "fx_context_to_domain",
 ]

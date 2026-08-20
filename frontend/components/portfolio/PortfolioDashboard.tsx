@@ -93,12 +93,14 @@ export default function PortfolioDashboard() {
         const next = opts?.force
           ? await refreshPortfolio({
               displayCurrency: currency,
+              currency,
               assetType: filter,
               token: t,
               signal: controller.signal,
             })
           : await fetchPortfolio({
               displayCurrency: currency,
+              currency,
               assetType: filter,
               token: t,
               signal: controller.signal,

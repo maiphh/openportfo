@@ -65,7 +65,7 @@ describe("HoldingsTable unit FX", () => {
     expect(screen.queryByText(/USD/)).not.toBeInTheDocument();
   });
 
-  it("falls back to convertToDisplay when API unit fields are absent", () => {
+  it("keeps native unit fields when API display fields are absent", () => {
     render(
       <HoldingsTable
         lines={[line({ marketValueDisplay: "40000", pnlDisplay: "10000" })]}
@@ -76,8 +76,8 @@ describe("HoldingsTable unit FX", () => {
       />,
     );
 
-    expect(screen.getByText(`${formatPrice(27600)} EUR`)).toBeInTheDocument();
-    expect(screen.getByText(`${formatPrice(36800)} EUR`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatPrice(30000)} USD`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatPrice(40000)} USD`)).toBeInTheDocument();
   });
 
   it("keeps native amounts and currency when FX is missing", () => {

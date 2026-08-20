@@ -3,6 +3,7 @@
 import { apiBase } from "@/lib/api";
 import { bearerHeader, readAuthToken } from "@/lib/auth";
 import { parseMoney, PortfolioApiError } from "@/lib/portfolio";
+import type { DisplayCurrency } from "@/lib/currency";
 
 export const PERFORMANCE_RANGES = ["1w", "mtd", "ytd", "max"] as const;
 export type PerformanceRange = (typeof PERFORMANCE_RANGES)[number];
@@ -175,11 +176,13 @@ async function authedGet<T>(
 
 export async function fetchPortfolioPerformance(options: {
   range: PerformanceRange | string;
+  currency?: DisplayCurrency;
   token?: string | null;
   signal?: AbortSignal;
 }): Promise<PerformanceResponse> {
   const range = parsePerformanceRange(options.range);
-  const body = await authedGet<PerformanceResponse>(`/api/portfolio/performance?range=${encodeURIComponent(range)}`, {
+  const currencyQuery = options.currency ? `&currency=${encodeURIComponent(options.currency)}` : "";
+  const body = await authedGet<PerformanceResponse>(`/api/portfolio/performance?range=${encodeURIComponent(range)}${currencyQuery}`, {
     token: options.token,
     signal: options.signal,
   });
@@ -192,10 +195,12 @@ export async function fetchPortfolioPerformance(options: {
 export async function fetchSnapshots(options: {
   from: string;
   to: string;
+  currency?: DisplayCurrency;
   token?: string | null;
   signal?: AbortSignal;
 }): Promise<SnapshotDto[]> {
   const qs = new URLSearchParams({ from: options.from, to: options.to });
+  if (options.currency) qs.set("currency", options.currency);
   const body = await authedGet<SnapshotDto[]>(`/api/snapshots?${qs}`, {
     token: options.token,
     signal: options.signal,
@@ -294,6 +299,19 @@ export function valuedPointsInDisplay(
     out.push({ date: point.date, marketValue: converted });
   }
   return out;
+}
+
+/** Consume backend-converted points; no browser FX arithmetic. */
+export function backendValuedPoints(
+  points: { date: string; marketValue: string | number | null; currency: string | null }[],
+  displayCurrency: string,
+): ValuedPoint[] {
+  const target = displayCurrency.trim().toUpperCase();
+  return points.flatMap((point) => {
+    const value = typeof point.marketValue === "number" ? point.marketValue : parseMoney(point.marketValue);
+    const pointCurrency = (point.currency || "").trim().toUpperCase();
+    return value != null && pointCurrency === target ? [{ date: point.date, marketValue: value }] : [];
+  });
 }
 
 /** Day-over-day MV delta on sorted snapshot dates. First point has no delta. */
@@ -399,5 +417,20 @@ export function snapshotsToDailyPnl(
       return { date: snap.date, marketValue: converted };
     })
     .filter((point): point is ValuedPoint => point != null);
+  return dailyPnlSeries(valued);
+}
+
+/** Compute chart deltas from snapshot payloads already converted by API. */
+export function backendSnapshotsToDailyPnl(
+  snapshots: SnapshotDto[],
+  displayCurrency: string,
+): DailyPnlPoint[] {
+  const target = displayCurrency.trim().toUpperCase();
+  const valued = snapshots.flatMap((snap) => {
+    const extracted = snapshotMarketValue(snap.payload);
+    return extracted && extracted.currency === target
+      ? [{ date: snap.date, marketValue: extracted.marketValue }]
+      : [];
+  });
   return dailyPnlSeries(valued);
 }

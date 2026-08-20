@@ -5,6 +5,7 @@ export {
   displayFractionDigits,
   formatPct,
   formatPrice,
+  formatMoney,
   formatQty,
   formatSigned,
 } from "./number-format";
