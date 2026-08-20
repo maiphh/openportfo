@@ -25,4 +25,14 @@ describe("SafeMarkdown", () => {
     expect(screen.getByRole("link", { name: "external" })).toHaveAttribute("href", "https://example.com/path");
     expect(container.querySelector('a[target="_blank"]')).toBeTruthy();
   });
+
+  it("keeps returned tables inside a keyboard-scrollable container", () => {
+    render(<SafeMarkdown content={"| Asset | Very long value |\n| --- | --- |\n| BTC | value |"} />);
+
+    const region = screen.getByRole("region", { name: "Scrollable data table" });
+    expect(region).toHaveClass("table-scroll", "min-w-0");
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("table")).toHaveClass("w-max", "min-w-full");
+    expect(screen.getByRole("columnheader", { name: "Very long value" })).toHaveClass("max-w-64", "break-words");
+  });
 });

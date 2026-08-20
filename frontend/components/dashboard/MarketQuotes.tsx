@@ -176,7 +176,7 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
           ) : null}
         </div>
       </div>
-      <div className="overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
         {source === "error" ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center" data-testid="quotes-error">
             <p className="text-sm text-gray-400">{error ?? "Quotes unavailable"}</p>
@@ -185,8 +185,8 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
             </Button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
+          <div className="table-scroll" role="region" aria-label="Scrollable market quotes" tabIndex={0}>
+            <table className="w-max min-w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-gray-600 text-gray-500">
                   {COLUMNS.map((column, index) => (

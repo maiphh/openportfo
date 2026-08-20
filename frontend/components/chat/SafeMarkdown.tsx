@@ -163,7 +163,7 @@ export default function SafeMarkdown({ content }: { content: string }) {
   const flushCode = () => {
     if (!code) return;
     blocks.push(
-      <pre key={`code-${blocks.length}`} className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-950 p-3 text-xs leading-5 text-gray-300">
+      <pre key={`code-${blocks.length}`} className="max-w-full overflow-x-auto rounded-lg border border-gray-700 bg-gray-950 p-3 text-xs leading-5 text-gray-300">
         <code data-language={code.language || undefined}>{code.lines.join("\n")}</code>
       </pre>,
     );
@@ -217,10 +217,16 @@ export default function SafeMarkdown({ content }: { content: string }) {
       }
       index -= 1;
       blocks.push(
-        <div key={`table-${blocks.length}`} className="overflow-x-auto">
-          <table className="min-w-full border-collapse text-left text-sm">
-            <thead><tr>{headers.map((cell, cellIndex) => <th key={cellIndex} className="border-b border-gray-600 px-2 py-1.5 font-semibold text-gray-200">{renderInline(cell, `th-${blocks.length}-${cellIndex}`)}</th>)}</tr></thead>
-            <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex} className="border-b border-gray-800 px-2 py-1.5 align-top">{renderInline(row[cellIndex] || "", `td-${blocks.length}-${rowIndex}-${cellIndex}`)}</td>)}</tr>)}</tbody>
+        <div
+          key={`table-${blocks.length}`}
+          className="table-scroll min-w-0"
+          role="region"
+          aria-label="Scrollable data table"
+          tabIndex={0}
+        >
+          <table className="w-max min-w-full border-collapse text-left text-sm">
+            <thead><tr>{headers.map((cell, cellIndex) => <th key={cellIndex} className="max-w-64 whitespace-normal break-words border-b border-gray-600 px-2 py-1.5 font-semibold text-gray-200">{renderInline(cell, `th-${blocks.length}-${cellIndex}`)}</th>)}</tr></thead>
+            <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex} className="max-w-64 whitespace-normal break-words border-b border-gray-800 px-2 py-1.5 align-top">{renderInline(row[cellIndex] || "", `td-${blocks.length}-${rowIndex}-${cellIndex}`)}</td>)}</tr>)}</tbody>
           </table>
         </div>,
       );
@@ -256,7 +262,7 @@ export default function SafeMarkdown({ content }: { content: string }) {
   flushParagraph();
   flushList();
 
-  return <div className="space-y-3 break-words">{blocks.length ? blocks : <span className="text-gray-500">No response.</span>}</div>;
+  return <div className="min-w-0 max-w-full space-y-3 break-words">{blocks.length ? blocks : <span className="text-gray-500">No response.</span>}</div>;
 }
 
 export { safeHref, inlineTokens };

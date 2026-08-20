@@ -186,8 +186,8 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
             <p className="text-xs text-red-500">Last refresh error: {rates.lastRefreshError}</p>
           ) : null}
 
-          <div className="overflow-hidden rounded-md border border-gray-700">
-            <table className="w-full text-left text-xs">
+          <div className="table-scroll min-w-0 rounded-md border border-gray-700" role="region" aria-label="Scrollable exchange rates" tabIndex={0}>
+            <table className="w-max min-w-full text-left text-xs">
               <thead className="bg-gray-900/50 text-gray-500">
                 <tr>
                   <th className="px-3 py-2 font-medium">Pair</th>

@@ -44,8 +44,8 @@ export default function HoldingsTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-600">
-      <table className="min-w-full text-left text-sm">
+    <div className="table-scroll min-w-0 rounded-xl border border-gray-600" role="region" aria-label="Scrollable holdings" tabIndex={0}>
+      <table className="w-max min-w-full text-left text-sm">
         <thead className="bg-gray-800 text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th className="px-3 py-3 font-medium">Asset</th>
