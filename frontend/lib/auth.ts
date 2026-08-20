@@ -38,17 +38,18 @@ export function readAuthToken(
 export function writeAuthToken(
   token: string,
   storage: Pick<Storage, "setItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
-): void {
-  if (!storage) return;
+): boolean {
+  if (!storage) return false;
   const cleaned = token.trim();
-  if (!cleaned) return;
+  if (!cleaned) return false;
   try {
     storage.setItem(
       AUTH_TOKEN_STORAGE_KEY,
       cleaned.startsWith("Bearer ") ? cleaned.slice(7).trim() : cleaned,
     );
+    return true;
   } catch {
-    // Ignore quota / private mode.
+    return false;
   }
 }
 
@@ -73,31 +74,46 @@ export async function fetchAuthMe(options?: {
   token?: string | null;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<AuthProfile> {
   const token = options?.token ?? readAuthToken();
   const fetchImpl = options?.fetchImpl ?? fetch;
-  const res = await fetchImpl(`${apiBase()}/api/auth/me`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      ...bearerHeader(token),
-    },
-    signal: options?.signal,
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new AuthApiError(res.status, `Profile HTTP ${res.status}`);
+  const controller = new AbortController();
+  const callerSignal = options?.signal;
+  const abortFromCaller = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) abortFromCaller();
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = globalThis.setTimeout(() => {
+    controller.abort(new DOMException("Profile request timed out", "TimeoutError"));
+  }, options?.timeoutMs ?? 10_000);
+
+  try {
+    const res = await fetchImpl(`${apiBase()}/api/auth/me`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...bearerHeader(token),
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new AuthApiError(res.status, `Profile HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as Partial<AuthProfile>;
+    if (!body || typeof body.userId !== "string" || !body.userId.trim()) {
+      throw new Error("Invalid profile payload");
+    }
+    return {
+      userId: body.userId,
+      email: typeof body.email === "string" ? body.email : "",
+      name: typeof body.name === "string" && body.name.trim() ? body.name : null,
+      role: typeof body.role === "string" ? body.role : undefined,
+    };
+  } finally {
+    globalThis.clearTimeout(timeout);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
-  const body = (await res.json()) as Partial<AuthProfile>;
-  if (!body || typeof body.userId !== "string" || !body.userId.trim()) {
-    throw new Error("Invalid profile payload");
-  }
-  return {
-    userId: body.userId,
-    email: typeof body.email === "string" ? body.email : "",
-    name: typeof body.name === "string" && body.name.trim() ? body.name : null,
-    role: typeof body.role === "string" ? body.role : undefined,
-  };
 }
 
 export function profileDisplayName(profile: AuthProfile): string {

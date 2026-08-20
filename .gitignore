@@ -25,3 +25,5 @@ frontend-temp/node_modules/
 .vscode/
 .DS_Store
 Thumbs.db
+
+.agents

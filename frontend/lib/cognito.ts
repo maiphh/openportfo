@@ -28,7 +28,7 @@ export type PkceSession = {
 
 type EnvLike = Record<string, string | undefined>;
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-.
+
 function publicCognitoEnv(): EnvLike {
   return {
     NEXT_PUBLIC_COGNITO_DOMAIN: process.env.NEXT_PUBLIC_COGNITO_DOMAIN,
@@ -57,8 +57,15 @@ export function postLogoutUri(appUrl: string): string {
 export function safeNextPath(raw: string | null | undefined): string {
   const value = (raw || "").trim();
   if (!value.startsWith("/")) return "/";
-  if (value.startsWith("//") || value.includes("://")) return "/";
-  return value;
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return "/";
+  try {
+    const base = new URL("https://local.openportfo.invalid");
+    const resolved = new URL(value, base);
+    if (resolved.origin !== base.origin) return "/";
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return "/";
+  }
 }
 
 export function readCognitoPublicParts(env: EnvLike = publicCognitoEnv()): {
@@ -121,12 +128,13 @@ export async function generateCodeChallenge(
 export function storePkceSession(
   session: PkceSession,
   storage: StorageLike | null | undefined = typeof window !== "undefined" ? window.sessionStorage : null,
-): void {
-  if (!storage) return;
+): boolean {
+  if (!storage) return false;
   try {
     storage.setItem(PKCE_STORAGE_KEY, JSON.stringify(session));
+    return true;
   } catch {
-    // Ignore quota / private mode.
+    return false;
   }
 }
 
@@ -200,7 +208,9 @@ export async function prepareHostedUiLogin(options?: {
   const challenge = await generateCodeChallenge(verifier, cryptoImpl.subtle);
   const state = generateOAuthState(cryptoImpl);
   const next = safeNextPath(options?.next);
-  storePkceSession({ verifier, state, next }, options?.sessionStorage);
+  if (!storePkceSession({ verifier, state, next }, options?.sessionStorage)) {
+    throw new Error("Unable to store the sign-in session. Check browser storage settings.");
+  }
   const url = buildAuthorizeUrl(config, { challenge, state });
   return { url, verifier, state, next };
 }
@@ -301,18 +311,22 @@ export async function completeHostedUiCallback(options: {
     return { ok: false, error };
   };
 
-  if (!parsed.ok) return finishError(parsed.error);
-
-  // PKCE verifier lives only in sessionStorage — never accept it from the URL.
-  const url = typeof options.search === "string" ? new URLSearchParams(options.search) : options.search;
-  url.delete("code_verifier");
-
   if (!session?.verifier) {
     return finishError("Sign-in session expired. Try signing in again.");
   }
-  if (parsed.state && session.state && parsed.state !== session.state) {
-    return finishError("Invalid sign-in state. Try signing in again.");
+  const callbackParams =
+    typeof options.search === "string"
+      ? new URLSearchParams(options.search.startsWith("?") ? options.search.slice(1) : options.search)
+      : options.search;
+  const callbackState = callbackParams.get("state")?.trim() || null;
+  if (!callbackState || callbackState !== session.state) {
+    // Callback không hợp lệ không được phép phá session đăng nhập đang diễn ra.
+    return { ok: false, error: "Invalid sign-in state. Try signing in again." };
   }
+  if (!parsed.ok) return finishError(parsed.error);
+
+  // Claim PKCE atomically trước network call để cùng code không bị đổi token hai lần.
+  clearPkceSession(pkceStorage);
 
   const config = options.config ?? readCognitoConfig(options.env ?? publicCognitoEnv());
   if (!config) {
@@ -331,8 +345,9 @@ export async function completeHostedUiCallback(options: {
     return finishError(err instanceof Error ? err.message : "Token exchange failed");
   }
 
-  writeAuthToken(idToken, tokenStorage);
-  clearPkceSession(pkceStorage);
+  if (!writeAuthToken(idToken, tokenStorage)) {
+    return { ok: false, error: "Unable to store the sign-in token. Check browser storage settings." };
+  }
 
   try {
     const profile = await fetchAuthMe({

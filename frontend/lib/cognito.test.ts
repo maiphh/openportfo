@@ -135,7 +135,10 @@ describe("callback parsing", () => {
   it("rejects open redirects in next", () => {
     expect(safeNextPath("https://evil.test")).toBe("/");
     expect(safeNextPath("//evil.test")).toBe("/");
+    expect(safeNextPath("/\\evil.test")).toBe("/");
+    expect(safeNextPath("/portfolio/\n/evil")).toBe("/");
     expect(safeNextPath("/portfolio/")).toBe("/portfolio/");
+    expect(safeNextPath("/portfolio/?tab=all#summary")).toBe("/portfolio/?tab=all#summary");
   });
 });
 
@@ -158,7 +161,7 @@ describe("completeHostedUiCallback", () => {
 
   it("does not store a token when Cognito returns an error", async () => {
     const result = await completeHostedUiCallback({
-      search: "error=access_denied&error_description=Nope",
+      search: "error=access_denied&error_description=Nope&state=abc",
       config: CONFIG,
       tokenStorage,
       pkceStorage,
@@ -186,6 +189,49 @@ describe("completeHostedUiCallback", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("rejects a stateless OAuth error without consuming a token", async () => {
+    const result = await completeHostedUiCallback({
+      search: "error=access_denied&error_description=Forged",
+      config: CONFIG,
+      tokenStorage,
+      pkceStorage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: false, error: "Invalid sign-in state. Try signing in again." });
+    expect(pkceStorage.getItem(PKCE_STORAGE_KEY)).toContain("session-verifier");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a callback that omits OAuth state", async () => {
+    const result = await completeHostedUiCallback({
+      search: "code=auth-code",
+      config: CONFIG,
+      tokenStorage,
+      pkceStorage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: false, error: "Invalid sign-in state. Try signing in again." });
+    expect(tokenStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(pkceStorage.getItem(PKCE_STORAGE_KEY)).toContain("session-verifier");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a callback with a different OAuth state", async () => {
+    const result = await completeHostedUiCallback({
+      search: "code=auth-code&state=wrong",
+      config: CONFIG,
+      tokenStorage,
+      pkceStorage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: false, error: "Invalid sign-in state. Try signing in again." });
+    expect(pkceStorage.getItem(PKCE_STORAGE_KEY)).toContain("session-verifier");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("does not store a token when the token endpoint fails", async () => {
     fetchImpl.mockResolvedValue(jsonResponse({ error: "invalid_grant", error_description: "Bad code" }, 400));
 
@@ -203,6 +249,62 @@ describe("completeHostedUiCallback", () => {
     expect(url).toBe("https://openportfo.auth.us-east-1.amazoncognito.com/oauth2/token");
     expect(String((init as RequestInit).body)).toContain("code_verifier=session-verifier");
     expect(String((init as RequestInit).body)).not.toContain("attacker");
+  });
+
+  it("claims the PKCE session before exchanging the code", async () => {
+    fetchImpl
+      .mockResolvedValueOnce(jsonResponse({ id_token: "id.jwt" }))
+      .mockResolvedValueOnce(jsonResponse({ userId: "sub-1", email: "ada@example.com" }));
+
+    const first = completeHostedUiCallback({
+      search: "code=auth-code&state=abc",
+      config: CONFIG,
+      tokenStorage,
+      pkceStorage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const second = await completeHostedUiCallback({
+      search: "code=auth-code&state=abc",
+      config: CONFIG,
+      tokenStorage,
+      pkceStorage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(second).toEqual({ ok: false, error: "Sign-in session expired. Try signing in again." });
+    await expect(first).resolves.toMatchObject({ ok: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails before redirecting when PKCE storage is unavailable", async () => {
+    await expect(
+      prepareHostedUiLogin({ config: CONFIG, sessionStorage: null }),
+    ).rejects.toThrow(/browser storage/i);
+  });
+
+  it("reports token storage failures", async () => {
+    const unavailableStorage = {
+      getItem: () => null,
+      removeItem: () => undefined,
+      setItem: () => {
+        throw new Error("Storage disabled");
+      },
+    };
+    fetchImpl.mockResolvedValueOnce(jsonResponse({ id_token: "id.jwt" }));
+
+    const result = await completeHostedUiCallback({
+      search: "code=auth-code&state=abc",
+      config: CONFIG,
+      tokenStorage: unavailableStorage,
+      pkceStorage,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Unable to store the sign-in token. Check browser storage settings.",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("does not store access_token when id_token is missing", async () => {

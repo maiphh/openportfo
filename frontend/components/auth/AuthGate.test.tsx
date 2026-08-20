@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AuthGate from "@/components/auth/AuthGate";
 
@@ -46,5 +46,17 @@ describe("AuthGate", () => {
 
     expect(screen.queryByPlaceholderText(/fake:userId/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("shows an error when Cognito sign-in cannot start", async () => {
+    isCognitoConfiguredMock.mockReturnValue(true);
+    beginHostedUiLoginMock.mockRejectedValue(new Error("Browser storage is disabled"));
+    render(
+      <AuthGate title="Portfolio" description="unused" onTokenSaved={() => undefined} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("Browser storage is disabled")).toBeInTheDocument();
   });
 });

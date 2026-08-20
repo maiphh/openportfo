@@ -87,6 +87,26 @@ describe("fetchAuthMe", () => {
     ).rejects.toMatchObject({ name: "AuthApiError", status: 401, authRequired: true });
     expect(AuthApiError).toBeTypeOf("function");
   });
+
+  it("aborts a profile request that exceeds the timeout", async () => {
+    fetchImpl.mockImplementation((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+      }),
+    );
+
+    await expect(
+      fetchAuthMe({
+        token: "id.token",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        timeoutMs: 1,
+      }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+  });
 });
 
 describe("profileDisplayName", () => {

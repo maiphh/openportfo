@@ -28,6 +28,7 @@ export default function UserMenu({ onSearch }: { onSearch?: () => void }) {
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     setToken(readAuthToken());
@@ -72,8 +73,11 @@ export default function UserMenu({ onSearch }: { onSearch?: () => void }) {
 
   const handleSignIn = () => {
     if (!cognito) return;
+    setLoginError(null);
     void beginHostedUiLogin({
       next: typeof window !== "undefined" ? window.location.pathname : "/",
+    }).catch((err: unknown) => {
+      setLoginError(err instanceof Error ? err.message : "Unable to start sign-in.");
     });
   };
 
@@ -123,13 +127,20 @@ export default function UserMenu({ onSearch }: { onSearch?: () => void }) {
             Logout
           </DropdownMenuItem>
         ) : cognito ? (
-          <DropdownMenuItem onSelect={handleSignIn}>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              // Giữ menu mở để hiển thị lỗi nếu browser chặn PKCE storage.
+              event.preventDefault();
+              handleSignIn();
+            }}
+          >
             <LogIn className="size-4" />
             Sign in
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem disabled>Sign in unavailable</DropdownMenuItem>
         )}
+        {loginError ? <p className="px-2 py-1.5 text-xs text-red-400">{loginError}</p> : null}
         <div className="sm:hidden">
           <DropdownMenuSeparator />
           <NavItems onSearch={onSearch} />

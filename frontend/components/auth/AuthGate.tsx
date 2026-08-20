@@ -19,7 +19,15 @@ export default function AuthGate({
   onTokenSaved: () => void;
 }) {
   const [tokenInput, setTokenInput] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
   const cognito = isCognitoConfigured();
+
+  const startCognitoLogin = () => {
+    setLoginError(null);
+    void beginHostedUiLogin({ next: nextPath }).catch((err: unknown) => {
+      setLoginError(err instanceof Error ? err.message : "Unable to start sign-in.");
+    });
+  };
 
   if (cognito) {
     return (
@@ -29,13 +37,11 @@ export default function AuthGate({
         <Button
           type="button"
           className="mt-4"
-          onClick={() => {
-            void beginHostedUiLogin({ next: nextPath });
-          }}
+          onClick={startCognitoLogin}
         >
           Sign in
         </Button>
-        {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
+        {loginError || error ? <p className="mt-3 text-sm text-red-400">{loginError || error}</p> : null}
       </div>
     );
   }

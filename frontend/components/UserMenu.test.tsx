@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import UserMenu from "@/components/UserMenu";
 import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth";
@@ -31,7 +31,8 @@ vi.mock("@/lib/cognito", async () => {
   };
 });
 
-const { isCognitoConfigured } = await import("@/lib/cognito");
+const { beginHostedUiLogin, isCognitoConfigured } = await import("@/lib/cognito");
+const beginHostedUiLoginMock = vi.mocked(beginHostedUiLogin);
 const isCognitoConfiguredMock = vi.mocked(isCognitoConfigured);
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -45,6 +46,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("UserMenu", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    beginHostedUiLoginMock.mockReset();
     isCognitoConfiguredMock.mockReturnValue(false);
     vi.stubGlobal("fetch", vi.fn());
   });
@@ -93,5 +95,22 @@ describe("UserMenu", () => {
     });
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
     expect(screen.queryByText("phu")).not.toBeInTheDocument();
+  });
+
+  it("shows an error when header sign-in cannot start", async () => {
+    isCognitoConfiguredMock.mockReturnValue(true);
+    beginHostedUiLoginMock.mockRejectedValue(new Error("Browser storage is disabled"));
+    render(<UserMenu />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("user-menu-label")).toHaveTextContent("Sign in");
+    });
+    fireEvent.pointerDown(screen.getByTestId("user-menu-label").closest("button")!, {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Sign in" }));
+
+    expect(await screen.findByText("Browser storage is disabled")).toBeInTheDocument();
   });
 });
