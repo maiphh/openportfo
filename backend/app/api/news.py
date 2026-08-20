@@ -11,6 +11,7 @@ from app.core.deps import get_current_user, get_news_service
 from app.ports.news import NewsItem
 from app.ports.users import UserProfile
 from app.services.news_service import NewsService
+from app.api.schemas import NewsItemResponse
 
 router = APIRouter(tags=["news"])
 
@@ -31,12 +32,15 @@ def news_item_to_dict(item: NewsItem) -> dict[str, Any]:
         "source": item.source,
         "publishedAt": _iso(item.published_at),
         "symbols": list(item.symbols or []),
-        "keywords": list(item.keywords or []),
         "date": item.date,
     }
 
 
-@router.get("/api/news")
+@router.get(
+    "/api/news",
+    response_model=list[NewsItemResponse],
+    response_model_by_alias=True,
+)
 def list_news(
     limit: int = Query(default=50, ge=1, le=200),
     user: UserProfile = Depends(get_current_user),

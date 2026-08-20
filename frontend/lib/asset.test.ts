@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiBase } from "@/lib/api";
 import {
   assetDetailHref,
+  assetCanonicalHref,
   assetDetailQuery,
   buildAssetStats,
   buildExternalLinks,
   fetchAssetDetail,
   fetchAssetHistory,
   historySeries,
+  normalizeAssetId,
   normalizeAssetKind,
+  parseAssetRouteParams,
   parseChartRange,
   AssetApiError,
 } from "@/lib/asset";
@@ -23,18 +26,37 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("assetDetailHref", () => {
-  it("builds crypto and stock detail paths", () => {
-    expect(assetDetailHref("crypto", "btc")).toBe("/crypto/btc");
-    expect(assetDetailHref("stock", "VNM")).toBe("/stock/VNM");
-    expect(assetDetailHref("CRYPTO", "bitcoin")).toBe("/crypto/bitcoin");
+  it("builds canonical crypto and stock query routes", () => {
+    expect(assetDetailHref("crypto", "btc")).toBe("/asset?type=crypto&id=btc");
+    expect(assetDetailHref("stock", "VNM")).toBe("/asset?type=stock&id=VNM");
+    expect(assetCanonicalHref("CRYPTO", "bitcoin")).toBe("/asset?type=crypto&id=bitcoin");
   });
 
-  it("encodes slug segments", () => {
-    expect(assetDetailHref("crypto", "my coin")).toBe("/crypto/my%20coin");
+  it("encodes query ids", () => {
+    expect(assetDetailHref("crypto", "my coin")).toBe("/asset?type=crypto&id=my%20coin");
   });
 
-  it("falls back to stock for unknown type", () => {
-    expect(assetDetailHref("other", "ABC")).toBe("/stock/ABC");
+  it("does not guess a type for invalid input", () => {
+    expect(assetDetailHref("other", "ABC")).toBe("/asset");
+    expect(assetDetailHref("crypto", "")).toBe("/asset");
+  });
+});
+
+describe("asset route params", () => {
+  it("normalizes valid ids and parses the canonical query", () => {
+    expect(normalizeAssetId("  token-with.dots  ")).toBe("token-with.dots");
+    expect(parseAssetRouteParams(new URLSearchParams("type=CRYPTO&id=arbitrary-token-999"))).toEqual({
+      assetType: "crypto",
+      id: "arbitrary-token-999",
+    });
+  });
+
+  it("rejects malformed or path-like query values", () => {
+    expect(normalizeAssetId("/etc/passwd")).toBeNull();
+    expect(normalizeAssetId("\\windows\\path")).toBeNull();
+    expect(normalizeAssetId("\u0000bad")).toBeNull();
+    expect(parseAssetRouteParams(new URLSearchParams("type=fx&id=VNM"))).toBeNull();
+    expect(parseAssetRouteParams(new URLSearchParams("type=stock&id="))).toBeNull();
   });
 });
 

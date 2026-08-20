@@ -42,7 +42,6 @@ def news_to_item(item: NewsItem) -> dict[str, Any]:
             "source": item.source,
             "publishedAt": dt_to_iso(item.published_at),
             "symbols": list(item.symbols or []),
-            "keywords": list(item.keywords or []),
             "date": date,
         }
     )
@@ -56,7 +55,6 @@ def item_to_news(item: dict[str, Any]) -> NewsItem:
         source=str(item.get("source") or ""),
         published_at=iso_to_dt(item.get("publishedAt")),
         symbols=list(item.get("symbols") or []),
-        keywords=list(item.get("keywords") or []),
         date=item.get("date"),
     )
 

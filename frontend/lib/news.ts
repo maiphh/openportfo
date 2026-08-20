@@ -35,14 +35,13 @@ export class NewsApiError extends Error {
 }
 
 export type NewsItemDto = {
-  id?: string;
-  title?: string;
-  url?: string | null;
-  source?: string | null;
-  publishedAt?: string | null;
-  symbols?: string[];
-  keywords?: string[];
-  date?: string | null;
+  id: string;
+  title: string;
+  url: string | null;
+  source: string;
+  publishedAt: string | null;
+  symbols: string[];
+  date: string | null;
 };
 
 export type LinkedSymbol = {

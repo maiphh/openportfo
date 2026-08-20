@@ -9,6 +9,7 @@ import {
   generateCodeChallenge,
   generateCodeVerifier,
   isCognitoConfigured,
+  logoutFromApp,
   parseCallbackSearch,
   prepareHostedUiLogin,
   readCognitoConfig,
@@ -150,6 +151,8 @@ describe("completeHostedUiCallback", () => {
   beforeEach(() => {
     tokenStorage.clear();
     pkceStorage.clear();
+    window.sessionStorage.clear();
+    window.localStorage.clear();
     fetchImpl.mockReset();
     storePkceSession({ verifier: "session-verifier", state: "abc", next: "/portfolio/" }, pkceStorage);
   });
@@ -157,6 +160,8 @@ describe("completeHostedUiCallback", () => {
   afterEach(() => {
     tokenStorage.clear();
     pkceStorage.clear();
+    window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
   it("does not store a token when Cognito returns an error", async () => {
@@ -341,6 +346,27 @@ describe("completeHostedUiCallback", () => {
     expect(String(fetchImpl.mock.calls[1]?.[0])).toMatch(/\/api\/auth\/me$/);
   });
 
+  it("stores callback tokens in sessionStorage and removes a legacy copy", async () => {
+    tokenStorage.clear();
+    pkceStorage.clear();
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+    storePkceSession({ verifier: "session-verifier", state: "abc", next: "/portfolio/" });
+    fetchImpl
+      .mockResolvedValueOnce(jsonResponse({ id_token: "  id.jwt  " }))
+      .mockResolvedValueOnce(jsonResponse({ userId: "sub-1", email: "ada@example.com" }));
+
+    const result = await completeHostedUiCallback({
+      search: "code=auth-code&state=abc",
+      config: CONFIG,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result).toMatchObject({ ok: true, next: "/portfolio/" });
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("id.jwt");
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(PKCE_STORAGE_KEY)).toBeNull();
+  });
+
   it("clears the ID token when /api/auth/me returns 401", async () => {
     fetchImpl
       .mockResolvedValueOnce(jsonResponse({ id_token: "id.jwt" }))
@@ -356,5 +382,14 @@ describe("completeHostedUiCallback", () => {
 
     expect(result.ok).toBe(false);
     expect(tokenStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+  });
+
+  it("logout clears both tab and legacy token stores", () => {
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "session.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+
+    expect(logoutFromApp({ env: {} })).toEqual({ cognitoLogoutUrl: null });
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
   });
 });

@@ -22,7 +22,8 @@ import {
   type DisplayCurrency,
   type FxRatesPayload,
 } from "@/lib/currency";
-import { AUTH_TOKEN_STORAGE_KEY, fetchFxRates, readAuthToken } from "@/lib/fx";
+import { AUTH_TOKEN_STORAGE_KEY, readAuthToken } from "@/lib/auth";
+import { fetchFxRates } from "@/lib/fx";
 
 export type CurrencyContextValue = {
   currency: DisplayCurrency;

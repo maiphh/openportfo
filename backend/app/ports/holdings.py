@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
+from collections.abc import Iterator
 from typing import Literal, Optional, Protocol
 
 AssetType = Literal["crypto", "stock"]
@@ -61,8 +62,24 @@ class HoldingsRepo(Protocol):
         """Return all holdings for ``user_id`` (empty list if none)."""
         ...
 
+    def iter_user_pages(
+        self,
+        *,
+        page_size: Optional[int] = None,
+    ) -> Iterator[list[str]]:
+        """Lazily yield pages of distinct user ids that have holdings.
+
+        Adapters must preserve distinctness across storage pages.  The page
+        size is a storage hint and ``None`` uses the provider default.
+        """
+        ...
+
+    def iter_all_users(self, *, page_size: Optional[int] = None) -> Iterator[str]:
+        """Lazily yield distinct user ids that have holdings (jobs)."""
+        ...
+
     def list_all_users(self) -> list[str]:
-        """Return distinct user ids that have holdings (jobs)."""
+        """Compatibility materializing helper for non-job callers."""
         ...
 
     def get(

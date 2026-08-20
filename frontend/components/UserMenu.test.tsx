@@ -45,6 +45,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("UserMenu", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     window.localStorage.clear();
     beginHostedUiLoginMock.mockReset();
     isCognitoConfiguredMock.mockReturnValue(false);
@@ -53,6 +54,7 @@ describe("UserMenu", () => {
 
   afterEach(() => {
     cleanup();
+    window.sessionStorage.clear();
     window.localStorage.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -69,7 +71,7 @@ describe("UserMenu", () => {
   });
 
   it("loads name and email from GET /api/auth/me", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "id.jwt");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "id.jwt");
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ userId: "sub-1", email: "ada@example.com", name: "Ada Lovelace" }),
     );
@@ -84,7 +86,7 @@ describe("UserMenu", () => {
   });
 
   it("clears a rejected token and does not keep a fake profile", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "stale.jwt");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "stale.jwt");
     isCognitoConfiguredMock.mockReturnValue(true);
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ detail: "Unauthorized" }, 401));
 
@@ -93,6 +95,7 @@ describe("UserMenu", () => {
     await waitFor(() => {
       expect(screen.getByTestId("user-menu-label")).toHaveTextContent("Sign in");
     });
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
     expect(screen.queryByText("phu")).not.toBeInTheDocument();
   });

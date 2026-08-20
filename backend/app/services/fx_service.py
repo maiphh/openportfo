@@ -20,6 +20,7 @@ from app.ports.fx import (
 )
 from app.domain.fx_math import get_rate
 from app.domain.models import FxRates
+from app.services.currency_service import FxContext, fx_context_from_stored, normalize_currency
 
 
 class ConversionError(Exception):
@@ -97,6 +98,10 @@ class FxService:
         """Stored rates only — never calls ExchangeRateClient."""
         return self._repo.get_latest()
 
+    def get_context(self) -> FxContext:
+        """Capture one immutable request/job FX snapshot from the store."""
+        return fx_context_from_stored(self._repo.get_latest())
+
     def convert(self, amount: object, source: str, target: str) -> tuple[Decimal, Decimal]:
         """Convert an amount using stored rates only; never calls the provider."""
         try:
@@ -105,10 +110,11 @@ class FxService:
             raise ConversionError("amount must be a valid number") from exc
         if not value.is_finite() or value < 0:
             raise ConversionError("amount must be a non-negative finite number")
-        src = (source or "").strip().upper()
-        dst = (target or "").strip().upper()
-        if len(src) != 3 or len(dst) != 3:
-            raise ConversionError("source and target must be 3-letter currency codes")
+        try:
+            src = normalize_currency(source, field="sourceCurrency")
+            dst = normalize_currency(target, field="targetCurrency")
+        except ValueError as exc:
+            raise ConversionError(str(exc)) from exc
         stored = self._repo.get_latest()
         if stored is None or stored.status == "missing":
             raise ConversionError("exchange rates are not available")

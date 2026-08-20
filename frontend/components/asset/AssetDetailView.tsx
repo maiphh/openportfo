@@ -54,7 +54,16 @@ export default function AssetDetailView({
   id: string;
 }) {
   const { currency } = useDisplayCurrency();
-  const slug = decodeURIComponent(id);
+  // Query-route ids have already been decoded by URLSearchParams, while the
+  // legacy dynamic routes may still pass an encoded segment. Never let a
+  // malformed percent escape crash the detail page.
+  const slug = (() => {
+    try {
+      return decodeURIComponent(id);
+    } catch {
+      return id;
+    }
+  })();
   const [token, setToken] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);

@@ -7,6 +7,7 @@ Services depend on ports only — boto3 only inside adapters (lazy-imported here
 
 from __future__ import annotations
 
+from threading import RLock
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, status
@@ -63,6 +64,12 @@ _rss_fetcher: Optional[RssFetcher] = None
 _llm_provider: Optional[LlmProvider] = None
 _tool_registry: Optional[ToolRegistry] = None
 
+# Token verifiers own their JWKS client. Keep one verifier per effective auth
+# configuration for the lifetime of this process so requests share the
+# PyJWKClient's JWKS cache instead of rebuilding it for every request.
+_token_verifier_cache: dict[tuple[str, ...], TokenVerifier] = {}
+_token_verifier_cache_lock = RLock()
+
 
 def settings_dep() -> Settings:
     return get_settings()
@@ -87,25 +94,72 @@ def _s3_endpoint(settings: Settings) -> Optional[str]:
     return url or None
 
 
+def _setting_text(value: object, default: str = "") -> str:
+    """Return a normalized string for settings fields and enum values."""
+    value = getattr(value, "value", value)
+    text = str(value or "").strip()
+    return text or default
+
+
+def _token_verifier_cache_key(settings: Settings) -> tuple[str, ...]:
+    """Build the key for the verifier's effective security configuration."""
+    mode = _setting_text(settings.auth_mode, "fake").lower()
+    if mode != "cognito":
+        # FakeTokenVerifier has no settings-dependent state. A single stable
+        # instance also keeps local/test dependency behavior deterministic.
+        return ("fake",)
+
+    return (
+        "cognito",
+        _setting_text(
+            settings.cognito_region or settings.aws_region,
+            "us-east-1",
+        ),
+        _setting_text(settings.cognito_user_pool_id),
+        _setting_text(settings.cognito_app_client_id),
+    )
+
+
 def get_token_verifier(
     settings: Settings = Depends(settings_dep),
 ) -> TokenVerifier:
-    """Factory: FakeTokenVerifier or CognitoJwtVerifier from AUTH_MODE."""
+    """Return a cached FakeTokenVerifier or CognitoJwtVerifier from AUTH_MODE."""
     # Direct call may pass Depends sentinel — resolve safely
     if not isinstance(settings, Settings):
         settings = get_settings()
-    mode = (settings.auth_mode or "fake").lower()
-    if mode == "cognito":
-        from app.adapters.cognito.jwt_verifier import CognitoJwtVerifier
+    key = _token_verifier_cache_key(settings)
 
-        return CognitoJwtVerifier(
-            region=settings.cognito_region or settings.aws_region or "us-east-1",
-            user_pool_id=settings.cognito_user_pool_id,
-            app_client_id=settings.cognito_app_client_id,
-        )
-    from tests.fakes.auth import FakeTokenVerifier
+    with _token_verifier_cache_lock:
+        cached = _token_verifier_cache.get(key)
+        if cached is not None:
+            return cached
 
-    return FakeTokenVerifier()
+        if key[0] == "cognito":
+            from app.adapters.cognito.jwt_verifier import CognitoJwtVerifier
+
+            verifier: TokenVerifier = CognitoJwtVerifier(
+                region=key[1],
+                user_pool_id=key[2],
+                app_client_id=key[3],
+            )
+        else:
+            from app.adapters.memory.auth import FakeTokenVerifier
+
+            verifier = FakeTokenVerifier()
+
+        _token_verifier_cache[key] = verifier
+        return verifier
+
+
+def reset_token_verifier_cache() -> None:
+    """Reset cached token verifiers (primarily useful for tests)."""
+    with _token_verifier_cache_lock:
+        _token_verifier_cache.clear()
+
+
+# Keep the name discoverable alongside ``clear_settings_cache`` for callers
+# that prefer ``clear_*`` terminology while retaining the explicit reset API.
+clear_token_verifier_cache = reset_token_verifier_cache
 
 
 def get_user_profile_repo() -> UserProfileRepo:
@@ -121,7 +175,7 @@ def get_user_profile_repo() -> UserProfileRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.users import InMemoryUserProfileRepo
+            from app.adapters.memory.users import InMemoryUserProfileRepo
 
             _user_profile_repo = InMemoryUserProfileRepo()
     return _user_profile_repo
@@ -193,7 +247,7 @@ def get_holdings_repo() -> HoldingsRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.holdings import InMemoryHoldingsRepo
+            from app.adapters.memory.holdings import InMemoryHoldingsRepo
 
             _holdings_repo = InMemoryHoldingsRepo()
     return _holdings_repo
@@ -217,7 +271,7 @@ def get_watchlist_repo() -> WatchlistRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.watchlist import InMemoryWatchlistRepo
+            from app.adapters.memory.watchlist import InMemoryWatchlistRepo
 
             _watchlist_repo = InMemoryWatchlistRepo()
     return _watchlist_repo
@@ -300,7 +354,7 @@ def get_price_cache_repo() -> PriceCacheRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.price_cache import InMemoryPriceCacheRepo
+            from app.adapters.memory.price_cache import InMemoryPriceCacheRepo
 
             _price_cache_repo = InMemoryPriceCacheRepo()
     return _price_cache_repo
@@ -358,7 +412,7 @@ def get_exchange_rate_repo() -> ExchangeRateRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.fx import InMemoryExchangeRateRepo
+            from app.adapters.memory.fx import InMemoryExchangeRateRepo
 
             _exchange_rate_repo = InMemoryExchangeRateRepo()
     return _exchange_rate_repo
@@ -457,7 +511,7 @@ def get_object_storage() -> ObjectStorage:
                 endpoint_url=_s3_endpoint(settings),
             )
         else:
-            from tests.fakes.storage import InMemoryObjectStorage
+            from app.adapters.memory.storage import InMemoryObjectStorage
 
             _object_storage = InMemoryObjectStorage()
     return _object_storage
@@ -524,7 +578,7 @@ def get_news_repo() -> NewsRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.news import InMemoryNewsRepo
+            from app.adapters.memory.news import InMemoryNewsRepo
 
             _news_repo = InMemoryNewsRepo()
     return _news_repo
@@ -570,7 +624,7 @@ def get_settings_repo() -> SettingsRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.admin import InMemorySettingsRepo
+            from app.adapters.memory.admin import InMemorySettingsRepo
 
             _settings_repo = InMemorySettingsRepo()
     return _settings_repo
@@ -596,7 +650,7 @@ def get_rss_sources_repo() -> RssSourcesRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.admin import InMemoryRssSourcesRepo
+            from app.adapters.memory.admin import InMemoryRssSourcesRepo
 
             _rss_sources_repo = InMemoryRssSourcesRepo()
     return _rss_sources_repo
@@ -620,7 +674,7 @@ def get_job_runs_repo() -> JobRunsRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.admin import InMemoryJobRunsRepo
+            from app.adapters.memory.admin import InMemoryJobRunsRepo
 
             _job_runs_repo = InMemoryJobRunsRepo()
     return _job_runs_repo
@@ -644,7 +698,7 @@ def get_snapshot_repo() -> SnapshotRepo:
                 endpoint_url=_ddb_endpoint(settings),
             )
         else:
-            from tests.fakes.snapshots import InMemorySnapshotRepo
+            from app.adapters.memory.snapshots import InMemorySnapshotRepo
 
             _snapshot_repo = InMemorySnapshotRepo()
     return _snapshot_repo
@@ -677,7 +731,7 @@ def get_rss_fetcher() -> RssFetcher:
 
             _rss_fetcher = HttpRssFetcher()
         else:
-            from tests.fakes.rss import FakeRssFetcher
+            from app.adapters.memory.rss import FakeRssFetcher
 
             _rss_fetcher = FakeRssFetcher()
     return _rss_fetcher

@@ -30,6 +30,7 @@ from app.core.deps import (
 )
 from app.main import create_app
 from app.ports.fx import StoredRates
+from app.ports.market import AssetSearchResult, MarketDataError
 from app.services.asset_detail_service import AssetDetailService
 from app.services.history_service import HistoryService
 from app.services.market_service import MarketService
@@ -136,19 +137,87 @@ def test_crypto_slug_bitcoin_and_profile_cache() -> None:
     assert first.status_code == 200
     assert first.json()["symbol"] == "BTC"
     assert crypto.profile_calls == 1
-    assert crypto.search_calls == 1
+    assert crypto.search_calls == 0
     second = client.get("/api/assets/crypto/bitcoin", headers=_auth())
     assert second.status_code == 200
     assert crypto.profile_calls == 1
-    assert crypto.search_calls == 1
+    assert crypto.search_calls == 0
     via_ticker = client.get("/api/assets/crypto/btc", headers=_auth())
     assert via_ticker.status_code == 200
     assert via_ticker.json()["assetId"] == "bitcoin"
     assert crypto.profile_calls == 1
-    assert crypto.search_calls == 1
+    assert crypto.search_calls == 0
     assert storage.get_json("profile/crypto/bitcoin.json") is not None
     assert storage.get_json("resolve/crypto/bitcoin.json") is not None
     assert storage.get_json("resolve/crypto/btc.json") is not None
+
+
+def test_crypto_provider_id_resolves_outside_browse_cap() -> None:
+    class SlugBlindCappedCryptoClient(FixtureCryptoMarketClient):
+        def search(self, q: str) -> list[AssetSearchResult]:
+            self.search_calls += 1
+            return []
+
+        def list_all(self, *, limit: int = 250) -> list[AssetSearchResult]:
+            return super().list_all(limit=min(limit, 250))
+
+    catalog = [
+        AssetSearchResult(
+            symbol=f"C{i}",
+            name=f"Coin {i}",
+            asset_id=f"coin-{i}",
+            asset_type="crypto",
+            currency="USD",
+        )
+        for i in range(291)
+    ]
+    catalog.append(
+        AssetSearchResult(
+            symbol="BOME",
+            name="BOOK OF MEME",
+            asset_id="book-of-meme",
+            asset_type="crypto",
+            currency="USD",
+        )
+    )
+    crypto = SlugBlindCappedCryptoClient(
+        search_index=catalog,
+        prices={"book-of-meme": (Decimal("0.00123"), "USD")},
+    )
+    client, _, _, storage = _make(crypto=crypto)
+
+    response = client.get("/api/assets/crypto/book-of-meme", headers=_auth())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["assetId"] == "book-of-meme"
+    assert response.json()["symbol"] == "BOME"
+    assert response.json()["quote"]["price"] == "0.00123"
+    assert crypto.profile_calls == 1
+    assert crypto.search_calls == 0
+    assert storage.get_json("resolve/crypto/book-of-meme.json") is not None
+    assert storage.get_json("resolve/crypto/bome.json") is not None
+    assert storage.get_json("profile/crypto/book-of-meme.json") is not None
+
+
+def test_crypto_symbol_falls_back_to_search_when_not_a_provider_id() -> None:
+    class IdOnlyProfileCryptoClient(FixtureCryptoMarketClient):
+        def get_profile(self, id: str):
+            if id.lower() == "btc":
+                self.profile_calls = getattr(self, "profile_calls", 0) + 1
+                self.last_profile_id = id
+                raise MarketDataError("CoinGecko HTTP 404")
+            return super().get_profile(id)
+
+    crypto = IdOnlyProfileCryptoClient()
+    client, _, _, _ = _make(crypto=crypto)
+
+    response = client.get("/api/assets/crypto/btc", headers=_auth())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["assetId"] == "bitcoin"
+    assert response.json()["symbol"] == "BTC"
+    assert crypto.search_calls == 1
+    assert crypto.profile_calls == 2
 
 
 def test_stock_vnm_profile() -> None:

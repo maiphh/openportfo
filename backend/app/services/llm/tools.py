@@ -141,7 +141,6 @@ def _news_item_to_dict(item: NewsItem) -> dict[str, Any]:
         "source": item.source,
         "publishedAt": _iso(item.published_at),
         "symbols": list(item.symbols or []),
-        "keywords": list(item.keywords or []),
         "date": item.date,
     }
 

@@ -4,6 +4,56 @@ import { apiBase } from "@/lib/api";
 
 export const AUTH_TOKEN_STORAGE_KEY = "artryx.accessToken";
 
+type AuthReadStorage = Pick<Storage, "getItem">;
+type AuthWriteStorage = Pick<Storage, "setItem">;
+type AuthClearStorage = Pick<Storage, "removeItem">;
+type BrowserAuthStorage = AuthReadStorage & AuthWriteStorage & AuthClearStorage;
+
+function browserStorage(kind: "sessionStorage" | "localStorage"): BrowserAuthStorage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window[kind];
+  } catch {
+    // Private browsing and restrictive storage policies can throw while the
+    // storage property is being read, before getItem/setItem is called.
+    return null;
+  }
+}
+
+function cleanToken(raw: string | null): string | null {
+  const token = raw?.trim() || "";
+  return token || null;
+}
+
+function readStoredToken(storage: AuthReadStorage | null | undefined): string | null {
+  if (!storage) return null;
+  try {
+    return cleanToken(storage.getItem(AUTH_TOKEN_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredToken(storage: AuthWriteStorage | null | undefined, token: string): boolean {
+  if (!storage) return false;
+  try {
+    storage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removeStoredToken(storage: AuthClearStorage | null | undefined): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures. Auth callers should fail closed without
+    // turning browser privacy settings into an application error.
+  }
+}
+
 export type AuthProfile = {
   userId: string;
   email: string;
@@ -24,44 +74,61 @@ export class AuthApiError extends Error {
 }
 
 export function readAuthToken(
-  storage: Pick<Storage, "getItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
+  storage?: AuthReadStorage | null,
 ): string | null {
-  if (!storage) return null;
-  try {
-    const raw = storage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    return raw?.trim() || null;
-  } catch {
-    return null;
+  // An explicitly supplied store is useful for deterministic callers/tests
+  // and means "read this store". The browser default is sessionStorage.
+  if (storage !== undefined) return readStoredToken(storage);
+
+  const session = browserStorage("sessionStorage");
+  const legacy = browserStorage("localStorage");
+  const sessionToken = readStoredToken(session);
+  const legacyToken = readStoredToken(legacy);
+
+  if (sessionToken) {
+    // Remove a stale copy left by an older release even when the current
+    // session token already exists.
+    if (legacyToken) removeStoredToken(legacy);
+    return sessionToken;
   }
+
+  if (!legacyToken) return null;
+
+  // Migrate the old persistent token only after the tab-scoped write has
+  // succeeded. If storage is unavailable, fail closed and remove the legacy
+  // copy so a bearer token is not kept across browser sessions.
+  if (writeStoredToken(session, legacyToken)) {
+    removeStoredToken(legacy);
+    return legacyToken;
+  }
+
+  removeStoredToken(legacy);
+  return null;
 }
 
 export function writeAuthToken(
   token: string,
-  storage: Pick<Storage, "setItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
+  storage?: AuthWriteStorage | null,
 ): boolean {
-  if (!storage) return false;
   const cleaned = token.trim();
   if (!cleaned) return false;
-  try {
-    storage.setItem(
-      AUTH_TOKEN_STORAGE_KEY,
-      cleaned.startsWith("Bearer ") ? cleaned.slice(7).trim() : cleaned,
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  const normalized = cleaned.startsWith("Bearer ") ? cleaned.slice(7).trim() : cleaned;
+  if (!normalized) return false;
+  if (storage !== undefined) return writeStoredToken(storage, normalized);
+  const stored = writeStoredToken(browserStorage("sessionStorage"), normalized);
+  if (stored) removeStoredToken(browserStorage("localStorage"));
+  return stored;
 }
 
 export function clearAuthToken(
-  storage: Pick<Storage, "removeItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
+  storage?: AuthClearStorage | null,
 ): void {
-  if (!storage) return;
-  try {
-    storage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  } catch {
-    // Ignore.
+  if (storage !== undefined) {
+    removeStoredToken(storage);
+    return;
   }
+  removeStoredToken(browserStorage("sessionStorage"));
+  removeStoredToken(browserStorage("localStorage"));
 }
 
 export function bearerHeader(token: string | null | undefined): Record<string, string> {

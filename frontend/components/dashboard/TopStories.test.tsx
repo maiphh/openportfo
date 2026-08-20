@@ -150,10 +150,10 @@ describe("TopStories", () => {
     });
 
     const vnm = screen.getByRole("link", { name: "VNM" });
-    expect(vnm).toHaveAttribute("href", "/stock/VNM");
+    expect(vnm).toHaveAttribute("href", "/asset?type=stock&id=VNM");
 
     const btc = screen.getByRole("link", { name: "BTC" });
-    expect(btc).toHaveAttribute("href", "/crypto/btc");
+    expect(btc).toHaveAttribute("href", "/asset?type=crypto&id=btc");
 
     expect(screen.queryByRole("link", { name: "UNKNOWN" })).not.toBeInTheDocument();
 

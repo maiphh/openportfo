@@ -133,7 +133,7 @@ def test_fx_latest_keys() -> None:
     assert back.rates["USD_VND"] == Decimal("25000")
 
 
-def test_news_keys_roundtrip() -> None:
+def test_news_mapper_drops_legacy_keywords() -> None:
     n = NewsItem(
         id="abc123",
         title="BTC rises",
@@ -141,15 +141,19 @@ def test_news_keys_roundtrip() -> None:
         source="CoinDesk",
         published_at=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
         symbols=["BTC"],
-        keywords=["btc"],
         date="2026-06-01",
     )
     item = news_to_item(n)
     assert item["pk"] == news_pk("2026-06-01") == "2026-06-01"
     assert item["sk"] == news_sk("CoinDesk", "abc123")
-    back = item_to_news(item)
+    assert "keywords" not in item
+
+    # Existing DynamoDB rows may still carry the old, user-specific field.
+    # Reading one must discard it rather than reintroducing it to NewsItem.
+    back = item_to_news({**item, "keywords": ["private-user-term"]})
     assert back.id == "abc123"
     assert back.title == "BTC rises"
+    assert not hasattr(back, "keywords")
 
 
 def test_job_run_and_snapshot_keys() -> None:

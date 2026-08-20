@@ -37,6 +37,16 @@ export const STOCK_STATIC_SEED = [
   "SAB",
 ] as const;
 
+/**
+ * Compatibility-only params for the legacy `/stock/[id]` and `/crypto/[id]`
+ * pages. The canonical `/asset` page is static and handles arbitrary ids at
+ * runtime, so these seeds are not a correctness or deployment dependency.
+ */
+export function staticAssetParams(market: "crypto" | "stock"): { id: string }[] {
+  const seeds = market === "crypto" ? CRYPTO_STATIC_SEED : STOCK_STATIC_SEED;
+  return seeds.map((id) => ({ id }));
+}
+
 /** Static-export path segment: ASCII only (Windows + prerender-manifest safe). */
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -50,7 +60,8 @@ function addParam(out: Set<string>, raw: unknown) {
   out.add(id);
 }
 
-// Production static export needs a full HOSE/crypto set; allow slower adapters.
+// Optional discovery for callers that want extra legacy compatibility pages.
+// The canonical `/asset` route never calls this at build time.
 const BUILD_FETCH_TIMEOUT_MS = 15_000;
 
 async function fetchJson(url: string): Promise<unknown | null> {
@@ -104,8 +115,9 @@ function collectFromQuotes(body: unknown, out: Set<string>) {
 }
 
 /**
- * IDs for `output: "export"` dynamic routes.
- * Prefers live public `/api/markets/*` at build time; always includes seeds.
+ * Optional IDs for legacy `output: "export"` dynamic routes.
+ * Always includes seeds and opportunistically adds live public market ids.
+ * Canonical links use `/asset`, so this helper is not required for correctness.
  */
 export async function buildStaticAssetParams(
   market: "crypto" | "stock",

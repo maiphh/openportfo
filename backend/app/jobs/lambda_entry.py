@@ -29,10 +29,10 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     # Ensure settings re-read env on cold/warm with config updates
     clear_settings_cache()
     settings = get_settings()
-    # Fail fast if misconfigured for data plane
-    if not settings.aws_adapters_enabled():
-        # Still allow explicit memory for local lambda-like tests
-        pass
+    # Fail fast before constructing any repository or making an AWS call. Local
+    # Lambda-shaped tests remain supported because non-production settings are
+    # intentionally outside the production job validation contract.
+    settings.validate_job_runtime()
     ctx = build_job_context(settings)
     result = job_handler(event or {}, ctx)
     return result

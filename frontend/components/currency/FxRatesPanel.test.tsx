@@ -2,7 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CurrencyProvider } from "@/components/currency/CurrencyProvider";
 import FxRatesPanel from "@/components/currency/FxRatesPanel";
-import { AUTH_TOKEN_STORAGE_KEY, fetchFxRates } from "@/lib/fx";
+import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth";
+import { fetchFxRates } from "@/lib/fx";
 import { formatPrice } from "@/lib/utils";
 
 vi.mock("@/lib/fx", async () => {
@@ -50,6 +51,7 @@ function fetchCallsTo(path: string) {
 
 describe("FxRatesPanel admin refresh", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     window.localStorage.clear();
     fetchFxRatesMock.mockReset();
     fetchFxRatesMock.mockResolvedValue(priorPayload);
@@ -58,14 +60,15 @@ describe("FxRatesPanel admin refresh", () => {
 
   afterEach(() => {
     cleanup();
+    window.sessionStorage.clear();
     window.localStorage.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it("shows Refresh rates only when GET /api/auth/me role is admin", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:user1");
-    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ role: "user" }));
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:user1");
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ role: "user", userId: "user-1" }));
 
     const { unmount } = renderPanel();
 
@@ -77,8 +80,8 @@ describe("FxRatesPanel admin refresh", () => {
 
     unmount();
 
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:admin1");
-    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ role: "admin" }));
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:admin1");
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ role: "admin", userId: "admin-1" }));
     renderPanel();
 
     await waitFor(() => {
@@ -98,10 +101,10 @@ describe("FxRatesPanel admin refresh", () => {
   });
 
   it("POSTs /api/admin/fx/refresh and replaces panel rates on success", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:admin1");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:admin1");
     vi.mocked(global.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/api/auth/me")) return jsonResponse({ role: "admin" });
+      if (url.includes("/api/auth/me")) return jsonResponse({ role: "admin", userId: "admin-1" });
       if (url.includes("/api/admin/fx/refresh")) {
         return jsonResponse({
           base: "USD",
@@ -135,10 +138,10 @@ describe("FxRatesPanel admin refresh", () => {
   });
 
   it("keeps prior rates and shows detail on 502", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:admin1");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:admin1");
     vi.mocked(global.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/api/auth/me")) return jsonResponse({ role: "admin" });
+      if (url.includes("/api/auth/me")) return jsonResponse({ role: "admin", userId: "admin-1" });
       if (url.includes("/api/admin/fx/refresh")) {
         return jsonResponse(
           {

@@ -11,21 +11,14 @@ import {
 } from "@/lib/watchlist";
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
+  return new Response(JSON.stringify(body), {
     status,
-    json: async () => body,
-  } as Response;
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function emptyResponse(status: number): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => {
-      throw new Error("no body");
-    },
-  } as Response;
+  return new Response(null, { status });
 }
 
 const sampleItem = {

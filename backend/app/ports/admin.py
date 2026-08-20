@@ -7,6 +7,9 @@ from datetime import datetime
 from typing import Any, Literal, Optional, Protocol
 
 
+JobStatus = Literal["success", "partial", "error", "skipped"]
+
+
 @dataclass
 class SystemSettings:
     """Singleton SETTINGS/GLOBAL."""
@@ -34,7 +37,10 @@ class RssSource:
 class JobRun:
     run_id: str
     job_type: str
-    status: str  # success|error|skipped
+    # ``partial`` is used when independent work units mixed success and
+    # failure.  ``error`` means every attempted unit failed; ``skipped`` is
+    # reserved for a disabled job.
+    status: JobStatus | str
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     message: Optional[str] = None
@@ -88,6 +94,7 @@ class JobRunsRepo(Protocol):
 
 __all__ = [
     "SystemSettings",
+    "JobStatus",
     "RssSource",
     "JobRun",
     "AdminValidationError",

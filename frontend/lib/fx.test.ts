@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiBase } from "@/lib/api";
-import { AUTH_TOKEN_STORAGE_KEY, fetchAuthMe, fetchFxRates, readAuthToken, refreshFxRates } from "@/lib/fx";
+import { AUTH_TOKEN_STORAGE_KEY, fetchAuthMe, readAuthToken } from "@/lib/auth";
+import { fetchFxRates, refreshFxRates } from "@/lib/fx";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -18,13 +19,16 @@ describe("fetchFxRates", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
-  it("reads optional auth token from localStorage", () => {
-    expect(readAuthToken(window.localStorage)).toBeNull();
+  it("reads optional auth token from sessionStorage and migrates legacy localStorage", () => {
+    expect(readAuthToken()).toBeNull();
     window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, " fake:u1 ");
-    expect(readAuthToken(window.localStorage)).toBe("fake:u1");
+    expect(readAuthToken()).toBe("fake:u1");
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("fake:u1");
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
   });
 
   it("marks authRequired on 401", async () => {
@@ -66,9 +70,10 @@ describe("fetchAuthMe", () => {
   });
 
   it("returns role from GET /api/auth/me", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ role: "admin", userId: "a1" }));
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ role: "admin", userId: "a1", email: "admin@example.com", name: "Admin" }),
+    );
     const result = await fetchAuthMe({ token: "fake:admin1" });
-    expect(result.ok).toBe(true);
     expect(result.role).toBe("admin");
     expect(vi.mocked(global.fetch).mock.calls[0]?.[0]).toBe(`${apiBase()}/api/auth/me`);
     const init = vi.mocked(global.fetch).mock.calls[0]?.[1] as RequestInit;

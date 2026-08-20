@@ -80,8 +80,23 @@ export type AssetHistoryDto = {
   nativeCurrency: string;
   displayCurrency: string;
   source?: string | null;
+  stale?: boolean;
+  cachedAt?: string | null;
+  expiresAt?: string | null;
   points: HistoryPoint[];
   fx?: AssetFxDto | null;
+};
+
+/** Legacy history route DTO (`/api/assets/{assetId}/history`). */
+export type LegacyAssetHistoryDto = {
+  assetId: string;
+  range: ChartRange | string;
+  type: AssetKind;
+  source: string;
+  stale: boolean;
+  cachedAt?: string | null;
+  expiresAt?: string | null;
+  points: HistoryPoint[];
 };
 
 export type AssetDetailDto = {
@@ -120,13 +135,55 @@ export function normalizeAssetKind(value: string | null | undefined): AssetKind 
   return null;
 }
 
-/** Build `/crypto/{id}` or `/stock/{id}` for shared AssetLink click-through. */
-export function assetDetailHref(assetType: AssetKind | string, id: string): string {
-  const kind = normalizeAssetKind(assetType) ?? "stock";
-  const slug = String(id || "").trim();
-  if (!slug) return `/${kind}`;
-  return `/${kind}/${encodeURIComponent(slug)}`;
+/**
+ * Asset ids are provider slugs/symbols, not filesystem paths. Keep the
+ * canonical query route bounded and reject values that could become another
+ * path segment or contain control characters. Unicode is allowed here: the
+ * query route does not have the static-export filesystem restrictions of the
+ * legacy dynamic routes.
+ */
+export function normalizeAssetId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const id = value.trim();
+  if (
+    !id ||
+    id.length > 128 ||
+    id === "." ||
+    id === ".." ||
+    /[\u0000-\u001f\u007f]/.test(id) ||
+    id.includes("/") ||
+    id.includes("\\")
+  ) {
+    return null;
+  }
+  return id;
 }
+
+export type AssetRouteParams = {
+  assetType: AssetKind;
+  id: string;
+};
+
+/** Parse and validate `/asset?type=...&id=...` query parameters. */
+export function parseAssetRouteParams(
+  params: Pick<URLSearchParams, "get">,
+): AssetRouteParams | null {
+  const assetType = normalizeAssetKind(params.get("type"));
+  const id = normalizeAssetId(params.get("id"));
+  if (!assetType || !id) return null;
+  return { assetType, id };
+}
+
+/** Build the canonical static-export-safe `/asset?type=...&id=...` URL. */
+export function assetDetailHref(assetType: AssetKind | string, id: string): string {
+  const kind = normalizeAssetKind(assetType);
+  const slug = normalizeAssetId(id);
+  if (!kind || !slug) return "/asset";
+  return `/asset?type=${kind}&id=${encodeURIComponent(slug)}`;
+}
+
+/** Descriptive alias for callers that need to emphasize canonical routing. */
+export const assetCanonicalHref = assetDetailHref;
 
 export function parseChartRange(value: string | null | undefined): ChartRange {
   const raw = (value || "").trim().toLowerCase();
@@ -202,6 +259,7 @@ export async function fetchAssetHistory(options: {
   slug: string;
   currency: DisplayCurrency;
   range: ChartRange;
+  force?: boolean;
   token?: string | null;
   signal?: AbortSignal;
 }): Promise<AssetHistoryDto> {
@@ -209,6 +267,7 @@ export async function fetchAssetHistory(options: {
     range: options.range,
     currency: displayCurrencyQuery(options.currency),
   });
+  if (options.force) qs.set("force", "true");
   return apiFetch<AssetHistoryDto>(
     `/api/assets/${encodeURIComponent(options.assetType)}/${encodeURIComponent(options.slug)}/history?${qs}`,
     { token: options.token, signal: options.signal },

@@ -25,7 +25,10 @@ Static export (`output: "export"`) is enabled on **`next build` only** (for S3 +
 npm run build
 ```
 
-Output is written to `out/`. Asset detail HTML is generated from `generateStaticParams()` (markets API + seed fallbacks).
+Output is written to `out/`. Asset detail links use the universal static
+`/asset?type=...&id=...` route, which resolves arbitrary ids in the browser.
+The legacy `/stock/[id]` and `/crypto/[id]` paths remain available for seeded
+compatibility links and no longer require a live markets API during the build.
 
 ## Auth (Cognito Hosted UI)
 

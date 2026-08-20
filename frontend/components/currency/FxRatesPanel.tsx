@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { Button } from "@/components/ui/button";
-import { fetchAuthMe, readAuthToken, refreshFxRates } from "@/lib/fx";
+import { fetchAuthMe, readAuthToken } from "@/lib/auth";
+import { refreshFxRates } from "@/lib/fx";
 import { formatPrice } from "@/lib/utils";
 
 function formatAsOf(asOf: string | null): string {
@@ -58,7 +59,7 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
 
     void fetchAuthMe({ token })
       .then((me) => {
-        if (!cancelled) setIsAdmin(me.ok && me.role === "admin");
+        if (!cancelled) setIsAdmin(me.role === "admin");
       })
       .catch(() => {
         if (!cancelled) setIsAdmin(false);

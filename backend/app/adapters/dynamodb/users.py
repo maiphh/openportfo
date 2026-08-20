@@ -6,6 +6,7 @@ PK: userId
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Optional, Sequence
 
 from app.adapters.dynamodb.base import (
@@ -16,6 +17,7 @@ from app.adapters.dynamodb.base import (
     utc_now,
 )
 from app.ports.users import Role, UserProfile
+from app.services.currency_service import normalize_stored_currency
 
 
 def profile_to_item(profile: UserProfile) -> dict[str, Any]:
@@ -28,7 +30,7 @@ def profile_to_item(profile: UserProfile) -> dict[str, Any]:
             "role": profile.role,
             "newsKeywords": list(profile.news_keywords or []),
             "emailOptIn": bool(profile.email_opt_in),
-            "preferredCurrency": (profile.preferred_currency or "").strip() or None,
+            "preferredCurrency": normalize_stored_currency(profile.preferred_currency),
             "createdAt": dt_to_iso(profile.created_at),
             "updatedAt": dt_to_iso(profile.updated_at),
         }
@@ -44,7 +46,7 @@ def item_to_profile(item: dict[str, Any]) -> UserProfile:
         role=item.get("role") or "user",  # type: ignore[arg-type]
         news_keywords=list(item.get("newsKeywords") or []),
         email_opt_in=bool(item.get("emailOptIn", False)),
-        preferred_currency=(str(item.get("preferredCurrency") or "").strip() or None),
+        preferred_currency=normalize_stored_currency(item.get("preferredCurrency")),
         created_at=iso_to_dt(item.get("createdAt")) or utc_now(),
         updated_at=iso_to_dt(item.get("updatedAt")) or utc_now(),
     )
@@ -118,7 +120,7 @@ class DynamoUserProfileRepo:
         if email_opt_in is not None:
             profile.email_opt_in = email_opt_in
         if preferred_currency is not None:
-            profile.preferred_currency = preferred_currency
+            profile.preferred_currency = normalize_stored_currency(preferred_currency)
         profile.updated_at = utc_now()
         self._table.put_item(Item=profile_to_item(profile))
         return profile
@@ -132,17 +134,42 @@ class DynamoUserProfileRepo:
         self._table.put_item(Item=profile_to_item(profile))
         return profile
 
+    def iter_pages(
+        self,
+        *,
+        page_size: Optional[int] = None,
+    ) -> Iterator[list[UserProfile]]:
+        """Yield one DynamoDB scan page at a time.
+
+        DynamoDB's ``LastEvaluatedKey`` is an opaque cursor and must be sent
+        back as ``ExclusiveStartKey`` on the next scan.  Keeping the cursor
+        local to this generator makes pagination correct without retaining
+        prior pages in the job process.
+        """
+        kwargs: dict[str, Any] = {}
+        if page_size is not None:
+            kwargs["Limit"] = max(1, int(page_size))
+
+        while True:
+            response = self._table.scan(**kwargs)
+            page = [item_to_profile(item) for item in response.get("Items") or []]
+            if page:
+                yield page
+            cursor = response.get("LastEvaluatedKey")
+            if not cursor:
+                return
+            kwargs = {"ExclusiveStartKey": cursor}
+            if page_size is not None:
+                kwargs["Limit"] = max(1, int(page_size))
+
+    def iter_all(self, *, page_size: Optional[int] = None) -> Iterator[UserProfile]:
+        """Lazily scan all profiles, releasing each page after consumption."""
+        for page in self.iter_pages(page_size=page_size):
+            yield from page
+
     def list_all(self) -> list[UserProfile]:
-        """Scan all profiles (jobs: news keywords / snapshots). Demo-scale OK."""
-        items: list[UserProfile] = []
-        resp = self._table.scan()
-        for item in resp.get("Items") or []:
-            items.append(item_to_profile(item))
-        while resp.get("LastEvaluatedKey"):
-            resp = self._table.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
-            for item in resp.get("Items") or []:
-                items.append(item_to_profile(item))
-        return items
+        """Compatibility materializing helper for non-job callers."""
+        return list(self.iter_all())
 
 
 __all__ = ["DynamoUserProfileRepo", "profile_to_item", "item_to_profile"]

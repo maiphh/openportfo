@@ -1,8 +1,6 @@
 import { apiBase } from "@/lib/api";
-import { AUTH_TOKEN_STORAGE_KEY, bearerHeader, readAuthToken } from "@/lib/auth";
+import { bearerHeader } from "@/lib/auth";
 import { emptyFxRates, type FxRatesPayload } from "@/lib/currency";
-
-export { AUTH_TOKEN_STORAGE_KEY, readAuthToken };
 
 export type FetchFxRatesResult = {
   data: FxRatesPayload;
@@ -10,12 +8,6 @@ export type FetchFxRatesResult = {
   status: number;
   /** True when API rejected for missing/invalid auth. */
   authRequired: boolean;
-};
-
-export type FetchAuthMeResult = {
-  role: string | null;
-  ok: boolean;
-  status: number;
 };
 
 export type RefreshFxRatesResult = {
@@ -71,26 +63,6 @@ async function readJson(res: Response): Promise<unknown> {
   } catch {
     return null;
   }
-}
-
-export async function fetchAuthMe(options?: {
-  token?: string | null;
-  signal?: AbortSignal;
-}): Promise<FetchAuthMeResult> {
-  const res = await fetch(`${apiBase()}/api/auth/me`, {
-    method: "GET",
-    headers: authHeaders(options?.token),
-    signal: options?.signal,
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    return { role: null, ok: false, status: res.status };
-  }
-
-  const body = await readJson(res);
-  const role = isRecord(body) && typeof body.role === "string" ? body.role : null;
-  return { role, ok: true, status: res.status };
 }
 
 export async function fetchFxRates(options?: {

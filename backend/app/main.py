@@ -25,10 +25,8 @@ from app.core.config import get_settings
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    settings.validate_api_runtime()
     env = (settings.app_env or "").strip().lower()
-    auth_mode = (settings.auth_mode or "").strip().lower()
-    if env == "prod" and auth_mode != "cognito":
-        raise RuntimeError("AUTH_MODE must be cognito when APP_ENV=prod")
 
     app = FastAPI(title=settings.app_name, version="0.1.0")
 

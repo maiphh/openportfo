@@ -45,8 +45,8 @@ describe("WatchlistTable", () => {
       />,
     );
 
-    expect(screen.getByRole("link", { name: /BTC/ })).toHaveAttribute("href", "/crypto/bitcoin");
-    expect(screen.getByRole("link", { name: /VNM/ })).toHaveAttribute("href", "/stock/VNM");
+    expect(screen.getByRole("link", { name: /BTC/ })).toHaveAttribute("href", "/asset?type=crypto&id=bitcoin");
+    expect(screen.getByRole("link", { name: /VNM/ })).toHaveAttribute("href", "/asset?type=stock&id=VNM");
   });
 
   it("converts native quotes into the session currency", () => {

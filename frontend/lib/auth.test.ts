@@ -20,16 +20,19 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("auth token storage", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     window.localStorage.clear();
   });
 
   afterEach(() => {
+    window.sessionStorage.clear();
     window.localStorage.clear();
   });
 
-  it("stores a trimmed ID token under artryx.accessToken", () => {
-    writeAuthToken("  eyJid.token  ");
-    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("eyJid.token");
+  it("stores a trimmed ID token in sessionStorage", () => {
+    expect(writeAuthToken("  eyJid.token  ")).toBe(true);
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("eyJid.token");
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
     expect(readAuthToken()).toBe("eyJid.token");
   });
 
@@ -39,14 +42,51 @@ describe("auth token storage", () => {
   });
 
   it("does not persist an empty token", () => {
-    writeAuthToken("   ");
+    expect(writeAuthToken("   ")).toBe(false);
     expect(readAuthToken()).toBeNull();
   });
 
-  it("clears the stored token", () => {
-    writeAuthToken("keep");
+  it("migrates a legacy localStorage token once", () => {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, " legacy.jwt ");
+
+    expect(readAuthToken()).toBe("legacy.jwt");
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("legacy.jwt");
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+  });
+
+  it("prefers the session token and removes a stale legacy copy", () => {
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "session.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+
+    expect(readAuthToken()).toBe("session.jwt");
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+  });
+
+  it("clears the stored token from both browser stores", () => {
+    writeAuthToken("session.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
     clearAuthToken();
     expect(readAuthToken()).toBeNull();
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+  });
+
+  it("fails safely when a supplied storage is unavailable", () => {
+    const unavailable = {
+      setItem: () => {
+        throw new Error("Storage disabled");
+      },
+      removeItem: () => {
+        throw new Error("Storage disabled");
+      },
+      getItem: () => {
+        throw new Error("Storage disabled");
+      },
+    };
+
+    expect(writeAuthToken("id.jwt", unavailable)).toBe(false);
+    expect(readAuthToken(unavailable)).toBeNull();
+    expect(() => clearAuthToken(unavailable)).not.toThrow();
   });
 });
 

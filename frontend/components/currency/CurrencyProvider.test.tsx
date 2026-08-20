@@ -2,7 +2,8 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CurrencyProvider, useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { DISPLAY_CURRENCY_STORAGE_KEY, type DisplayCurrency } from "@/lib/currency";
-import { AUTH_TOKEN_STORAGE_KEY, fetchFxRates } from "@/lib/fx";
+import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth";
+import { fetchFxRates } from "@/lib/fx";
 
 vi.mock("@/lib/fx", async () => {
   const actual = await vi.importActual<typeof import("@/lib/fx")>("@/lib/fx");
@@ -47,6 +48,7 @@ function Probe() {
 
 describe("CurrencyProvider", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     window.localStorage.clear();
     latestSetCurrency = null;
     latestRefresh = null;
@@ -56,6 +58,7 @@ describe("CurrencyProvider", () => {
 
   afterEach(() => {
     cleanup();
+    window.sessionStorage.clear();
     window.localStorage.clear();
     latestSetCurrency = null;
     latestRefresh = null;
@@ -148,7 +151,7 @@ describe("CurrencyProvider", () => {
     });
     const callsAfterMount = fetchFxRatesMock.mock.calls.length;
 
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:u1");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:u1");
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });

@@ -17,7 +17,6 @@ class NewsItem:
     source: str
     published_at: Optional[datetime] = None
     symbols: list[str] = field(default_factory=list)
-    keywords: list[str] = field(default_factory=list)
     date: Optional[str] = None  # YYYY-MM-DD
 
 

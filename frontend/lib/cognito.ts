@@ -29,6 +29,15 @@ export type PkceSession = {
 type EnvLike = Record<string, string | undefined>;
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+function browserSessionStorage(): StorageLike | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 function publicCognitoEnv(): EnvLike {
   return {
     NEXT_PUBLIC_COGNITO_DOMAIN: process.env.NEXT_PUBLIC_COGNITO_DOMAIN,
@@ -127,11 +136,12 @@ export async function generateCodeChallenge(
 
 export function storePkceSession(
   session: PkceSession,
-  storage: StorageLike | null | undefined = typeof window !== "undefined" ? window.sessionStorage : null,
+  storage?: StorageLike | null,
 ): boolean {
-  if (!storage) return false;
+  const target = storage === undefined ? browserSessionStorage() : storage;
+  if (!target) return false;
   try {
-    storage.setItem(PKCE_STORAGE_KEY, JSON.stringify(session));
+    target.setItem(PKCE_STORAGE_KEY, JSON.stringify(session));
     return true;
   } catch {
     return false;
@@ -139,11 +149,12 @@ export function storePkceSession(
 }
 
 export function readPkceSession(
-  storage: StorageLike | null | undefined = typeof window !== "undefined" ? window.sessionStorage : null,
+  storage?: StorageLike | null,
 ): PkceSession | null {
-  if (!storage) return null;
+  const source = storage === undefined ? browserSessionStorage() : storage;
+  if (!source) return null;
   try {
-    const raw = storage.getItem(PKCE_STORAGE_KEY);
+    const raw = source.getItem(PKCE_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PkceSession>;
     if (!parsed.verifier?.trim() || !parsed.state?.trim()) return null;
@@ -158,11 +169,12 @@ export function readPkceSession(
 }
 
 export function clearPkceSession(
-  storage: StorageLike | null | undefined = typeof window !== "undefined" ? window.sessionStorage : null,
+  storage?: StorageLike | null,
 ): void {
-  if (!storage) return;
+  const target = storage === undefined ? browserSessionStorage() : storage;
+  if (!target) return;
   try {
-    storage.removeItem(PKCE_STORAGE_KEY);
+    target.removeItem(PKCE_STORAGE_KEY);
   } catch {
     // Ignore.
   }
@@ -301,9 +313,11 @@ export async function completeHostedUiCallback(options: {
   fetchImpl?: typeof fetch;
 }): Promise<{ ok: true; next: string; profile: AuthProfile | null } | { ok: false; error: string }> {
   const pkceStorage =
-    options.pkceStorage ?? (typeof window !== "undefined" ? window.sessionStorage : null);
-  const tokenStorage =
-    options.tokenStorage ?? (typeof window !== "undefined" ? window.localStorage : null);
+    options.pkceStorage !== undefined ? options.pkceStorage : browserSessionStorage();
+  // Leaving tokenStorage undefined delegates to the canonical auth helper,
+  // which writes to tab-scoped sessionStorage. A supplied store remains
+  // available for deterministic callers and tests.
+  const tokenStorage = options.tokenStorage;
   const parsed = parseCallbackSearch(options.search);
   const session = readPkceSession(pkceStorage);
   const finishError = (error: string): { ok: false; error: string } => {

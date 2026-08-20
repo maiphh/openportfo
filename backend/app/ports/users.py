@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from collections.abc import Iterator
 from typing import Literal, Optional, Protocol, Sequence
 
 Role = Literal["user", "admin"]
@@ -59,6 +60,24 @@ class UserProfileRepo(Protocol):
         """Set role (admin bootstrap in tests/ops). Raises KeyError if missing."""
         ...
 
+    def iter_pages(
+        self,
+        *,
+        page_size: Optional[int] = None,
+    ) -> Iterator[list[UserProfile]]:
+        """Lazily yield profile pages for scheduled jobs.
+
+        ``page_size`` is a storage-adapter hint.  ``None`` leaves the
+        provider's natural page size unchanged.  Pages are intentionally
+        short-lived so a job does not need to hold the complete user table in
+        memory.
+        """
+        ...
+
+    def iter_all(self, *, page_size: Optional[int] = None) -> Iterator[UserProfile]:
+        """Lazily yield all profiles (jobs: news keywords / snapshots)."""
+        ...
+
     def list_all(self) -> list[UserProfile]:
-        """Return all profiles (jobs: news keywords / snapshots)."""
+        """Compatibility materializing helper for non-job callers."""
         ...

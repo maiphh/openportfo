@@ -15,10 +15,13 @@ def _matches(item: NewsItem, needles: Sequence[str]) -> bool:
         return True
     title = (item.title or "").lower()
     item_syms = {s.lower() for s in (item.symbols or [])}
-    item_kw = {k.lower() for k in (item.keywords or [])}
     for n in needles:
         n_l = n.lower()
-        if n_l in title or n_l in item_syms or n_l in item_kw:
+        # User-configured keywords are private query input.  They must never
+        # be copied to, or read from, shared NewsItem records.  Matching the
+        # public title keeps a user's own keyword useful while ignoring the
+        # legacy DynamoDB ``keywords`` attribute entirely.
+        if n_l in title or n_l in item_syms:
             return True
     return False
 

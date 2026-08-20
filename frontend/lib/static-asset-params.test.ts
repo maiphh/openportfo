@@ -3,6 +3,7 @@ import {
   CRYPTO_STATIC_SEED,
   STOCK_STATIC_SEED,
   buildStaticAssetParams,
+  staticAssetParams,
 } from "@/lib/static-asset-params";
 
 afterEach(() => {
@@ -10,6 +11,11 @@ afterEach(() => {
 });
 
 describe("buildStaticAssetParams", () => {
+  it("keeps compatibility params deterministic and seed-only", () => {
+    expect(staticAssetParams("stock")).toEqual(STOCK_STATIC_SEED.map((id) => ({ id })));
+    expect(staticAssetParams("crypto")).toEqual(CRYPTO_STATIC_SEED.map((id) => ({ id })));
+  });
+
   it(
     "always includes crypto seeds even when markets API is down",
     async () => {

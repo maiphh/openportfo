@@ -1,9 +1,9 @@
 import AssetDetailView from "@/components/asset/AssetDetailView";
-import { buildStaticAssetParams } from "@/lib/static-asset-params";
+import { staticAssetParams } from "@/lib/static-asset-params";
 
-/** Required for `output: "export"` dynamic routes. */
-export async function generateStaticParams() {
-  return buildStaticAssetParams("crypto");
+/** Seeded compatibility paths; canonical links use `/asset?type=crypto&id=...`. */
+export function generateStaticParams() {
+  return staticAssetParams("crypto");
 }
 
 export default async function CryptoAssetPage({

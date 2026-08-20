@@ -7,6 +7,7 @@ PK: userId  SK: HOLD#{assetType}#{symbol}
 from __future__ import annotations
 
 from decimal import Decimal
+from collections.abc import Iterator
 from typing import Any, Optional
 
 from boto3.dynamodb.conditions import Key
@@ -90,22 +91,55 @@ class DynamoHoldingsRepo:
             items.extend(item_to_holding(i) for i in resp.get("Items") or [])
         return sorted(items, key=lambda h: (h.asset_type, h.symbol))
 
+    def iter_user_pages(
+        self,
+        *,
+        page_size: Optional[int] = None,
+    ) -> Iterator[list[str]]:
+        """Yield distinct holding-user ids from paginated projection scans.
+
+        A user can occur on multiple DynamoDB scan pages because the table is
+        keyed by ``(userId, sk)``.  ``seen`` spans pages so callers never
+        process a user twice, while only one small page of output is yielded
+        at a time.
+        """
+        kwargs: dict[str, Any] = {"ProjectionExpression": "userId"}
+        if page_size is not None:
+            kwargs["Limit"] = max(1, int(page_size))
+        seen: set[str] = set()
+
+        while True:
+            response = self._table.scan(**kwargs)
+            page: list[str] = []
+            for item in response.get("Items") or []:
+                if "userId" not in item:
+                    continue
+                user_id = str(item["userId"])
+                if user_id in seen:
+                    continue
+                seen.add(user_id)
+                page.append(user_id)
+            if page:
+                yield page
+
+            cursor = response.get("LastEvaluatedKey")
+            if not cursor:
+                return
+            kwargs = {
+                "ProjectionExpression": "userId",
+                "ExclusiveStartKey": cursor,
+            }
+            if page_size is not None:
+                kwargs["Limit"] = max(1, int(page_size))
+
+    def iter_all_users(self, *, page_size: Optional[int] = None) -> Iterator[str]:
+        """Lazily yield distinct user ids that have at least one holding."""
+        for page in self.iter_user_pages(page_size=page_size):
+            yield from page
+
     def list_all_users(self) -> list[str]:
-        """Job helper: distinct user ids with holdings (scan, demo-scale)."""
-        user_ids: set[str] = set()
-        resp = self._table.scan(ProjectionExpression="userId")
-        for item in resp.get("Items") or []:
-            if "userId" in item:
-                user_ids.add(str(item["userId"]))
-        while resp.get("LastEvaluatedKey"):
-            resp = self._table.scan(
-                ProjectionExpression="userId",
-                ExclusiveStartKey=resp["LastEvaluatedKey"],
-            )
-            for item in resp.get("Items") or []:
-                if "userId" in item:
-                    user_ids.add(str(item["userId"]))
-        return sorted(user_ids)
+        """Compatibility materializing helper for non-job callers."""
+        return sorted(self.iter_all_users())
 
     def get(
         self,

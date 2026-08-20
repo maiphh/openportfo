@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -94,6 +94,8 @@ def test_hit_skips_market() -> None:
             "range": "30d",
             "type": "crypto",
             "points": [{"t": "2026-08-01T00:00:00+00:00", "price": "64000"}],
+            "cachedAt": "2026-08-20T00:00:00+00:00",
+            "expiresAt": "2099-01-01T00:00:00+00:00",
         },
     )
     crypto = FixtureCryptoMarketClient()
@@ -106,6 +108,97 @@ def test_hit_skips_market() -> None:
     assert r.status_code == 200
     assert r.json()["source"] == "cache"
     assert getattr(crypto, "chart_calls", 0) == 0
+    assert storage.put_calls == 0
+
+
+def test_expired_cache_refreshes_and_force_bypasses_fresh_cache() -> None:
+    now = [datetime(2026, 8, 20, tzinfo=timezone.utc)]
+    storage = InMemoryObjectStorage()
+    crypto = FixtureCryptoMarketClient()
+    stock = FixtureStockMarketClient()
+    crypto.set_chart(
+        "bitcoin",
+        "7d",
+        [{"t": now[0], "price": Decimal("65000")}],
+    )
+    service = HistoryService(
+        storage,
+        crypto,
+        stock,
+        ttl_seconds=60,
+        clock=lambda: now[0],
+    )
+
+    first = service.get_history(asset_id="bitcoin", asset_type="crypto", range_="7d")
+    assert first["source"] == "live"
+    assert first["stale"] is False
+    assert first["cachedAt"] == "2026-08-20T00:00:00+00:00"
+    assert first["expiresAt"] == "2026-08-20T00:01:00+00:00"
+    assert crypto.chart_calls == 1
+
+    # A fresh cache is used without another provider call.
+    cached = service.get_history(asset_id="bitcoin", asset_type="crypto", range_="7d")
+    assert cached["source"] == "cache"
+    assert crypto.chart_calls == 1
+
+    # Once expired, the next request revalidates and writes a new expiry.
+    now[0] += timedelta(seconds=61)
+    crypto.set_chart(
+        "bitcoin",
+        "7d",
+        [{"t": now[0], "price": Decimal("66000")}],
+    )
+    refreshed = service.get_history(asset_id="bitcoin", asset_type="crypto", range_="7d")
+    assert refreshed["source"] == "live"
+    assert refreshed["stale"] is False
+    assert refreshed["points"][0]["price"] == "66000"
+    assert refreshed["expiresAt"] == "2026-08-20T00:02:01+00:00"
+    assert crypto.chart_calls == 2
+
+    # Explicit force refresh bypasses even the newly-fresh cache.
+    crypto.set_chart(
+        "bitcoin",
+        "7d",
+        [{"t": now[0], "price": Decimal("67000")}],
+    )
+    forced = service.get_history(
+        asset_id="bitcoin",
+        asset_type="crypto",
+        range_="7d",
+        force=True,
+    )
+    assert forced["source"] == "live"
+    assert forced["points"][0]["price"] == "67000"
+    assert crypto.chart_calls == 3
+
+
+def test_legacy_cache_is_expired_and_provider_failure_returns_stale_last_good() -> None:
+    now = datetime(2026, 8, 20, tzinfo=timezone.utc)
+    storage = InMemoryObjectStorage()
+    key = build_history_key("crypto", "bitcoin", "7d")
+    storage.seed(
+        key,
+        {
+            "assetId": "bitcoin",
+            "range": "7d",
+            "type": "crypto",
+            "points": [{"t": "2026-08-01T00:00:00+00:00", "price": "64000"}],
+        },
+    )
+    crypto = FixtureCryptoMarketClient()
+    crypto.get_market_chart = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("down"))
+    service = HistoryService(
+        storage,
+        crypto,
+        FixtureStockMarketClient(),
+        ttl_seconds=60,
+        clock=lambda: now,
+    )
+
+    result = service.get_history(asset_id="bitcoin", asset_type="crypto", range_="7d")
+    assert result["source"] == "cache"
+    assert result["stale"] is True
+    assert result["points"][0]["price"] == "64000"
     assert storage.put_calls == 0
 
 

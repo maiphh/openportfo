@@ -86,8 +86,8 @@ describe("SearchDialog", () => {
       expect.objectContaining({ q: "VNM", token: "fake:alice" }),
     );
 
-    expect(await screen.findByRole("link", { name: /VNM/ })).toHaveAttribute("href", "/stock/VNM");
-    expect(screen.getByRole("link", { name: /BTC/ })).toHaveAttribute("href", "/crypto/bitcoin");
+    expect(await screen.findByRole("link", { name: /VNM/ })).toHaveAttribute("href", "/asset?type=stock&id=VNM");
+    expect(screen.getByRole("link", { name: /BTC/ })).toHaveAttribute("href", "/asset?type=crypto&id=bitcoin");
     expect(screen.getByText("Stock")).toBeInTheDocument();
     expect(screen.getByText("Crypto")).toBeInTheDocument();
     expect(screen.queryByText(/68,420/)).not.toBeInTheDocument();

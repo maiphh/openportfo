@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.deps import get_asset_detail_service, get_current_user, get_market_service
+from app.api.schemas import AssetDetailResponse, AssetHistoryResponse
 from app.ports.market import MarketDataError
 from app.ports.users import UserProfile
 from app.services.asset_detail_service import AssetDetailService, AssetNotFoundError
@@ -136,12 +137,18 @@ def search_assets(
     return [search_result_to_dict(r) for r in results]
 
 
-@router.get("/api/assets/{asset_type}/{slug}/history")
+@router.get(
+    "/api/assets/{asset_type}/{slug}/history",
+    response_model=AssetHistoryResponse,
+    response_model_by_alias=True,
+)
 def get_asset_detail_history(
     asset_type: str,
     slug: str,
     range: str = Query(default="30d"),  # noqa: A002
     currency: Optional[str] = Query(default=None),
+    force: bool = Query(default=False),
+    refresh: bool = Query(default=False),
     user: UserProfile = Depends(get_current_user),
     svc: AssetDetailService = Depends(get_asset_detail_service),
 ) -> dict[str, Any]:
@@ -152,6 +159,7 @@ def get_asset_detail_history(
             slug=slug,
             range_=range,
             currency=currency,
+            force=bool(force or refresh),
             preferred_currency=user.preferred_currency,
         )
     except ValidationError as exc:
@@ -167,12 +175,18 @@ def get_asset_detail_history(
         ) from exc
 
 
-@router.get("/api/assets/{asset_type}/{slug}")
+@router.get(
+    "/api/assets/{asset_type}/{slug}",
+    response_model=AssetDetailResponse,
+    response_model_by_alias=True,
+)
 def get_asset_detail(
     asset_type: str,
     slug: str,
     currency: Optional[str] = Query(default=None),
     range: Optional[str] = Query(default=None),  # noqa: A002
+    force: bool = Query(default=False),
+    refresh: bool = Query(default=False),
     user: UserProfile = Depends(get_current_user),
     svc: AssetDetailService = Depends(get_asset_detail_service),
 ) -> dict[str, Any]:
@@ -183,6 +197,7 @@ def get_asset_detail(
             slug=slug,
             currency=currency,
             range_=range,
+            force=bool(force or refresh),
             preferred_currency=user.preferred_currency,
         )
     except ValidationError as exc:

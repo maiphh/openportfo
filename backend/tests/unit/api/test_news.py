@@ -11,6 +11,7 @@ from app.core.deps import (
     set_news_service,
     set_user_profile_repo,
 )
+from app.adapters.dynamodb.news import item_to_news
 from app.main import create_app
 from app.ports.news import NewsItem
 from app.services.news_service import NewsService
@@ -69,6 +70,7 @@ def test_list_seeded_unfiltered() -> None:
     r = client.get("/api/news", headers=_auth("u1"))
     assert r.status_code == 200
     assert len(r.json()) == 3
+    assert all("keywords" not in item for item in r.json())
 
 
 def test_filter_by_keyword() -> None:
@@ -89,3 +91,25 @@ def test_filter_by_keyword() -> None:
     assert "Bitcoin rallies" in titles
     assert "Ethereum upgrade" in titles
     assert "Oil markets" not in titles
+
+
+def test_legacy_keywords_do_not_cross_user_filter_boundary() -> None:
+    # Simulate a pre-fix DynamoDB row.  Its old keywords value belongs to the
+    # user whose ingest created it, not to the user currently reading news.
+    legacy = item_to_news(
+        {
+            "id": "legacy",
+            "title": "Public market update",
+            "url": "https://ex/legacy",
+            "source": "A",
+            "keywords": ["private-user-term"],
+        }
+    )
+    client, _, profiles = _setup(InMemoryNewsRepo([legacy]))
+    profile = profiles.get_or_create("u2", email="u2@test.com", name="U2")
+    profiles.update_settings(profile.user_id, news_keywords=["private-user-term"])
+
+    response = client.get("/api/news", headers=_auth("u2"))
+
+    assert response.status_code == 200
+    assert response.json() == []

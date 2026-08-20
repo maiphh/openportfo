@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -22,6 +23,7 @@ from app.services.market_service import MarketService, QuoteKey, ValidationError
 
 VALID_TYPES = frozenset({"crypto", "stock"})
 VALID_RANGES = frozenset({"7d", "30d", "90d", "1y"})
+DIRECT_CRYPTO_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 
 class AssetNotFoundError(Exception):
@@ -111,6 +113,38 @@ class AssetDetailService:
                 asset_type=at,  # type: ignore[arg-type]
                 currency=cached.get("currency"),
             )
+
+        # Canonical crypto links carry the provider's coin id (for example
+        # ``book-of-meme``), so resolve that id directly before searching by
+        # text. CoinGecko's search endpoint is optimized for names/symbols and
+        # does not reliably return an exact hit when queried with an id. The
+        # browse fallback is also capped, which made valid lower-ranked coins
+        # impossible to open from a search result.
+        if at == "crypto" and DIRECT_CRYPTO_ID_RE.fullmatch(needle):
+            try:
+                direct_profile = self._crypto.get_profile(needle)
+            except MarketDataError:
+                direct_profile = None
+            if (
+                direct_profile is not None
+                and direct_profile.asset_id.strip()
+                and direct_profile.symbol.strip()
+            ):
+                hit = AssetSearchResult(
+                    symbol=direct_profile.symbol,
+                    name=direct_profile.name or direct_profile.symbol,
+                    asset_id=direct_profile.asset_id,
+                    asset_type="crypto",
+                    currency=direct_profile.market_currency or "USD",
+                )
+                self._cache_resolution(hit, needle)
+                if (direct_profile.source or "live") != "fixture-fallback":
+                    self._storage.put_json(
+                        profile_cache_key(hit.asset_type, hit.asset_id),
+                        self._profile_to_cache(direct_profile),
+                    )
+                return hit
+
         try:
             hits = self._market.search(needle, at)
         except ValidationError:
@@ -135,6 +169,10 @@ class AssetDetailService:
                     break
         if hit is None:
             raise AssetNotFoundError(f"Asset not found: {at}/{needle}")
+        self._cache_resolution(hit, needle)
+        return hit
+
+    def _cache_resolution(self, hit: AssetSearchResult, requested_slug: str) -> None:
         payload = {
             "assetType": hit.asset_type,
             "symbol": hit.symbol,
@@ -142,10 +180,9 @@ class AssetDetailService:
             "name": hit.name,
             "currency": hit.currency,
         }
-        aliases = {needle.lower(), hit.symbol.lower(), hit.asset_id.lower()}
+        aliases = {requested_slug.lower(), hit.symbol.lower(), hit.asset_id.lower()}
         for alias in aliases:
-            self._storage.put_json(resolve_cache_key(at, alias), payload)
-        return hit
+            self._storage.put_json(resolve_cache_key(hit.asset_type, alias), payload)
 
     def get_detail(
         self,
@@ -154,6 +191,8 @@ class AssetDetailService:
         slug: str,
         currency: Optional[str] = None,
         range_: Optional[str] = None,
+        force: bool = False,
+        refresh: bool = False,
         preferred_currency: Optional[str] = None,
     ) -> dict[str, Any]:
         resolved = self.resolve(asset_type, slug)
@@ -170,6 +209,7 @@ class AssetDetailService:
                 slug=resolved.symbol,
                 range_=range_,
                 currency=display,
+                force=bool(force or refresh),
                 resolved=resolved,
             )
         return {
@@ -192,6 +232,8 @@ class AssetDetailService:
         slug: str,
         range_: str,
         currency: Optional[str] = None,
+        force: bool = False,
+        refresh: bool = False,
         preferred_currency: Optional[str] = None,
         resolved: Optional[AssetSearchResult] = None,
     ) -> dict[str, Any]:
@@ -205,6 +247,7 @@ class AssetDetailService:
             asset_id=hit.asset_id,
             asset_type=hit.asset_type,
             range_=rng,
+            force=bool(force or refresh),
         )
         fx_meta, rate = self._fx_meta(native, display)
         points = []
@@ -230,6 +273,9 @@ class AssetDetailService:
             "nativeCurrency": native,
             "displayCurrency": display,
             "source": raw.get("source"),
+            "stale": bool(raw.get("stale")),
+            "cachedAt": raw.get("cachedAt"),
+            "expiresAt": raw.get("expiresAt"),
             "points": points,
             "fx": fx_meta,
         }

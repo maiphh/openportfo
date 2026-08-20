@@ -3,11 +3,104 @@
 from __future__ import annotations
 
 import os
+from enum import Enum
 from functools import lru_cache
 from typing import List, Tuple
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+
+class AppEnvironment(str, Enum):
+    """Supported runtime environments."""
+
+    LOCAL = "local"
+    TEST = "test"
+    PROD = "prod"
+
+
+class AuthMode(str, Enum):
+    """Supported authentication implementations."""
+
+    FAKE = "fake"
+    COGNITO = "cognito"
+
+
+class StorageBackend(str, Enum):
+    """Supported persistence backends."""
+
+    MEMORY = "memory"
+    AWS = "aws"
+
+
+class MarketClientMode(str, Enum):
+    """Supported market-data client implementations."""
+
+    FIXTURE = "fixture"
+    HTTP = "http"
+
+
+# Every production API dependency and every scheduled-job context is wired
+# through these durable adapters. Keep the environment names here so runtime
+# validation reports only safe configuration keys, never configured values.
+_DURABLE_TABLE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("USERS_TABLE", "users_table"),
+    ("HOLDINGS_TABLE", "holdings_table"),
+    ("WATCHLIST_TABLE", "watchlist_table"),
+    ("PRICE_CACHE_TABLE", "price_cache_table"),
+    ("NEWS_TABLE", "news_table"),
+    ("SETTINGS_TABLE", "settings_table"),
+    ("FX_TABLE", "fx_table"),
+    ("RSS_TABLE", "rss_table"),
+    ("JOB_RUNS_TABLE", "job_runs_table"),
+    ("SNAPSHOTS_TABLE", "snapshots_table"),
+)
+
+
+def _missing_settings(
+    settings: "Settings",
+    fields: tuple[tuple[str, str], ...],
+) -> list[str]:
+    """Return missing environment names without exposing configured values."""
+    return [
+        env_name
+        for env_name, field_name in fields
+        if not str(getattr(settings, field_name, "") or "").strip()
+    ]
+
+
+def _value_text(value: object) -> str:
+    """Normalize enum/string settings for comparisons."""
+    value = getattr(value, "value", value)
+    return str(value or "").strip().lower()
+
+
+def _durable_data_plane_errors(settings: "Settings") -> list[str]:
+    """Validate configuration shared by API and scheduled-job AWS adapters."""
+    errors: list[str] = []
+    if _value_text(settings.storage_backend) != StorageBackend.AWS.value:
+        errors.append("STORAGE_BACKEND must be aws")
+    if not str(settings.aws_region or "").strip():
+        errors.append("AWS_REGION is required")
+    if not str(settings.data_bucket or "").strip():
+        errors.append("DATA_BUCKET is required")
+
+    errors.extend(
+        f"{name} is required"
+        for name in _missing_settings(settings, _DURABLE_TABLE_FIELDS)
+    )
+
+    for env_name, field_name in (
+        ("DYNAMODB_ENDPOINT_URL", "dynamodb_endpoint_url"),
+        ("S3_ENDPOINT_URL", "s3_endpoint_url"),
+    ):
+        # Endpoint overrides are for LocalStack and other test/integration
+        # environments only.  Production must fail closed for every non-empty
+        # value, including host.docker.internal, malformed URLs, and any other
+        # hostname that could bypass a hostname-based local-only check.
+        if str(getattr(settings, field_name, "") or "").strip():
+            errors.append(f"{env_name} must be empty in production")
+    return errors
 
 
 def _disable_env_file() -> bool:
@@ -29,6 +122,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        use_enum_values=True,
     )
 
     @classmethod
@@ -45,13 +139,16 @@ class Settings(BaseSettings):
         return (init_settings, env_settings, dotenv_settings, file_secret_settings)
 
     app_name: str = Field(default="OpenPortfo", alias="APP_NAME")
-    app_env: str = Field(default="local", alias="APP_ENV")  # local | test | prod
-    auth_mode: str = Field(default="fake", alias="AUTH_MODE")  # fake | cognito
+    app_env: AppEnvironment = Field(default=AppEnvironment.LOCAL, alias="APP_ENV")
+    auth_mode: AuthMode = Field(default=AuthMode.FAKE, alias="AUTH_MODE")
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
 
     # Adapter selection: memory (default) | aws
     # Also: USE_AWS_ADAPTERS=true or APP_ENV=prod (unless STORAGE_BACKEND=memory)
-    storage_backend: str = Field(default="memory", alias="STORAGE_BACKEND")
+    storage_backend: StorageBackend = Field(
+        default=StorageBackend.MEMORY,
+        alias="STORAGE_BACKEND",
+    )
     use_aws_adapters: bool = Field(default=False, alias="USE_AWS_ADAPTERS")
 
     # Optional DynamoDB local / LocalStack endpoint (tests/integration only)
@@ -117,7 +214,16 @@ class Settings(BaseSettings):
     llm_app_title: str = Field(default="OpenPortfo", alias="LLM_APP_TITLE")
 
     # Market client mode: fixture (default for tests) | http (live HTTP when aws/prod)
-    market_client_mode: str = Field(default="fixture", alias="MARKET_CLIENT_MODE")
+    market_client_mode: MarketClientMode = Field(
+        default=MarketClientMode.FIXTURE,
+        alias="MARKET_CLIENT_MODE",
+    )
+    # Fixture data is useful for local/test and explicit production demos, but
+    # must never be selected accidentally by a production API deployment.
+    allow_fixture_market_data: bool = Field(
+        default=False,
+        alias="ALLOW_FIXTURE_MARKET_DATA",
+    )
 
     # Price cache TTL (Sprint 04) — seconds; default 600 (10 min)
     price_cache_ttl_seconds: int = Field(default=600, alias="PRICE_CACHE_TTL_SECONDS")
@@ -145,6 +251,57 @@ class Settings(BaseSettings):
         if (self.app_env or "").strip().lower() == "prod":
             return True
         return False
+
+    def validate_api_runtime(self) -> None:
+        """Fail closed for unsafe production API configuration.
+
+        This is intentionally an explicit API-runtime check instead of a
+        model-level production validator. Scheduled Lambda jobs run with
+        ``APP_ENV=prod`` but do not authenticate users, so they must still be
+        able to construct settings with ``AUTH_MODE=fake``.
+        """
+        if self.app_env != AppEnvironment.PROD:
+            return
+
+        errors = _durable_data_plane_errors(self)
+        if _value_text(self.auth_mode) != AuthMode.COGNITO.value:
+            errors.append("AUTH_MODE must be cognito when APP_ENV=prod")
+        if _value_text(self.auth_mode) == AuthMode.COGNITO.value:
+            if not (self.cognito_user_pool_id or "").strip():
+                errors.append("COGNITO_USER_POOL_ID is required")
+            if not (self.cognito_app_client_id or "").strip():
+                errors.append("COGNITO_APP_CLIENT_ID is required")
+        if (
+            self.market_client_mode == MarketClientMode.FIXTURE
+            and not self.allow_fixture_market_data
+        ):
+            errors.append(
+                "MARKET_CLIENT_MODE=http is required unless "
+                "ALLOW_FIXTURE_MARKET_DATA=true"
+            )
+
+        if errors:
+            raise RuntimeError(
+                "Invalid production API configuration: " + "; ".join(errors)
+            )
+
+    def validate_job_runtime(self) -> None:
+        """Fail closed for production scheduled-job data-plane settings.
+
+        Jobs do not authenticate end users, so ``AUTH_MODE=fake`` is valid and
+        Cognito settings are intentionally not required. They do, however,
+        construct every durable repository in :func:`build_job_context` and
+        therefore require the complete AWS data plane.
+        """
+        if self.app_env != AppEnvironment.PROD:
+            return
+
+        errors = _durable_data_plane_errors(self)
+
+        if errors:
+            raise RuntimeError(
+                "Invalid production job configuration: " + "; ".join(errors)
+            )
 
 
 @lru_cache

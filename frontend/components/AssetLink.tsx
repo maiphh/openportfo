@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
-import { assetDetailHref, type AssetKind } from "@/lib/asset";
+import { assetCanonicalHref, type AssetKind } from "@/lib/asset";
 import { cn } from "@/lib/utils";
 
-/** Shared click-through to `/crypto/[id]` or `/stock/[id]`. */
+/** Shared click-through to the static-export-safe `/asset` query route. */
 export default function AssetLink({
   assetType,
   id,
@@ -28,7 +28,7 @@ export default function AssetLink({
   title?: string;
   style?: CSSProperties;
 }) {
-  const href = assetDetailHref(assetType, id);
+  const href = assetCanonicalHref(assetType, id);
   return (
     <Link
       href={href}
