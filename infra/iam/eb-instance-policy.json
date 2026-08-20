@@ -25,7 +25,8 @@
         "arn:aws:dynamodb:us-east-1:*:table/openportfo-fx",
         "arn:aws:dynamodb:us-east-1:*:table/openportfo-rss",
         "arn:aws:dynamodb:us-east-1:*:table/openportfo-job-runs",
-        "arn:aws:dynamodb:us-east-1:*:table/openportfo-snapshots"
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-snapshots",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-chat-idempotency"
       ]
     },
     {

@@ -1,6 +1,6 @@
 # Backlog board
 
-**Last updated:** 2026-08-19  
+**Last updated:** 2026-08-20
 **How to use:** see `docs/backlog/README.md`
 
 **Orchestration:** PLAN `6cc30007` complete on `integration/backlog-batch-6cc30007` (**not merged to main**).  
@@ -16,6 +16,10 @@
 | BL-012 | Configurable 2-decimal number format | P0 | `done` | Eng | `features/BL-012-number-format.md` | Merged to integration |
 | BL-013 | Portfolio Avg cost / Price in session FX | P0 | `done` | Eng | `features/BL-013-portfolio-unit-fx.md` | Merged to integration |
 | BL-014 | Portfolio chart + GitHub-style PnL heatmap | P0 | `done` | Eng | `features/BL-014-portfolio-charts.md` | Merged to integration |
+| BL-015 | Personal chatbot backend + safe streaming | P0 | `done` | Eng | `features/BL-015-personal-chatbot-backend.md` | Auth-scoped SSE + POST compatibility |
+| BL-016 | Personal chatbot client + safe Markdown | P0 | `done` | Eng | `features/BL-016-personal-chatbot-client.md` | Global production client |
+| BL-017 | Draggable chatbot bubble + panel | P1 | `done` | Eng | `features/BL-017-draggable-chat-bubble.md` | Responsive/a11y/viewport clamping |
+| BL-018 | Bounded user-scoped chat session | P1 | `done` | Eng | `features/BL-018-bounded-chat-session.md` | Per-account browser persistence |
 | BL-005 | Watchlist CRUD UI | P1 | `done` | Eng | `features/BL-005-watchlist-ui.md` | Merged to integration |
 | BL-006 | Cognito Hosted UI | P1 | `done` | Eng | `features/BL-006-cognito-hosted-ui.md` | Merged to integration |
 | BL-007 | TopStories → real news | P1 | `done` | Eng | `features/BL-007-top-stories-news.md` | Merged to integration |

@@ -3,6 +3,17 @@
 import { apiBase } from "@/lib/api";
 
 export const AUTH_TOKEN_STORAGE_KEY = "artryx.accessToken";
+export const AUTH_CHANGE_EVENT = "openportfo:auth-change";
+
+/** Notify client widgets that the active bearer token may have changed. */
+export function notifyAuthChanged(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+  } catch {
+    // Browser event dispatch is best-effort; auth storage remains canonical.
+  }
+}
 
 type AuthReadStorage = Pick<Storage, "getItem">;
 type AuthWriteStorage = Pick<Storage, "setItem">;
@@ -114,9 +125,16 @@ export function writeAuthToken(
   if (!cleaned) return false;
   const normalized = cleaned.startsWith("Bearer ") ? cleaned.slice(7).trim() : cleaned;
   if (!normalized) return false;
-  if (storage !== undefined) return writeStoredToken(storage, normalized);
+  if (storage !== undefined) {
+    const stored = writeStoredToken(storage, normalized);
+    if (stored) notifyAuthChanged();
+    return stored;
+  }
   const stored = writeStoredToken(browserStorage("sessionStorage"), normalized);
-  if (stored) removeStoredToken(browserStorage("localStorage"));
+  if (stored) {
+    removeStoredToken(browserStorage("localStorage"));
+    notifyAuthChanged();
+  }
   return stored;
 }
 
@@ -125,10 +143,12 @@ export function clearAuthToken(
 ): void {
   if (storage !== undefined) {
     removeStoredToken(storage);
+    notifyAuthChanged();
     return;
   }
   removeStoredToken(browserStorage("sessionStorage"));
   removeStoredToken(browserStorage("localStorage"));
+  notifyAuthChanged();
 }
 
 export function bearerHeader(token: string | null | undefined): Record<string, string> {

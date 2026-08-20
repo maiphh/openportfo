@@ -26,6 +26,7 @@ from app.ports.storage import ObjectStorage
 from app.ports.users import UserProfile, UserProfileRepo
 from app.ports.watchlist import WatchlistRepo
 from app.ports.llm import LlmProvider
+from app.ports.chat_idempotency import ChatIdempotencyRepo
 from app.services.fx_service import FxService
 from app.services.history_service import HistoryService
 from app.services.holdings_service import HoldingsService
@@ -63,6 +64,7 @@ _snapshot_service: Optional[SnapshotService] = None
 _rss_fetcher: Optional[RssFetcher] = None
 _llm_provider: Optional[LlmProvider] = None
 _tool_registry: Optional[ToolRegistry] = None
+_chat_idempotency_repo: Optional[ChatIdempotencyRepo] = None
 
 # Token verifiers own their JWKS client. Keep one verifier per effective auth
 # configuration for the lifetime of this process so requests share the
@@ -791,6 +793,31 @@ def set_tool_registry(registry: Optional[ToolRegistry]) -> None:
     _tool_registry = registry
 
 
+def get_chat_idempotency_repo() -> ChatIdempotencyRepo:
+    """Return the durable per-user request ledger used for mutating turns."""
+    global _chat_idempotency_repo
+    if _chat_idempotency_repo is None:
+        settings = get_settings()
+        if _use_aws(settings):
+            from app.adapters.dynamodb.chat_idempotency import DynamoChatIdempotencyRepo
+
+            _chat_idempotency_repo = DynamoChatIdempotencyRepo(
+                settings.chat_idempotency_table,
+                region=_region(settings),
+                endpoint_url=_ddb_endpoint(settings),
+            )
+        else:
+            from app.adapters.memory.chat_idempotency import InMemoryChatIdempotencyRepo
+
+            _chat_idempotency_repo = InMemoryChatIdempotencyRepo()
+    return _chat_idempotency_repo
+
+
+def set_chat_idempotency_repo(repo: Optional[ChatIdempotencyRepo]) -> None:
+    global _chat_idempotency_repo
+    _chat_idempotency_repo = repo
+
+
 def get_chat_service() -> ChatService:
     settings = get_settings()
     return ChatService(
@@ -803,6 +830,7 @@ def get_chat_service() -> ChatService:
         get_market_service(),
         asset_detail=get_asset_detail_service(),
         news=get_news_service(),
+        idempotency=get_chat_idempotency_repo(),
     )
 
 

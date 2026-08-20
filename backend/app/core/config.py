@@ -54,6 +54,7 @@ _DURABLE_TABLE_FIELDS: tuple[tuple[str, str], ...] = (
     ("RSS_TABLE", "rss_table"),
     ("JOB_RUNS_TABLE", "job_runs_table"),
     ("SNAPSHOTS_TABLE", "snapshots_table"),
+    ("CHAT_IDEMPOTENCY_TABLE", "chat_idempotency_table"),
 )
 
 
@@ -178,6 +179,10 @@ class Settings(BaseSettings):
     rss_table: str = Field(default="openportfo-rss", alias="RSS_TABLE")
     job_runs_table: str = Field(default="openportfo-job-runs", alias="JOB_RUNS_TABLE")
     snapshots_table: str = Field(default="openportfo-snapshots", alias="SNAPSHOTS_TABLE")
+    chat_idempotency_table: str = Field(
+        default="openportfo-chat-idempotency",
+        alias="CHAT_IDEMPOTENCY_TABLE",
+    )
 
     # S3 (Sprint 07 / 12)
     data_bucket: str = Field(default="", alias="DATA_BUCKET")
@@ -211,6 +216,24 @@ class Settings(BaseSettings):
     llm_max_tokens: int = Field(default=2048, alias="LLM_MAX_TOKENS")
     llm_retry_max: int = Field(default=2, alias="LLM_RETRY_MAX")
     llm_retry_max_sleep: float = Field(default=8.0, alias="LLM_RETRY_MAX_SLEEP")
+    chat_idempotency_ttl_seconds: int = Field(
+        default=24 * 60 * 60,
+        ge=60,
+        le=7 * 24 * 60 * 60,
+        alias="CHAT_IDEMPOTENCY_TTL_SECONDS",
+    )
+    chat_stream_deadline_seconds: float = Field(
+        default=120.0,
+        ge=5.0,
+        le=600.0,
+        alias="CHAT_STREAM_DEADLINE_SECONDS",
+    )
+    chat_stream_max_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        alias="CHAT_STREAM_MAX_CONCURRENCY",
+    )
     llm_http_referer: str = Field(default="https://openportfo.local", alias="LLM_HTTP_REFERER")
     llm_app_title: str = Field(default="OpenPortfo", alias="LLM_APP_TITLE")
 

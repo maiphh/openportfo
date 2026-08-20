@@ -7,8 +7,8 @@ from decimal import Decimal
 from app.ports.llm import ToolCall
 from app.ports.users import UserProfile
 from app.services.holdings_service import HoldingsService
-from app.services.llm.orchestrator import ChatOrchestrator
-from app.services.llm.registry import ToolContext
+from app.services.llm.orchestrator import ChatOrchestrator, _sanitize_assistant_text
+from app.services.llm.registry import ToolContext, ToolRegistry, ToolSpec
 from app.services.llm.tools import build_default_registry
 from app.services.market_service import MarketService
 from app.services.portfolio_service import PortfolioService
@@ -100,3 +100,42 @@ def test_orchestrator_remove_after_add() -> None:
     result = ChatOrchestrator(provider, build_default_registry()).run("remove my btc", ctx)
     assert result.tool_calls[0].ok is True
     assert repo.list("alice") == []
+
+
+def test_orchestrator_drops_unmatched_hidden_reasoning_opening_tag() -> None:
+    assert _sanitize_assistant_text("<think>secret internal chain\nDo not show this") == ""
+    assert _sanitize_assistant_text("Visible <analysis>hidden") == "Visible"
+    assert _sanitize_assistant_text("[reasoning]hidden[/reasoning] Answer") == "Answer"
+
+
+def test_orchestrator_fences_mutating_tool_before_execution() -> None:
+    events: list[str] = []
+    registry = ToolRegistry()
+
+    def write_handler(_args: dict, _ctx: ToolContext) -> dict:
+        events.append("execute")
+        return {"ok": True}
+
+    registry.register(
+        ToolSpec(
+            name="write_test",
+            description="test write",
+            parameters={"type": "object"},
+            handler=write_handler,
+            public_label="Updating test data",
+            mutating=True,
+        )
+    )
+    provider = ScriptedLlmProvider(
+        [
+            completion_tools(ToolCall(id="write", name="write_test", arguments={})),
+            completion_text("done"),
+        ]
+    )
+    result = ChatOrchestrator(provider, registry).run(
+        "write",
+        _ctx(InMemoryHoldingsRepo()),
+        before_mutating_tool=lambda _name: (events.append("mark") or True),
+    )
+    assert result.reply == "done"
+    assert events == ["mark", "execute"]

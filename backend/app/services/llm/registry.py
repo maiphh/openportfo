@@ -22,8 +22,10 @@ AnalystFn = Callable[[str, dict[str, Any]], str]
 class ToolContext:
     """Per-request services scoped to the authenticated user.
 
-    ``user_token`` is the caller's Bearer token for future HTTP-style tools.
-    It is never included in tool JSON sent to the LLM.
+    Authentication is resolved before this context is created.  A bearer
+    token is deliberately not retained here: tools use the already resolved
+    ``UserProfile`` and scoped ports, so there is no credential to
+    accidentally serialize into a model request or progress event.
     """
 
     user: UserProfile
@@ -34,7 +36,6 @@ class ToolContext:
     asset_detail: Optional[AssetDetailService] = None
     news: Optional[NewsService] = None
     run_analyst: Optional[AnalystFn] = None
-    user_token: Optional[str] = None
 
 
 @dataclass
@@ -43,6 +44,12 @@ class ToolSpec:
     description: str
     parameters: dict[str, Any]
     handler: ToolHandler
+    # Optional product-facing label.  Tool descriptions and schemas remain
+    # model-facing; the UI receives only this small allow-listed metadata.
+    public_label: Optional[str] = None
+    # Mutating tools are checked against request cancellation immediately
+    # before execution and participate in request idempotency handling.
+    mutating: bool = False
 
 
 @dataclass
@@ -63,6 +70,25 @@ class ToolRegistry:
 
     def get(self, name: str) -> Optional[ToolSpec]:
         return self._tools.get(name)
+
+    def public_tool_metadata(self, name: str) -> Optional[dict[str, str]]:
+        """Return the only tool metadata that may cross the API boundary.
+
+        Unknown/model-invented tool names are intentionally rejected rather
+        than echoed.  This prevents arbitrary model text from becoming a UI
+        event and keeps arguments/results out of the public contract.
+        """
+        spec = self._tools.get(name)
+        if spec is None:
+            return None
+        label = (spec.public_label or _PUBLIC_TOOL_LABELS.get(spec.name) or "").strip()
+        if not label:
+            return None
+        return {"name": spec.name, "label": label}
+
+    def is_mutating(self, name: str) -> bool:
+        spec = self._tools.get(name)
+        return bool(spec and spec.mutating)
 
     def openai_tools(self) -> list[dict[str, Any]]:
         return [
@@ -137,3 +163,20 @@ __all__ = [
     "ToolRegistry",
     "ToolSpec",
 ]
+
+
+# This is deliberately a closed list.  Adding a tool requires consciously
+# deciding what short, non-sensitive label can be shown to signed-in users.
+_PUBLIC_TOOL_LABELS: dict[str, str] = {
+    "search_assets": "Searching assets",
+    "add_holding": "Updating holdings",
+    "remove_holding": "Updating holdings",
+    "list_holdings": "Reading holdings",
+    "get_portfolio": "Reading portfolio",
+    "get_quote": "Checking a quote",
+    "analyze_asset": "Analyzing an asset",
+    "analyze_portfolio": "Analyzing portfolio",
+    "get_news": "Reading market news",
+    "add_watchlist": "Updating watchlist",
+    "remove_watchlist": "Updating watchlist",
+}

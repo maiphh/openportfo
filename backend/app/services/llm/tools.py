@@ -120,7 +120,6 @@ def _dec_str(d: Optional[Decimal]) -> Optional[str]:
 
 def _holding_payload(record: HoldingRecord) -> dict[str, Any]:
     return {
-        "userId": record.user_id,
         "assetType": record.asset_type,
         "symbol": record.symbol,
         "assetId": record.asset_id,
@@ -477,7 +476,7 @@ def analyze_asset(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
         "profile": profile,
         "history": _history_summary((detail or {}).get("history") if detail else None),
         "news": news_items,
-        "userPreferredCurrency": ctx.user.preferred_currency,
+        "preferredCurrency": ctx.user.preferred_currency,
     }
     analysis = None
     if ctx.run_analyst is not None:
@@ -485,7 +484,9 @@ def analyze_asset(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
             analysis = ctx.run_analyst("asset", payload)
         except Exception as exc:  # noqa: BLE001
             analysis = None
-            payload["analystError"] = str(getattr(exc, "detail", None) or exc)
+            # Do not forward provider internals, credentials, or exception
+            # payloads into the next model turn.
+            payload["analystError"] = "Analysis is temporarily unavailable."
     return {"ok": True, "analysis": analysis, "data": payload}
 
 
@@ -500,10 +501,7 @@ def analyze_portfolio(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     payload = {
         "portfolio": port.get("portfolio"),
         "news": news_items,
-        "user": {
-            "userId": ctx.user.user_id,
-            "preferredCurrency": ctx.user.preferred_currency,
-        },
+        "preferredCurrency": ctx.user.preferred_currency,
     }
     analysis = None
     if ctx.run_analyst is not None:
@@ -511,7 +509,7 @@ def analyze_portfolio(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
             analysis = ctx.run_analyst("portfolio", payload)
         except Exception as exc:  # noqa: BLE001
             analysis = None
-            payload["analystError"] = str(getattr(exc, "detail", None) or exc)
+            payload["analystError"] = "Analysis is temporarily unavailable."
     return {"ok": True, "analysis": analysis, "data": payload}
 
 
@@ -631,6 +629,7 @@ def build_default_registry() -> ToolRegistry:
                 ["symbol"],
             ),
             handler=add_holding,
+            mutating=True,
         ),
         ToolSpec(
             name="remove_holding",
@@ -645,6 +644,7 @@ def build_default_registry() -> ToolRegistry:
                 ["symbol"],
             ),
             handler=remove_holding,
+            mutating=True,
         ),
         ToolSpec(
             name="list_holdings",
@@ -720,6 +720,7 @@ def build_default_registry() -> ToolRegistry:
                 ["symbol"],
             ),
             handler=add_watchlist,
+            mutating=True,
         ),
         ToolSpec(
             name="remove_watchlist",
@@ -733,6 +734,7 @@ def build_default_registry() -> ToolRegistry:
                 ["symbol"],
             ),
             handler=remove_watchlist,
+            mutating=True,
         ),
     ]
     for spec in specs:

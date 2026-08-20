@@ -8,7 +8,7 @@ Deployable data plane + IAM for **us-east-1** (Learner Lab default).
 
 | Resource | Purpose |
 |----------|---------|
-| DynamoDB tables | `openportfo-*` multi-table (users, holdings, watchlist, price-cache, news, settings, fx, rss, job-runs, snapshots) |
+| DynamoDB tables | `openportfo-*` multi-table (users, holdings, watchlist, price-cache, news, settings, fx, rss, job-runs, snapshots, chat-idempotency) |
 | S3 data bucket | `history/` and `snapshots/` prefixes (app writes keys) |
 | Cognito User Pool + public app client | Email sign-in; Hosted UI callbacks for localhost + CloudFront placeholder |
 | EB instance role + profile | DynamoDB RW + S3 data RW + logs (no Cognito Admin APIs; JWT verify uses public JWKS) |
@@ -52,6 +52,11 @@ Important outputs:
 - `CognitoAppClientId` → `COGNITO_APP_CLIENT_ID`
 - `EBInstanceProfileName` → EB environment configuration
 - `LambdaExecutionRoleArn` → Lambda function role
+
+The chat ledger is returned as `ChatIdempotencyTableName`; configure the EB
+API's `CHAT_IDEMPOTENCY_TABLE` with that value. When `ProjectPrefix` is not
+`openportfo`, use `<ProjectPrefix>-chat-idempotency` (and matching prefixed
+names for the other DynamoDB tables) rather than the local default.
 
 ### Enable EventBridge after Lambda exists
 

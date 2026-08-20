@@ -10,6 +10,7 @@ from app.adapters.dynamodb.rss import DynamoRssSourcesRepo
 from app.adapters.dynamodb.fx import DynamoExchangeRateRepo
 from app.adapters.dynamodb.job_runs import DynamoJobRunsRepo
 from app.adapters.dynamodb.snapshots import DynamoSnapshotRepo
+from app.adapters.dynamodb.chat_idempotency import DynamoChatIdempotencyRepo
 
 __all__ = [
     "DynamoUserProfileRepo",
@@ -22,4 +23,5 @@ __all__ = [
     "DynamoExchangeRateRepo",
     "DynamoJobRunsRepo",
     "DynamoSnapshotRepo",
+    "DynamoChatIdempotencyRepo",
 ]

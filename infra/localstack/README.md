@@ -4,7 +4,7 @@ Emulates **DynamoDB** and **S3** on your machine so you can run the real boto3 a
 
 | Service | LocalStack (community) | Notes |
 |---------|------------------------|--------|
-| DynamoDB | ✅ | All 10 OpenPortfo tables |
+| DynamoDB | ✅ | All 11 OpenPortfo tables |
 | S3 | ✅ | `openportfo-data-local` |
 | Cognito | ❌ Pro-only | Keep `AUTH_MODE=fake` |
 | Lambda / EB | ❌ | Not needed for adapter testing |
@@ -113,9 +113,9 @@ aws --endpoint-url=http://localhost:4566 dynamodb list-tables
 
 | Resource | Name |
 |----------|------|
-| DynamoDB | `openportfo-users`, `openportfo-holdings`, `openportfo-watchlist`, `openportfo-price-cache`, `openportfo-news`, `openportfo-settings`, `openportfo-fx`, `openportfo-rss`, `openportfo-job-runs`, `openportfo-snapshots` |
+| DynamoDB | `openportfo-users`, `openportfo-holdings`, `openportfo-watchlist`, `openportfo-price-cache`, `openportfo-news`, `openportfo-settings`, `openportfo-fx`, `openportfo-rss`, `openportfo-job-runs`, `openportfo-snapshots`, `openportfo-chat-idempotency` |
 | S3 | `openportfo-data-local` |
-| TTL | `openportfo-price-cache` attribute `ttl` |
+| TTL | `openportfo-price-cache` attribute `ttl`; `openportfo-chat-idempotency` attribute `expiresAt` |
 
 Key schemas match `infra/cloudformation.yml` and the Dynamo adapters under `backend/app/adapters/dynamodb/`.
 

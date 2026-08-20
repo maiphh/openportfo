@@ -257,6 +257,28 @@ Resources:
         - Key: Project
           Value: OpenPortfo
 
+  ChatIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-chat-idempotency"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: requestId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
   # ---------------------------------------------------------------------------
   # Cognito — email sign-in + public SPA client
   # ---------------------------------------------------------------------------
@@ -369,6 +391,7 @@ Resources:
                   - !GetAtt RssTable.Arn
                   - !GetAtt JobRunsTable.Arn
                   - !GetAtt SnapshotsTable.Arn
+                  - !GetAtt ChatIdempotencyTable.Arn
               - Sid: S3DataRW
                 Effect: Allow
                 Action:
@@ -545,6 +568,9 @@ Outputs:
     Value: !Ref JobRunsTable
   SnapshotsTableName:
     Value: !Ref SnapshotsTable
+  ChatIdempotencyTableName:
+    Description: Set as CHAT_IDEMPOTENCY_TABLE for the EB API
+    Value: !Ref ChatIdempotencyTable
 
   CognitoUserPoolId:
     Description: Set as COGNITO_USER_POOL_ID

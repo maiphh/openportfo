@@ -226,6 +226,28 @@ Resources:
         - Key: Project
           Value: OpenPortfo
 
+  ChatIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-chat-idempotency"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: requestId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -293,6 +315,9 @@ Outputs:
   DataBucketName:
     Description: Set as DATA_BUCKET
     Value: !Ref DataBucket
+  ChatIdempotencyTableName:
+    Description: Set as CHAT_IDEMPOTENCY_TABLE for the EB API
+    Value: !Ref ChatIdempotencyTable
   CognitoUserPoolId:
     Description: Set as COGNITO_USER_POOL_ID
     Value: !Ref UserPool

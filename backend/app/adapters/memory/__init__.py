@@ -16,6 +16,7 @@ from app.adapters.memory.snapshots import InMemorySnapshotRepo
 from app.adapters.memory.storage import InMemoryObjectStorage
 from app.adapters.memory.users import InMemoryUserProfileRepo
 from app.adapters.memory.watchlist import InMemoryWatchlistRepo
+from app.adapters.memory.chat_idempotency import InMemoryChatIdempotencyRepo
 
 __all__ = [
     "FakeTokenVerifier",
@@ -30,4 +31,5 @@ __all__ = [
     "InMemorySettingsRepo",
     "InMemoryRssSourcesRepo",
     "InMemoryJobRunsRepo",
+    "InMemoryChatIdempotencyRepo",
 ]

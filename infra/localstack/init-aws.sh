@@ -128,6 +128,23 @@ create_table "${PREFIX}-snapshots" \
     AttributeName=sk,KeyType=RANGE \
   --billing-mode PAY_PER_REQUEST
 
+# chat-idempotency: PK userId, SK requestId (+ TTL expiresAt)
+create_table "${PREFIX}-chat-idempotency" \
+  --attribute-definitions \
+    AttributeName=userId,AttributeType=S \
+    AttributeName=requestId,AttributeType=S \
+  --key-schema \
+    AttributeName=userId,KeyType=HASH \
+    AttributeName=requestId,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST
+
+if ! $AWSCMD dynamodb describe-time-to-live --table-name "${PREFIX}-chat-idempotency" 2>/dev/null \
+  | grep -q '"TimeToLiveStatus": "ENABLED"'; then
+  $AWSCMD dynamodb update-time-to-live \
+    --table-name "${PREFIX}-chat-idempotency" \
+    --time-to-live-specification "Enabled=true,AttributeName=expiresAt" >/dev/null || true
+fi
+
 # --- S3 data bucket ---
 if $AWSCMD s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
   echo "[localstack-init] Bucket already exists: $BUCKET"
