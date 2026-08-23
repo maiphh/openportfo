@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "orchestrator",
+  "instructions": ["docs/architecture-design.md", "docs/prd/OpenPortfo_PRD.md", "docs/orchestration/README.md"],
+  "references": {
+    "docs": {
+      "path": "./docs",
+      "description": "Product docs, PRD, architecture, backlog, and sprints"
+    },
+    "backend": {
+      "path": "./backend",
+      "description": "FastAPI backend (domain, services, ports, adapters)"
+    },
+    "frontend": {
+      "path": "./frontend",
+      "description": "Next.js frontend (CSR, static export)"
+    }
+  }
+}
