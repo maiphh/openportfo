@@ -236,7 +236,7 @@ describe("MarketQuotes", () => {
     await waitFor(() => {
       expect(screen.getByText("Vietcombank")).toBeInTheDocument();
     });
-    expect(sessionStorage.getItem("artryx.markets.quotes.stock")).toBeTruthy();
+    expect(sessionStorage.getItem("openportfo.markets.quotes.stock")).toBeTruthy();
     unmount();
 
     fetchMarketQuotes.mockReturnValue(new Promise(() => {}));

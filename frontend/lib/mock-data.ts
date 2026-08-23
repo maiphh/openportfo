@@ -10,25 +10,6 @@ export type LogoSpec = {
   mark: string;
 };
 
-export const NAV_ITEMS = [
-  {
-    href: "/markets/stock",
-    label: "Market",
-    children: [
-      { href: "/markets/stock", label: "Stock" },
-      { href: "/markets/crypto", label: "Crypto" },
-    ],
-  },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/search", label: "Search" },
-] as const;
-
-export const MOCK_USER = {
-  name: "phu",
-  email: "phu@artryx.app",
-};
-
 export const RANGES: RangeKey[] = ["1D", "1M", "3M", "1Y", "5Y", "All"];
 
 export const LOGOS: Record<string, LogoSpec> = {

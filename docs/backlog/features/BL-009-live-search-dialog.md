@@ -130,3 +130,7 @@ As an **authenticated investor**, I want **header search to find real VN stocks 
 - Approach: FE-only. Header `SearchDialog` no longer reads `SEARCH_UNIVERSE` (export removed). After mount it reads `artryx.accessToken`, debounces ~250ms, aborts in-flight, and calls `searchLiveCatalog` — two parallel `searchAssets` GETs (`/api/assets/search?q&type=stock|crypto`). Empty `q` skips fetch and shows “Type to search”. Unauthenticated / 401 shows Sign in empty state (token paste CTA, no mock list). Results: symbol, name, type via `AssetLink` (`assetId` or symbol); price/chg% only if already on the payload. One type failing keeps the other + soft error. Holdings modal unchanged.
 - PR / branch: `feat/BL-009-live-search-dialog`
 - Verification: `cd frontend; npx vitest run lib/asset-search.test.ts lib/portfolio.test.ts components/SearchDialog.test.tsx` (empty q no fetch, `assetSearchQuery` / dual type, 401 sign-in). Full `npx vitest run` in `frontend/`.
+### Current implementation note (Sprint 05)
+
+The app now reads the canonical `openportfo.accessToken`; historical
+`artryx.*` references below describe the pre-rebrand shell.

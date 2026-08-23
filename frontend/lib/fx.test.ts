@@ -23,11 +23,11 @@ describe("fetchFxRates", () => {
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
-  it("reads optional auth token from sessionStorage and migrates legacy localStorage", () => {
+  it("reads the optional auth token only from sessionStorage", () => {
     expect(readAuthToken()).toBeNull();
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, " fake:u1 ");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, " fake:u1 ");
     expect(readAuthToken()).toBe("fake:u1");
-    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("fake:u1");
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe(" fake:u1 ");
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
   });
 

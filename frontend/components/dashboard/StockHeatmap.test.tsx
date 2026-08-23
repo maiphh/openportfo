@@ -203,7 +203,7 @@ describe("StockHeatmap", () => {
     await waitFor(() => {
       expect(screen.getByText("VCB")).toBeInTheDocument();
     });
-    expect(sessionStorage.getItem("artryx.markets.heatmap.stock")).toBeTruthy();
+    expect(sessionStorage.getItem("openportfo.markets.heatmap.stock")).toBeTruthy();
     unmount();
 
     fetchMarketHeatmap.mockReturnValue(new Promise(() => {}));

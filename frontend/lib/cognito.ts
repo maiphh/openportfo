@@ -7,8 +7,7 @@ import {
   writeAuthToken,
   type AuthProfile,
 } from "@/lib/auth";
-
-export const PKCE_STORAGE_KEY = "artryx.pkce";
+export const PKCE_STORAGE_KEY = "openportfo.pkce";
 
 const VERIFIER_BYTES = 32;
 const STATE_BYTES = 16;

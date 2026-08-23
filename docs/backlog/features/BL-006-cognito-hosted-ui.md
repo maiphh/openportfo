@@ -139,3 +139,8 @@ As an **investor**, I want to **sign in with Cognito (and sign out)**, so that *
 - Approach: Option A Hosted UI + PKCE S256 in the browser. `lib/cognito.ts` builds `/oauth2/authorize` and `/logout`, keeps the verifier in `sessionStorage` (`artryx.pkce`), and exchanges `code` at Cognito `/oauth2/token` (no Next route handler). ID token is written to existing `artryx.accessToken`. Client page `app/auth/callback/page.tsx` reads the query after mount (`trailingSlash` → `/auth/callback/`). `UserMenu` loads name/email from `GET /api/auth/me` (no `MOCK_USER`). `AuthGate` hides paste when Cognito public env is set and keeps the BL-001 paste fallback otherwise.
 - PR / branch: `feat/BL-006-cognito-hosted-ui`
 - Verification: `cd frontend; npx vitest run lib/cognito.test.ts lib/auth.test.ts app/auth/callback/page.test.tsx components/auth/AuthGate.test.tsx components/UserMenu.test.tsx`. Full `npx vitest run` in `frontend/`.
+### Current implementation note (Sprint 05)
+
+The canonical auth/PKCE keys are now `openportfo.accessToken` and
+`openportfo.pkce`; historical `artryx.*` references below document the prior
+release and its compatibility migration.

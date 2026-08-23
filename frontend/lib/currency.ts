@@ -4,7 +4,7 @@ export const DISPLAY_CURRENCIES = ["VND", "USD", "EUR"] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 
 export const DEFAULT_DISPLAY_CURRENCY: DisplayCurrency = "VND";
-export const DISPLAY_CURRENCY_STORAGE_KEY = "artryx.displayCurrency";
+export const DISPLAY_CURRENCY_STORAGE_KEY = "openportfo.displayCurrency";
 export const DEFAULT_FX_BASE = "USD";
 
 export type FxRatesPayload = {
@@ -30,11 +30,19 @@ export function parseDisplayCurrency(value: unknown): DisplayCurrency {
 }
 
 export function readStoredDisplayCurrency(
-  storage: Pick<Storage, "getItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
+  storage?: Pick<Storage, "getItem"> | null,
 ): DisplayCurrency {
-  if (!storage) return DEFAULT_DISPLAY_CURRENCY;
+  let source = storage;
+  if (source === undefined && typeof window !== "undefined") {
+    try {
+      source = window.localStorage;
+    } catch {
+      source = null;
+    }
+  }
+  if (!source) return DEFAULT_DISPLAY_CURRENCY;
   try {
-    return parseDisplayCurrency(storage.getItem(DISPLAY_CURRENCY_STORAGE_KEY));
+    return parseDisplayCurrency(source.getItem(DISPLAY_CURRENCY_STORAGE_KEY));
   } catch {
     return DEFAULT_DISPLAY_CURRENCY;
   }
@@ -42,11 +50,19 @@ export function readStoredDisplayCurrency(
 
 export function writeStoredDisplayCurrency(
   currency: DisplayCurrency,
-  storage: Pick<Storage, "setItem"> | null | undefined = typeof window !== "undefined" ? window.localStorage : null,
+  storage?: Pick<Storage, "setItem"> | null,
 ): void {
-  if (!storage) return;
+  let target = storage;
+  if (target === undefined && typeof window !== "undefined") {
+    try {
+      target = window.localStorage;
+    } catch {
+      target = null;
+    }
+  }
+  if (!target) return;
   try {
-    storage.setItem(DISPLAY_CURRENCY_STORAGE_KEY, currency);
+    target.setItem(DISPLAY_CURRENCY_STORAGE_KEY, currency);
   } catch {
     // Quota / private mode — preference still lives in React state for the session.
   }

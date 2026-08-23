@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   profile: { userId: "alice", email: "alice@example.com", name: "Alice" },
   fetchAuthMe: vi.fn(),
   readAuthToken: vi.fn(),
+  isAuthTokenStorageKey: vi.fn((key: string | null) => key === "openportfo.accessToken"),
   clearAuthToken: vi.fn(),
   sendChatMessage: vi.fn(),
   beginHostedUiLogin: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/lib/auth", () => ({
   },
   clearAuthToken: mocks.clearAuthToken,
   fetchAuthMe: mocks.fetchAuthMe,
+  isAuthTokenStorageKey: mocks.isAuthTokenStorageKey,
   readAuthToken: mocks.readAuthToken,
 }));
 
@@ -48,7 +50,7 @@ vi.mock("@/lib/cognito", () => ({
   isCognitoConfigured: mocks.isCognitoConfigured,
 }));
 
-import ChatWidget from "@/components/chat/ChatWidget";
+import ChatWidget, { clampPosition } from "@/components/chat/ChatWidget";
 import { ChatApiError } from "@/lib/chat";
 import { chatSessionKey } from "@/lib/chat-session";
 
@@ -104,6 +106,20 @@ describe("ChatWidget", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(bubble));
+  });
+
+  it("clamps launcher positions outside the 240px rail, 64px rail, and mobile insets", () => {
+    expect(clampPosition({ x: 0, y: 0 }, { width: 800, height: 600 }, 240).x).toBe(240);
+    expect(clampPosition({ x: 0, y: 0 }, { width: 800, height: 600 }, 64).x).toBe(64);
+    expect(clampPosition({ x: 0, y: 0 }, { width: 800, height: 600 }, 0).x).toBe(12);
+  });
+
+  it("re-clamps a stored/live launcher position when the sidebar inset changes", async () => {
+    window.localStorage.setItem("openportfo.chat-bubble-position.v1", JSON.stringify({ x: 20, y: 20 }));
+    const { rerender } = render(<ChatWidget leftInset={240} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open personal assistant" }).style.transform).toContain("240px"));
+    rerender(<ChatWidget leftInset={64} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open personal assistant" }).style.transform).toContain("64px"));
   });
 
   it("uses opening/closing presence, focuses the composer, and leaves non-modal Tab navigation alone", async () => {
@@ -235,7 +251,7 @@ describe("ChatWidget", () => {
     mocks.isCognitoConfigured.mockReturnValue(false);
     render(<ChatWidget />);
     fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
-    expect(await screen.findByText("Use the account menu in the header to sign in.")).toBeInTheDocument();
+    expect(await screen.findByText("Use your account settings to sign in.")).toBeInTheDocument();
     cleanup();
 
     mocks.isCognitoConfigured.mockReturnValue(true);
@@ -252,6 +268,19 @@ describe("ChatWidget", () => {
     fireEvent(window, new Event("focus"));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.fetchAuthMe).toHaveBeenCalledTimes(callsBeforeFocus);
+  });
+
+  it("refreshes the profile only for the canonical auth storage event", async () => {
+    await renderReady();
+    const callsBefore = mocks.fetchAuthMe.mock.calls.length;
+    mocks.token = "token-b";
+    fireEvent(window, new StorageEvent("storage", { key: "openportfo.accessToken" }));
+    await waitFor(() => expect(mocks.fetchAuthMe.mock.calls.length).toBeGreaterThan(callsBefore));
+    const callsAfterCanonical = mocks.fetchAuthMe.mock.calls.length;
+    mocks.token = "token-c";
+    fireEvent(window, new StorageEvent("storage", { key: "openportfo.other" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.fetchAuthMe).toHaveBeenCalledTimes(callsAfterCanonical);
   });
 
   it("shows New chat and clears the active private transcript", async () => {

@@ -346,10 +346,10 @@ describe("completeHostedUiCallback", () => {
     expect(String(fetchImpl.mock.calls[1]?.[0])).toMatch(/\/api\/auth\/me$/);
   });
 
-  it("stores callback tokens in sessionStorage and removes a legacy copy", async () => {
+  it("stores callback tokens in sessionStorage and removes a persistent copy", async () => {
     tokenStorage.clear();
     pkceStorage.clear();
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "persistent.jwt");
     storePkceSession({ verifier: "session-verifier", state: "abc", next: "/portfolio/" });
     fetchImpl
       .mockResolvedValueOnce(jsonResponse({ id_token: "  id.jwt  " }))
@@ -384,9 +384,9 @@ describe("completeHostedUiCallback", () => {
     expect(tokenStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
   });
 
-  it("logout clears both tab and legacy token stores", () => {
+  it("logout clears both tab and local token stores", () => {
     window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "session.jwt");
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "persistent.jwt");
 
     expect(logoutFromApp({ env: {} })).toEqual({ cognitoLogoutUrl: null });
     expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();

@@ -40,7 +40,7 @@ function StateCard({ children, title, tone = "neutral", action }: { children: Re
   const toneClass = tone === "warning"
     ? "border-amber-400/20 bg-amber-400/[0.06] text-amber-100"
     : tone === "error"
-      ? "border-red-400/20 bg-red-400/[0.06] text-red-100"
+      ? "border-red-400/20 bg-red-400/[0.06] text-red-400 dark:text-red-100"
       : "border-gray-700 bg-gray-900/45 text-gray-400";
   return (
     <div className={`rounded-2xl border p-4 ${toneClass}`}>
@@ -78,7 +78,7 @@ export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panel
       data-mobile={mobile ? "true" : "false"}
       data-reduced-motion={reducedMotion ? "true" : "false"}
       data-motion={phase === "open" ? "visible" : "hidden"}
-      className={`chat-panel chat-panel--${phase} fixed z-[70] flex flex-col overflow-hidden border border-gray-600/90 bg-gray-800/95 outline-none backdrop-blur-xl ${mobile ? "chat-panel--mobile rounded-2xl" : "rounded-2xl"}`}
+      className={`chat-panel chat-panel--${phase} fixed z-[50] flex flex-col overflow-hidden border border-gray-600/90 bg-gray-800/95 outline-none backdrop-blur-xl ${mobile ? "chat-panel--mobile rounded-2xl" : "rounded-2xl"}`}
       style={style}
     >
       <header className="flex shrink-0 items-start justify-between border-b border-gray-700/80 bg-gray-800/90 px-4 py-3.5">
@@ -140,7 +140,7 @@ export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panel
             {cognitoConfigured ? (
               <button type="button" onClick={handleSignIn} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-teal-400 px-4 text-xs font-semibold text-teal-950 transition-colors hover:bg-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-200/80">Sign in with Cognito</button>
             ) : (
-              <p className="mt-4 rounded-xl border border-gray-700 bg-gray-800/70 px-3 py-2.5 text-xs text-gray-400">Use the account menu in the header to sign in.</p>
+              <p className="mt-4 rounded-xl border border-gray-700 bg-gray-800/70 px-3 py-2.5 text-xs text-gray-400">Use your account settings to sign in.</p>
             )}
             {loginError ? <p className="mt-3 text-xs text-red-300" role="alert">{loginError}</p> : null}
           </StateCard>
@@ -158,7 +158,7 @@ export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panel
         />
       )}
 
-      {error ? <p className="mx-4 mb-2 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-3 py-2.5 text-xs leading-5 text-red-200" role="alert">{error}</p> : null}
+      {error ? <p className="mx-4 mb-2 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-3 py-2.5 text-xs leading-5 text-red-400 dark:text-red-200" role="alert">{error}</p> : null}
       <ChatComposer
         value={draft}
         onChange={onDraftChange}

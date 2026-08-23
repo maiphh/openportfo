@@ -14,6 +14,7 @@ import {
   AuthApiError,
   clearAuthToken,
   fetchAuthMe,
+  isAuthTokenStorageKey,
   readAuthToken,
   type AuthProfile,
 } from "@/lib/auth";
@@ -59,13 +60,18 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function clampPosition(position: Position, viewport: Pick<Viewport, "width" | "height">): Position {
+export function clampPosition(
+  position: Position,
+  viewport: Pick<Viewport, "width" | "height">,
+  leftInset = 0,
+): Position {
   const marginX = viewport.width < BUBBLE_SIZE + VIEWPORT_MARGIN * 2 ? 0 : VIEWPORT_MARGIN;
   const marginY = viewport.height < BUBBLE_SIZE + VIEWPORT_MARGIN * 2 ? 0 : VIEWPORT_MARGIN;
-  const maxX = Math.max(marginX, viewport.width - BUBBLE_SIZE - marginX);
+  const minX = Math.max(marginX, Math.round(leftInset));
+  const maxX = Math.max(minX, viewport.width - BUBBLE_SIZE - marginX);
   const maxY = Math.max(marginY, viewport.height - BUBBLE_SIZE - marginY);
   return {
-    x: Math.min(maxX, Math.max(marginX, Math.round(position.x))),
+    x: Math.min(maxX, Math.max(minX, Math.round(position.x))),
     y: Math.min(maxY, Math.max(marginY, Math.round(position.y))),
   };
 }
@@ -77,14 +83,14 @@ export function defaultPosition(viewport: Pick<Viewport, "width" | "height">): P
   );
 }
 
-function readBubblePosition(viewport: Pick<Viewport, "width" | "height">): Position | null {
+function readBubblePosition(viewport: Pick<Viewport, "width" | "height">, leftInset = 0): Position | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(POSITION_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<Position>;
     if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) return null;
-    return clampPosition({ x: Number(value.x), y: Number(value.y) }, viewport);
+    return clampPosition({ x: Number(value.x), y: Number(value.y) }, viewport, leftInset);
   } catch {
     return null;
   }
@@ -157,7 +163,7 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-export default function ChatWidget() {
+export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {}) {
   const [viewport, setViewport] = useState<Viewport>({ width: 0, height: 0, offsetLeft: 0, offsetTop: 0 });
   const [position, setPosition] = useState<Position>({ x: 20, y: 20 });
   const positionRef = useRef<Position>({ x: 20, y: 20 });
@@ -200,19 +206,19 @@ export default function ChatWidget() {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLButtonElement | null>(null);
   const composerFocusRef = useRef<(() => void) | null>(null);
-  const isMobile = viewport.width > 0 && viewport.width <= MOBILE_BREAKPOINT;
+  const isMobile = viewport.width > 0 && viewport.width < MOBILE_BREAKPOINT;
 
   useEffect(() => {
     const updateViewport = () => {
       const next = readViewport();
       setViewport(next);
-      const clamped = clampPosition(positionRef.current, next);
+      const clamped = clampPosition(positionRef.current, next, leftInset);
       positionRef.current = clamped;
       setPosition(clamped);
     };
     const initial = readViewport();
-    const stored = readBubblePosition(initial);
-    const initialPosition = stored || defaultPosition(initial);
+    const stored = readBubblePosition(initial, leftInset);
+    const initialPosition = stored || clampPosition(defaultPosition(initial), initial, leftInset);
     positionRef.current = initialPosition;
     setViewport(initial);
     setPosition(initialPosition);
@@ -225,7 +231,14 @@ export default function ChatWidget() {
       window.visualViewport?.removeEventListener("resize", updateViewport);
       window.visualViewport?.removeEventListener("scroll", updateViewport);
     };
-  }, []);
+  }, [leftInset]);
+
+  useEffect(() => {
+    if (!viewport.width) return;
+    const clamped = clampPosition(positionRef.current, viewport, leftInset);
+    positionRef.current = clamped;
+    setPosition(clamped);
+  }, [leftInset, viewport]);
 
   const syncToken = useCallback(() => {
     const nextToken = readAuthToken();
@@ -241,7 +254,7 @@ export default function ChatWidget() {
   useEffect(() => {
     syncToken();
     const onStorage = (event: StorageEvent) => {
-      if (event.key === "artryx.accessToken") syncToken();
+      if (isAuthTokenStorageKey(event.key)) syncToken();
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener(AUTH_CHANGE_EVENT, syncToken);
@@ -502,11 +515,11 @@ export default function ChatWidget() {
       const active = dragRef.current;
       if (!active) return;
       active.frame = null;
-      const next = clampPosition({ x: active.origin.x + active.lastX - active.startX, y: active.origin.y + active.lastY - active.startY }, viewport);
+      const next = clampPosition({ x: active.origin.x + active.lastX - active.startX, y: active.origin.y + active.lastY - active.startY }, viewport, leftInset);
       positionRef.current = next;
       setPosition(next);
     });
-  }, [viewport]);
+  }, [leftInset, viewport]);
 
   const finishDrag = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
@@ -516,7 +529,7 @@ export default function ChatWidget() {
       drag.frame = null;
     }
     if (drag.moved) {
-      const finalPosition = clampPosition({ x: drag.origin.x + event.clientX - drag.startX, y: drag.origin.y + event.clientY - drag.startY }, viewport);
+      const finalPosition = clampPosition({ x: drag.origin.x + event.clientX - drag.startX, y: drag.origin.y + event.clientY - drag.startY }, viewport, leftInset);
       positionRef.current = finalPosition;
       setPosition(finalPosition);
       persistBubblePosition(finalPosition);
@@ -524,7 +537,7 @@ export default function ChatWidget() {
     }
     dragRef.current = null;
     setDragging(false);
-  }, [viewport]);
+  }, [leftInset, viewport]);
 
   const onBubblePointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
@@ -566,15 +579,16 @@ export default function ChatWidget() {
     scheduleFrame(() => document.getElementById("personal-chat-input")?.focus());
   }, []);
 
+  const availableWidth = viewport.width - (isMobile ? 0 : leftInset);
   const panelWidth = viewport.width
-    ? Math.max(1, isMobile ? viewport.width - PANEL_MOBILE_MARGIN * 2 : Math.min(PANEL_DESKTOP_WIDTH, viewport.width - PANEL_MARGIN * 2))
+    ? Math.max(1, isMobile ? viewport.width - PANEL_MOBILE_MARGIN * 2 : Math.min(PANEL_DESKTOP_WIDTH, availableWidth - PANEL_MARGIN * 2))
     : 360;
   const panelHeight = viewport.height
     ? Math.max(1, isMobile ? Math.min(PANEL_MAX_HEIGHT, viewport.height - PANEL_MOBILE_MARGIN * 2) : Math.min(PANEL_MAX_HEIGHT, viewport.height - 96))
     : 560;
   const layoutMarginX = viewport.width < 48 ? 1 : PANEL_MARGIN;
   const layoutMarginY = viewport.height < 48 ? 1 : PANEL_MARGIN;
-  const viewportMinLeft = viewport.offsetLeft + layoutMarginX;
+  const viewportMinLeft = viewport.offsetLeft + (isMobile ? 0 : leftInset) + layoutMarginX;
   const viewportMinTop = viewport.offsetTop + layoutMarginY;
   const panelMaxLeft = Math.max(viewportMinLeft, viewport.offsetLeft + viewport.width - panelWidth - layoutMarginX);
   const panelMaxTop = Math.max(viewportMinTop, viewport.offsetTop + viewport.height - panelHeight - layoutMarginY);

@@ -2,7 +2,7 @@
 
 import { apiBase } from "@/lib/api";
 
-export const AUTH_TOKEN_STORAGE_KEY = "artryx.accessToken";
+export const AUTH_TOKEN_STORAGE_KEY = "openportfo.accessToken";
 export const AUTH_CHANGE_EVENT = "openportfo:auth-change";
 
 /** Notify client widgets that the active bearer token may have changed. */
@@ -88,33 +88,13 @@ export function readAuthToken(
   storage?: AuthReadStorage | null,
 ): string | null {
   // An explicitly supplied store is useful for deterministic callers/tests
-  // and means "read this store". The browser default is sessionStorage.
+  // and means "read this store". Browser auth is tab-scoped by default.
   if (storage !== undefined) return readStoredToken(storage);
-
-  const session = browserStorage("sessionStorage");
-  const legacy = browserStorage("localStorage");
-  const sessionToken = readStoredToken(session);
-  const legacyToken = readStoredToken(legacy);
-
-  if (sessionToken) {
-    // Remove a stale copy left by an older release even when the current
-    // session token already exists.
-    if (legacyToken) removeStoredToken(legacy);
-    return sessionToken;
-  }
-
-  if (!legacyToken) return null;
-
-  // Migrate the old persistent token only after the tab-scoped write has
-  // succeeded. If storage is unavailable, fail closed and remove the legacy
-  // copy so a bearer token is not kept across browser sessions.
-  if (writeStoredToken(session, legacyToken)) {
-    removeStoredToken(legacy);
-    return legacyToken;
-  }
-
-  removeStoredToken(legacy);
-  return null;
+  const token = readStoredToken(browserStorage("sessionStorage"));
+  // Fail closed if a caller or old local development build persisted the
+  // canonical bearer token outside the tab-scoped store.
+  removeStoredToken(browserStorage("localStorage"));
+  return token;
 }
 
 export function writeAuthToken(
@@ -130,9 +110,11 @@ export function writeAuthToken(
     if (stored) notifyAuthChanged();
     return stored;
   }
-  const stored = writeStoredToken(browserStorage("sessionStorage"), normalized);
+  const session = browserStorage("sessionStorage");
+  const stored = writeStoredToken(session, normalized);
   if (stored) {
-    removeStoredToken(browserStorage("localStorage"));
+    const local = browserStorage("localStorage");
+    removeStoredToken(local);
     notifyAuthChanged();
   }
   return stored;
@@ -146,9 +128,16 @@ export function clearAuthToken(
     notifyAuthChanged();
     return;
   }
-  removeStoredToken(browserStorage("sessionStorage"));
-  removeStoredToken(browserStorage("localStorage"));
+  const session = browserStorage("sessionStorage");
+  const local = browserStorage("localStorage");
+  removeStoredToken(session);
+  removeStoredToken(local);
   notifyAuthChanged();
+}
+
+/** True for the canonical auth storage key. */
+export function isAuthTokenStorageKey(key: string | null): boolean {
+  return key === AUTH_TOKEN_STORAGE_KEY;
 }
 
 export function bearerHeader(token: string | null | undefined): Record<string, string> {

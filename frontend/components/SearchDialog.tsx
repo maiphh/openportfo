@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { clearAuthToken, readAuthToken, writeAuthToken } from "@/lib/auth";
 import type { AssetSearchHit } from "@/lib/portfolio";
 import { cn, formatPct, formatPrice } from "@/lib/utils";
+import { useT } from "@/components/LanguageProvider";
 
 function isAbortError(err: unknown): boolean {
   return (
@@ -30,10 +31,17 @@ function typeLabel(assetType: AssetSearchHit["assetType"]): string {
 export default function SearchDialog({
   open,
   onClose,
+  returnFocusRef,
+  restoreFocusOnClose = true,
 }: {
   open: boolean;
   onClose: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+  restoreFocusOnClose?: boolean;
 }) {
+  const t = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState("");
@@ -48,6 +56,14 @@ export default function SearchDialog({
     setToken(readAuthToken());
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (open) {
+      openerRef.current = returnFocusRef?.current ?? (document.activeElement as HTMLElement | null);
+      return;
+    }
+    if (restoreFocusOnClose) openerRef.current?.focus();
+  }, [open, restoreFocusOnClose, returnFocusRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -149,16 +165,23 @@ export default function SearchDialog({
       : null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/60 px-4 pt-24" onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("nav.search")}
+      className="fixed inset-0 z-[80] flex items-start justify-center bg-black/60 px-4 pt-24"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-2xl overflow-hidden rounded-xl border border-gray-600 bg-gray-800 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <input
+          ref={inputRef}
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search symbols or companies"
+          placeholder={t("search.placeholder")}
           className="h-14 w-full border-b border-gray-600 bg-transparent px-5 text-base text-gray-200 outline-none placeholder:text-gray-500"
         />
         <ul className="max-h-[420px] overflow-y-auto py-2">
@@ -167,7 +190,7 @@ export default function SearchDialog({
               <p className="text-sm font-medium text-gray-200">Sign in to search</p>
               <p className="mt-1 text-xs text-gray-500">
                 Asset search requires a Bearer token. Paste it to continue (saved as{" "}
-                <code className="text-teal-400">artryx.accessToken</code>).
+                <code className="text-teal-400">openportfo.accessToken</code>).
               </p>
               <input
                 value={tokenInput}

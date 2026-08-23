@@ -54,7 +54,7 @@ export default function AllocationPie({
               fill={slice.color}
             />
           ))}
-          <circle cx={cx} cy={cy} r={inner - 2} fill="#141414" />
+          <circle cx={cx} cy={cy} r={inner - 2} style={{ fill: "var(--color-gray-800)" }} />
         </svg>
         <ul className="w-full space-y-2 text-sm">
           {colored

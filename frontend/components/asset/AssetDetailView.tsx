@@ -271,7 +271,7 @@ export default function AssetDetailView({
       <AuthGate
         title="Asset detail"
         description={
-          "Asset detail APIs require a Bearer access token. Paste a temporary token (saved as artryx.accessToken). Cognito Hosted UI is not configured in this environment."
+          "Asset detail APIs require a Bearer access token. Paste a temporary token (saved as openportfo.accessToken). Cognito Hosted UI is not configured in this environment."
         }
         error={error}
         onTokenSaved={() => {

@@ -38,7 +38,7 @@ function flatten(nodes: TreemapRect[]): TreemapRect[] {
 function HeatmapSkeleton() {
   return (
     <div
-      className="relative h-[min(72vh,820px)] min-h-[560px] w-full animate-pulse bg-[#141414] p-3"
+      className="relative h-[min(72vh,820px)] min-h-[560px] w-full animate-pulse bg-gray-800 p-3"
       data-testid="heatmap-skeleton"
     >
       <div className="grid h-full grid-cols-4 grid-rows-3 gap-2">
@@ -152,7 +152,7 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
         {source === "loading" ? <HeatmapSkeleton /> : null}
         {source === "error" ? (
           <div
-            className="flex h-[min(72vh,820px)] min-h-[560px] flex-col items-center justify-center gap-3 bg-[#141414] px-4 text-center"
+            className="flex h-[min(72vh,820px)] min-h-[560px] flex-col items-center justify-center gap-3 bg-gray-800 px-4 text-center"
             data-testid="heatmap-error"
           >
             <p className="text-sm text-gray-400">{error ?? "Heatmap unavailable"}</p>
@@ -163,7 +163,7 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
         ) : null}
         {showBoard ? (
           <>
-            <div ref={hostRef} className="relative h-[min(72vh,820px)] min-h-[560px] w-full bg-[#141414]">
+            <div ref={hostRef} className="relative h-[min(72vh,820px)] min-h-[560px] w-full bg-gray-800">
               {sectors.map((sector) => (
                 <div
                   key={sector.id}

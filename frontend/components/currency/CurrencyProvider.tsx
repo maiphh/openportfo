@@ -22,7 +22,7 @@ import {
   type DisplayCurrency,
   type FxRatesPayload,
 } from "@/lib/currency";
-import { AUTH_TOKEN_STORAGE_KEY, readAuthToken } from "@/lib/auth";
+import { AUTH_CHANGE_EVENT, isAuthTokenStorageKey, readAuthToken } from "@/lib/auth";
 import { fetchFxRates } from "@/lib/fx";
 
 export type CurrencyContextValue = {
@@ -138,7 +138,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     };
 
     const onStorage = (event: StorageEvent) => {
-      if (event.key === AUTH_TOKEN_STORAGE_KEY) {
+      if (isAuthTokenStorageKey(event.key)) {
         void refreshRates();
       }
     };
@@ -148,10 +148,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     };
 
     window.addEventListener("storage", onStorage);
+    window.addEventListener(AUTH_CHANGE_EVENT, maybeRefreshForAuth);
     window.addEventListener("focus", maybeRefreshForAuth);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener(AUTH_CHANGE_EVENT, maybeRefreshForAuth);
       window.removeEventListener("focus", maybeRefreshForAuth);
       document.removeEventListener("visibilitychange", onVisibility);
     };

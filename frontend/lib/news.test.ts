@@ -142,7 +142,7 @@ describe("fetchNews", () => {
   });
 
   it("GETs /api/news with limit and Bearer token", async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse([]));
 
     await fetchNews({ limit: 12 });

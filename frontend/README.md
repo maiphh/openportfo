@@ -1,6 +1,6 @@
-# Artryx
+# OpenPortfo
 
-Next.js frontend for the market dashboard, cloned from the [OpenStock](https://github.com/Open-Dev-Society/OpenStock) Dashboard tab and rebranded as **Artryx**.
+Next.js frontend for the OpenPortfo market dashboard, cloned from the [OpenStock](https://github.com/Open-Dev-Society/OpenStock) Dashboard tab.
 
 This first slice is **Dashboard only**, backed by **mock data** (no TradingView, Finnhub, or backend).
 
@@ -16,7 +16,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 - Dashboard `/` — Market Overview, Stock Heatmap, Market Quotes, Top Stories
 - Markets `/markets` — stub
-- Search — mock symbol palette from the header
+- Search — live symbol search from the app sidebar (`Cmd/Ctrl+K`)
 
 Static export (`output: "export"`) is enabled on **`next build` only** (for S3 + CloudFront).
 `next dev` omits it so `/stock/[id]` and `/crypto/[id]` work for any ticker without pre-listing.
@@ -47,6 +47,10 @@ Register these exact Hosted UI URLs (trailing slash required for static export):
 - Callback: `http://localhost:3000/auth/callback/`
 - Sign-out: `http://localhost:3000/`
 
-The app stores the **ID token** in `artryx.accessToken` and sends `Authorization: Bearer <id_token>` to FastAPI. PKCE `code_verifier` stays in `sessionStorage` only.
+The app stores the **ID token** in `openportfo.accessToken` (tab-scoped
+`sessionStorage`) and sends `Authorization: Bearer <id_token>` to FastAPI.
+PKCE `code_verifier` stays in `sessionStorage` only. This project was not
+released under its former working name, so no legacy browser-storage migration
+is included.
 
 If the Cognito public env vars are omitted, `/portfolio` keeps the local token-paste fallback (`fake:alice`).

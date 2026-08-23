@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { X } from "lucide-react";
 import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { Button } from "@/components/ui/button";
 import { fetchAuthMe, readAuthToken } from "@/lib/auth";
 import { refreshFxRates } from "@/lib/fx";
 import { formatPrice } from "@/lib/utils";
+import type { AuthProfileController } from "@/lib/use-auth-profile";
 
 function formatAsOf(asOf: string | null): string {
   if (!asOf) return "—";
@@ -27,7 +28,48 @@ function describeRatesError(ratesError: string | null): string | null {
   return `Could not refresh rates (${ratesError}). Showing last loaded data.`;
 }
 
-export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+function focusableElements(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+}
+
+function trapTab(
+  event: { key: string; shiftKey: boolean; preventDefault: () => void },
+  root: HTMLElement | null,
+): void {
+  // Focus is trapped by the root key handler and the window fallback below.
+  if (event.key !== "Tab") return;
+  const items = focusableElements(root);
+  if (items.length === 0) return;
+  const first = items[0]!;
+  const last = items[items.length - 1]!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  } else if (!root?.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+export default function FxRatesPanel({
+  open,
+  onClose,
+  returnFocusRef,
+  auth,
+}: {
+  open: boolean;
+  onClose: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+  auth?: AuthProfileController;
+}) {
   const {
     rates,
     ratesLoading,
@@ -42,6 +84,25 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
   const [isAdmin, setIsAdmin] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+    closeButtonRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      wasOpenRef.current = true;
+      return;
+    }
+    if (wasOpenRef.current) {
+      wasOpenRef.current = false;
+      returnFocusRef?.current?.focus();
+    }
+  }, [open, returnFocusRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +111,10 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
 
   useEffect(() => {
     if (!open) return;
+    if (auth) {
+      setIsAdmin(auth.profile?.role === "admin");
+      return;
+    }
     let cancelled = false;
     const token = readAuthToken();
     if (!token) {
@@ -68,7 +133,7 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [auth, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -78,6 +143,15 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onTab = (event: KeyboardEvent) => {
+      trapTab(event, dialogRef.current);
+    };
+    window.addEventListener("keydown", onTab);
+    return () => window.removeEventListener("keydown", onTab);
+  }, [open]);
 
   async function onRefreshRates() {
     const token = readAuthToken();
@@ -111,7 +185,14 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
   const softError = describeRatesError(ratesError);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="fx-rates-title">
+    <div
+      ref={dialogRef}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="fx-rates-title"
+      onKeyDown={(event) => trapTab(event, dialogRef.current)}
+    >
       <button type="button" className="absolute inset-0 bg-black/60" aria-label="Close rates panel" onClick={onClose} />
       <div className="relative z-10 flex max-h-[min(80vh,560px)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-gray-600 bg-gray-800 shadow-xl">
         <div className="flex items-center justify-between gap-3 border-b border-gray-700 px-4 py-3">
@@ -136,7 +217,7 @@ export default function FxRatesPanel({ open, onClose }: { open: boolean; onClose
                 {refreshing ? "Refreshing…" : "Refresh rates"}
               </Button>
             ) : null}
-            <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+            <Button ref={closeButtonRef} type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close">
               <X className="size-4" />
             </Button>
           </div>

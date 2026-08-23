@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiBase } from "@/lib/api";
 import {
   AUTH_TOKEN_STORAGE_KEY,
+  AUTH_CHANGE_EVENT,
   AuthApiError,
   clearAuthToken,
   fetchAuthMe,
+  isAuthTokenStorageKey,
   profileDisplayName,
   readAuthToken,
   writeAuthToken,
@@ -46,17 +48,25 @@ describe("auth token storage", () => {
     expect(readAuthToken()).toBeNull();
   });
 
-  it("migrates a legacy localStorage token once", () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, " legacy.jwt ");
+  it("rejects and removes a token persisted outside sessionStorage", () => {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, " persistent.jwt ");
 
-    expect(readAuthToken()).toBe("legacy.jwt");
-    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("legacy.jwt");
+    expect(readAuthToken()).toBeNull();
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
   });
 
-  it("prefers the session token and removes a stale legacy copy", () => {
+  it("reads an explicitly supplied canonical store without inferring another store", () => {
+    const supplied = {
+      getItem: (key: string) => key === AUTH_TOKEN_STORAGE_KEY ? "supplied-only" : null,
+    };
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "browser-session");
+    expect(readAuthToken(supplied)).toBe("supplied-only");
+  });
+
+  it("prefers the session token and removes a persistent local copy", () => {
     window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "session.jwt");
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "persistent.jwt");
 
     expect(readAuthToken()).toBe("session.jwt");
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
@@ -64,11 +74,30 @@ describe("auth token storage", () => {
 
   it("clears the stored token from both browser stores", () => {
     writeAuthToken("session.jwt");
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "legacy.jwt");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "persistent.jwt");
     clearAuthToken();
     expect(readAuthToken()).toBeNull();
     expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+  });
+
+  it("clears canonical auth storage and emits the same-document auth event", () => {
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "new-session");
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "new-local");
+    const listener = vi.fn();
+    window.addEventListener(AUTH_CHANGE_EVENT, listener);
+    clearAuthToken();
+    window.removeEventListener(AUTH_CHANGE_EVENT, listener);
+    expect(window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("recognizes only the canonical auth storage event", () => {
+    expect(isAuthTokenStorageKey(AUTH_TOKEN_STORAGE_KEY)).toBe(true);
+    expect(isAuthTokenStorageKey("legacy.accessToken")).toBe(false);
+    expect(isAuthTokenStorageKey("openportfo.other")).toBe(false);
+    expect(isAuthTokenStorageKey(null)).toBe(false);
   });
 
   it("fails safely when a supplied storage is unavailable", () => {

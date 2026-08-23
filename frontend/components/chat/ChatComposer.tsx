@@ -54,7 +54,7 @@ export default function ChatComposer({ value, onChange, onSubmit, disabled, sign
           disabled={disabled || !signedIn}
           placeholder={signedIn ? "Ask anything about your portfolio…" : "Sign in to start chatting"}
           aria-describedby="personal-chat-input-help personal-chat-input-count"
-          className="min-h-11 max-h-[132px] flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-6 text-gray-100 outline-none placeholder:text-gray-600 disabled:cursor-not-allowed"
+          className="min-h-11 max-h-[132px] flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-6 text-gray-100 outline-none placeholder:text-gray-500 disabled:cursor-not-allowed"
         />
         <button
           type="submit"
@@ -65,7 +65,7 @@ export default function ChatComposer({ value, onChange, onSubmit, disabled, sign
           {sending ? <LoaderCircle className="size-4.5 animate-spin" aria-hidden="true" /> : <Send className="size-4.5" aria-hidden="true" />}
         </button>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[10px] text-gray-600">
+      <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[10px] text-gray-500">
         <p id="personal-chat-input-help">Enter to send · Shift+Enter for a new line</p>
         <span id="personal-chat-input-count" aria-live="polite" aria-label={`${value.length.toLocaleString()} of 8,000 characters`} className={value.length > 7_800 ? "text-amber-300/80" : ""}>{value.length.toLocaleString()}/8,000</span>
       </div>

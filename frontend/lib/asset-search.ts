@@ -1,4 +1,4 @@
-/** Header live search: dual stock+crypto via existing `searchAssets`. */
+/** App-shell live search: dual stock+crypto via existing `searchAssets`. */
 
 import {
   PortfolioApiError,

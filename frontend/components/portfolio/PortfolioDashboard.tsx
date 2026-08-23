@@ -247,7 +247,7 @@ export default function PortfolioDashboard() {
       <AuthGate
         title="Portfolio"
         description={
-          'Portfolio APIs require a Bearer access token. Paste a temporary token (saved as artryx.accessToken). Cognito Hosted UI is not configured in this environment.'
+          'Portfolio APIs require a Bearer access token. Paste a temporary token (saved as openportfo.accessToken). Cognito Hosted UI is not configured in this environment.'
         }
         error={error}
         nextPath="/portfolio/"
@@ -267,7 +267,7 @@ export default function PortfolioDashboard() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-100">Portfolio</h1>
           <p className="text-sm text-gray-500">
-            One implicit portfolio · display currency {currency} (header switcher)
+            One implicit portfolio · display currency {currency} (settings)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

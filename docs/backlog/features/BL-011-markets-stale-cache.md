@@ -183,3 +183,7 @@ Value: `{ savedAt: ISO, payload: HeatmapResponse | QuotesResponse }`.
 - Verification:
   - `cd frontend; npx vitest run lib/markets-cache.test.ts components/dashboard/StockHeatmap.test.tsx components/dashboard/MarketQuotes.test.tsx`
   - `cd backend; python -m pytest tests/unit/adapters/test_vnstock_http.py tests/unit/api/test_markets.py tests/unit/api/test_markets_heatmap.py tests/unit/api/test_markets_quotes.py tests/unit/api/test_markets_crypto.py -q`
+### Current implementation note (Sprint 05)
+
+Markets caches now use `openportfo.markets.*`; the `artryx.markets.*` examples
+below are historical and are migrated once at startup.

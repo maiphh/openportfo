@@ -31,17 +31,17 @@ export default function Sparkline({
   return (
     <svg viewBox={`0 0 ${width} ${height + 22}`} className="h-auto w-full" role="img" aria-label="Price sparkline">
       <defs>
-        <linearGradient id="artryx-spark-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0FEDBE" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="#0FEDBE" stopOpacity="0" />
+        <linearGradient id="openportfo-spark-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" style={{ stopColor: "var(--color-teal-400)" }} stopOpacity="0.22" />
+          <stop offset="100%" style={{ stopColor: "var(--color-teal-400)" }} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#artryx-spark-fill)" />
-      <path d={line} fill="none" stroke="#0FEDBE" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={area} fill="url(#openportfo-spark-fill)" />
+      <path d={line} fill="none" style={{ stroke: "var(--color-teal-400)" }} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
       {labels.map((label, i) => {
         const x = padX + (i / Math.max(labels.length - 1, 1)) * (width - padX * 2);
         return (
-          <text key={label} x={x} y={height + 16} textAnchor="middle" fill="#9095A1" fontSize="11">
+          <text key={label} x={x} y={height + 16} textAnchor="middle" style={{ fill: "var(--color-gray-500)" }} fontSize="11">
             {label}
           </text>
         );

@@ -191,3 +191,8 @@ As an **authenticated investor**, I want **one implicit portfolio with validated
 - Approach: Artryx `/portfolio` dashboard (summary, SVG pie, table, filter, refresh, modal CRUD) + BE `HoldingsService` catalog resolve on POST/PUT and session→native cost FX via stored rates. Auth gate uses `artryx.accessToken` localStorage + paste CTA when Cognito Hosted UI is incomplete.
 - PR / branch: `execute-plan/6cc30007-pr-3-bl-001-portfolio-dashboard`
 - Verification: `pytest backend/tests/unit/api/test_holdings.py`; `npm test` in `frontend/` (NavItems + portfolio helpers).
+### Current implementation note (Sprint 05)
+
+Portfolio auth uses canonical `openportfo.accessToken`; older
+`artryx.*` references below are retained as historical context and migration
+compatibility notes.

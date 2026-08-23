@@ -1,6 +1,6 @@
 # Backlog board
 
-**Last updated:** 2026-08-20
+**Last updated:** 2026-08-23
 **How to use:** see `docs/backlog/README.md`
 
 **Orchestration:** PLAN `6cc30007` complete on `integration/backlog-batch-6cc30007` (**not merged to main**).  
@@ -12,6 +12,14 @@
 
 | ID | Title | Priority | Status | Owner | Feature file | Notes |
 |----|-------|----------|--------|-------|--------------|-------|
+| BL-019 | Rebrand Artryx → OpenPortfo (+ storage-key migration) | P0 | `done` | Luna implementer | `features/BL-019-rebrand-openportfo.md` | Architecture-approved 2026-08-23 |
+| BL-020 | Collapsible sidebar nav, avatar bottom-left | P0 | `done` | Luna implementer | `features/BL-020-sidebar-nav.md` | Architecture-approved 2026-08-23 |
+| BL-021 | User settings modal: light/dark + language + currency | P0 | `done` | Luna implementer | `features/BL-021-user-settings-modal.md` | Architecture-approved 2026-08-23 |
+| BL-022 | DiceBear avatars | P1 | `done` | Luna implementer | `features/BL-022-dicebear-avatars.md` | Architecture-approved 2026-08-23 |
+| BL-023 | Settings page w/ sub-tabs (General + Avatar) | P0 | `ready` | Eng | `features/BL-023-settings-page.md` | Open WebUI-style tabs; sprint-06 |
+| BL-024 | Admin page: user matrix + role/settings control + ADMIN_EMAILS whitelist | P0 | `ready` | Eng | `features/BL-024-admin-page-whitelist.md` | BE user-mgmt API + env whitelist |
+| BL-025 | Chatbot settings tab (models, params) | P1 | `ready` | Eng | `features/BL-025-chatbot-settings.md` | DB overrides env |
+| BL-026 | FX rates settings tab (view + admin refresh) | P1 | `ready` | Eng | `features/BL-026-fx-settings-tab.md` | Absorbs FxRatesPanel |
 | BL-011 | Markets stale-while-revalidate + shared BE cache | P0 | `done` | Eng | `features/BL-011-markets-stale-cache.md` | Merged to integration |
 | BL-012 | Configurable 2-decimal number format | P0 | `done` | Eng | `features/BL-012-number-format.md` | Merged to integration |
 | BL-013 | Portfolio Avg cost / Price in session FX | P0 | `done` | Eng | `features/BL-013-portfolio-unit-fx.md` | Merged to integration |
@@ -41,6 +49,10 @@
 
 | ID | Title | Done date | Feature file |
 |----|-------|-----------|--------------|
+| BL-019 | Rebrand OpenPortfo | 2026-08-23 | `features/BL-019-rebrand-openportfo.md` |
+| BL-020 | Collapsible sidebar nav | 2026-08-23 | `features/BL-020-sidebar-nav.md` |
+| BL-021 | User settings modal | 2026-08-23 | `features/BL-021-user-settings-modal.md` |
+| BL-022 | DiceBear avatars | 2026-08-23 | `features/BL-022-dicebear-avatars.md` |
 | BL-011 | Markets SWR cache | 2026-08-19 | `features/BL-011-markets-stale-cache.md` |
 | BL-012 | 2-decimal number format | 2026-08-19 | `features/BL-012-number-format.md` |
 | BL-013 | Portfolio unit FX | 2026-08-19 | `features/BL-013-portfolio-unit-fx.md` |

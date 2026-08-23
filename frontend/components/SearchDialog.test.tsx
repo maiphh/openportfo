@@ -51,16 +51,16 @@ describe("SearchDialog", () => {
   beforeEach(() => {
     searchLiveCatalog.mockReset();
     searchLiveCatalog.mockResolvedValue(emptyOutcome());
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
   afterEach(() => {
     cleanup();
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
   it("does not fetch on empty query and shows helper copy", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     render(<SearchDialog open onClose={() => undefined} />);
 
     expect(await screen.findByText("Type to search")).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe("SearchDialog", () => {
   });
 
   it("debounces then searches live catalog", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     searchLiveCatalog.mockResolvedValue(emptyOutcome({ hits: [stockHit, cryptoHit] }));
 
     render(<SearchDialog open onClose={() => undefined} />);
@@ -94,7 +94,7 @@ describe("SearchDialog", () => {
   });
 
   it("shows sign-in empty state on 401 and does not dump mock results", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     searchLiveCatalog.mockResolvedValue(emptyOutcome({ authRequired: true }));
 
     render(<SearchDialog open onClose={() => undefined} />);

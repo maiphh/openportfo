@@ -99,12 +99,12 @@ describe("WatchlistView", () => {
     addWatchlist.mockReset();
     removeWatchlist.mockReset();
     searchAssets.mockReset();
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
   afterEach(() => {
     cleanup();
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
   it("does not fetch watchlist data when unauthenticated", async () => {
@@ -118,7 +118,7 @@ describe("WatchlistView", () => {
   });
 
   it("loads items for an authenticated user", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     fetchWatchlist.mockResolvedValue([item()]);
 
     render(<WatchlistView />);
@@ -130,7 +130,7 @@ describe("WatchlistView", () => {
   });
 
   it("adds a search-resolved asset and shows the new row", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     fetchWatchlist.mockResolvedValueOnce([]).mockResolvedValueOnce([
       item({
         assetType: "stock",
@@ -171,7 +171,7 @@ describe("WatchlistView", () => {
   });
 
   it("shows a 409 inline error and leaves the list unchanged", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     const existing = [item()];
     fetchWatchlist.mockResolvedValue(existing);
     searchAssets.mockResolvedValue([
@@ -197,7 +197,7 @@ describe("WatchlistView", () => {
   });
 
   it("removes a row after DELETE 204", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     fetchWatchlist.mockResolvedValue([item()]);
     removeWatchlist.mockResolvedValue(undefined);
 
@@ -222,7 +222,7 @@ describe("WatchlistView", () => {
   });
 
   it("shows error + retry when the list request fails", async () => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     fetchWatchlist.mockRejectedValueOnce(new Error("Watchlist HTTP 503")).mockResolvedValueOnce([item()]);
 
     render(<WatchlistView />);

@@ -141,11 +141,11 @@ describe("asset API client", () => {
 
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
   });
 
   afterEach(() => {
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

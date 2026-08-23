@@ -20,7 +20,7 @@ function defaultSessionStorage(): SessionLike | null {
 }
 
 export function marketsCacheKey(widget: MarketsWidget, market: MarketKind): string {
-  return `artryx.markets.${widget}.${market}`;
+  return `openportfo.markets.${widget}.${market}`;
 }
 
 function isIsoTimestamp(value: unknown): value is string {

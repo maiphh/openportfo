@@ -61,10 +61,10 @@ describe("markets-cache", () => {
   });
 
   it("uses per-market per-widget keys", () => {
-    expect(marketsCacheKey("heatmap", "stock")).toBe("artryx.markets.heatmap.stock");
-    expect(marketsCacheKey("heatmap", "crypto")).toBe("artryx.markets.heatmap.crypto");
-    expect(marketsCacheKey("quotes", "stock")).toBe("artryx.markets.quotes.stock");
-    expect(marketsCacheKey("quotes", "crypto")).toBe("artryx.markets.quotes.crypto");
+    expect(marketsCacheKey("heatmap", "stock")).toBe("openportfo.markets.heatmap.stock");
+    expect(marketsCacheKey("heatmap", "crypto")).toBe("openportfo.markets.heatmap.crypto");
+    expect(marketsCacheKey("quotes", "stock")).toBe("openportfo.markets.quotes.stock");
+    expect(marketsCacheKey("quotes", "crypto")).toBe("openportfo.markets.quotes.crypto");
   });
 
   it("writes and reads a heatmap payload", () => {

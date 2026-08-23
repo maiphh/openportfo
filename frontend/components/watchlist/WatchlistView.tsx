@@ -183,7 +183,7 @@ export default function WatchlistView() {
     return (
       <AuthGate
         title="Watchlist"
-        description="Watchlist APIs require a Bearer access token. Paste a temporary token (saved as artryx.accessToken). Cognito Hosted UI is not configured in this environment."
+        description="Watchlist APIs require a Bearer access token. Paste a temporary token (saved as openportfo.accessToken). Cognito Hosted UI is not configured in this environment."
         error={error}
         nextPath="/watchlist/"
         onTokenSaved={() => {
@@ -205,7 +205,7 @@ export default function WatchlistView() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-100">Watchlist</h1>
           <p className="text-sm text-gray-500">
-            Names you track without a holding · display currency {currency} (header switcher)
+            Names you track without a holding · display currency {currency} (settings)
           </p>
         </div>
         <Button type="button" onClick={openAdd}>
