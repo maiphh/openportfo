@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   AuthApiError,
   AUTH_CHANGE_EVENT,
@@ -11,102 +11,100 @@ import {
   type AuthProfile,
 } from "@/lib/auth";
 import { beginHostedUiLogin, isCognitoConfigured, logoutFromApp } from "@/lib/cognito";
+import { AuthProfileContext, type AuthProfileController } from "@/lib/auth-profile-context";
 
-export type AuthProfileController = {
-  hydrated: boolean;
-  token: string | null;
-  profile: AuthProfile | null;
-  loading: boolean;
-  error: string | null;
-  cognitoConfigured: boolean;
-  refresh: () => void;
-  signIn: (next?: string) => Promise<void>;
-  signOut: () => void;
-};
+export type { AuthProfileController } from "@/lib/auth-profile-context";
 
-export function useAuthProfile(): AuthProfileController {
+/** Shared provider hook with a standalone fallback for isolated consumers. */
+function useStandaloneAuthProfile(disabled = false): AuthProfileController {
   const [hydrated, setHydrated] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const profileTokenRef = useRef<string | null>(null);
 
-  const refresh = useCallback(() => {
-    setToken(readAuthToken());
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    setHydrated(true);
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!hydrated) return;
+  const refresh = useCallback(() => setToken(readAuthToken()), []);
+  const reloadProfile = useCallback(async () => {
     requestRef.current?.abort();
-    if (!token) {
+    const currentToken = token ?? readAuthToken();
+    if (!currentToken) {
+      profileTokenRef.current = null;
       setProfile(null);
       setLoading(false);
-      setError(null);
-      return;
+      return null;
     }
-
+    if (profileTokenRef.current !== currentToken) {
+      profileTokenRef.current = currentToken;
+      setProfile(null);
+    }
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true);
-    setError(null);
-    void fetchAuthMe({ token, signal: controller.signal })
-      .then((nextProfile) => {
-        if (controller.signal.aborted) return;
-        setProfile(nextProfile);
-      })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return;
-        if (reason instanceof AuthApiError && reason.authRequired) {
-          clearAuthToken();
-          setToken(null);
-          setProfile(null);
-          setError(null);
-        } else {
-          setProfile(null);
-          setError(reason instanceof Error ? reason.message : "Unable to load account.");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-      if (requestRef.current === controller) requestRef.current = null;
-    };
-  }, [hydrated, token]);
+    try {
+      const next = await fetchAuthMe({ token: currentToken, signal: controller.signal });
+      if (controller.signal.aborted) return null;
+      profileTokenRef.current = currentToken;
+      setProfile(next);
+      setError(null);
+      return next;
+    } catch (reason: unknown) {
+      if (controller.signal.aborted) return null;
+      if (reason instanceof AuthApiError && reason.authRequired) {
+        clearAuthToken();
+        setToken(null);
+        profileTokenRef.current = null;
+        setProfile(null);
+        setError(null);
+      } else {
+        setProfile(null);
+        setError(reason instanceof Error ? reason.message : "Unable to load account.");
+      }
+      return null;
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (disabled) return;
+    refresh();
+    setHydrated(true);
+  }, [disabled, refresh]);
+  useEffect(() => {
+    if (disabled || !hydrated) return;
+    if (!token) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    void reloadProfile();
+    return () => requestRef.current?.abort();
+  }, [disabled, hydrated, reloadProfile, token]);
+  useEffect(() => {
+    if (disabled || !hydrated) return;
     const sync = () => refresh();
-    const onStorage = (event: StorageEvent) => {
+    const storage = (event: StorageEvent) => {
       if (isAuthTokenStorageKey(event.key)) sync();
     };
     window.addEventListener(AUTH_CHANGE_EVENT, sync);
-    window.addEventListener("storage", onStorage);
+    window.addEventListener("storage", storage);
     window.addEventListener("focus", sync);
     return () => {
       window.removeEventListener(AUTH_CHANGE_EVENT, sync);
-      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("storage", storage);
       window.removeEventListener("focus", sync);
     };
-  }, [hydrated, refresh]);
+  }, [disabled, hydrated, refresh]);
 
   const signIn = useCallback(async (next?: string) => {
-    setError(null);
     try {
-      await beginHostedUiLogin({ next: next ?? (typeof window !== "undefined" ? window.location.pathname : "/") });
+      await beginHostedUiLogin({ next: next ?? "/" });
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Unable to start sign-in.");
     }
   }, []);
-
   const signOut = useCallback(() => {
     const { cognitoLogoutUrl } = logoutFromApp();
     requestRef.current?.abort();
@@ -114,15 +112,10 @@ export function useAuthProfile(): AuthProfileController {
     setProfile(null);
     setError(null);
     if (cognitoLogoutUrl && typeof window !== "undefined") {
-      try {
-        window.location.assign(cognitoLogoutUrl);
-      } catch {
-        // jsdom and locked-down browsers may reject navigation; local logout
-        // has already completed and remains the source of truth.
-      }
+      try { window.location.assign(cognitoLogoutUrl); } catch { /* local logout completed */ }
     }
   }, []);
-
+  const replaceProfile = useCallback((next: AuthProfile) => setProfile(next), []);
   return {
     hydrated,
     token,
@@ -131,8 +124,15 @@ export function useAuthProfile(): AuthProfileController {
     error,
     cognitoConfigured: isCognitoConfigured(),
     refresh,
+    reloadProfile,
+    replaceProfile,
     signIn,
     signOut,
   };
 }
 
+export function useAuthProfile(): AuthProfileController {
+  const context = useContext(AuthProfileContext);
+  const standalone = useStandaloneAuthProfile(Boolean(context));
+  return context ?? standalone;
+}

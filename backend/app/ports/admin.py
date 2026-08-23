@@ -23,6 +23,21 @@ class SystemSettings:
     jobs_email: bool = False
     jobs_price: bool = True
     default_display_currency: str = "USD"
+    version: int = 0
+    chat_model: Optional[str] = None
+    chat_fallback_models: Optional[list[str]] = None
+    chat_temperature: Optional[float] = None
+    chat_top_p: Optional[float] = None
+    chat_max_tokens: Optional[int] = None
+    chat_system_prompt_extra: Optional[str] = None
+
+
+class SettingsConflictError(Exception):
+    """Raised when an optimistic SystemSettings version is stale."""
+
+    def __init__(self, detail: str = "Settings changed; reload before saving") -> None:
+        self.detail = detail
+        super().__init__(detail)
 
 
 @dataclass
@@ -63,7 +78,12 @@ class SettingsRepo(Protocol):
     def get(self) -> SystemSettings:
         ...
 
-    def save(self, settings: SystemSettings) -> SystemSettings:
+    def save(
+        self,
+        settings: SystemSettings,
+        *,
+        expected_version: Optional[int] = None,
+    ) -> SystemSettings:
         ...
 
 
@@ -99,6 +119,7 @@ __all__ = [
     "JobRun",
     "AdminValidationError",
     "AdminNotFoundError",
+    "SettingsConflictError",
     "SettingsRepo",
     "RssSourcesRepo",
     "JobRunsRepo",

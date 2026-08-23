@@ -39,6 +39,9 @@ eb create openportfo-api-env \
 | `COGNITO_REGION` | `us-east-1` |
 | `COGNITO_USER_POOL_ID` | *(CFN)* |
 | `COGNITO_APP_CLIENT_ID` | *(CFN)* |
+| `ADMIN_EMAILS` | Comma-separated grant-only bootstrap emails (optional; set in EB console) |
+| `LLM_TEMPERATURE` / `LLM_TOP_P` | *(optional runtime defaults)* |
+| `LLM_SYSTEM_PROMPT_EXTRA` | *(optional bounded prompt suffix; no secrets)* |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173,https://YOUR_EB_URL` |
 | `MARKET_CLIENT_MODE` | `fixture` or `http` |
 | `EXCHANGE_RATE_API_KEY` | *(optional; admin FX only — set in EB console, never commit)* |
@@ -53,3 +56,4 @@ Table names default to `openportfo-*` matching CFN.
 ## Instance profile
 
 Attach CFN output `EBInstanceProfileName` (`openportfo-eb-instance-profile`) so the instance can call DynamoDB + S3 without access keys in env.
+The attached profile must include `dynamodb:TransactWriteItems` on the Users and Settings table ARNs for last-admin role changes. Never grant or log the `ADMIN_EMAILS` value to browser clients.

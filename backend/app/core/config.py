@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from enum import Enum
 from functools import lru_cache
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
@@ -124,6 +125,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         use_enum_values=True,
+        hide_input_in_errors=True,
     )
 
     @classmethod
@@ -168,6 +170,22 @@ class Settings(BaseSettings):
     cognito_user_pool_id: str = Field(default="", alias="COGNITO_USER_POOL_ID")
     cognito_app_client_id: str = Field(default="", alias="COGNITO_APP_CLIENT_ID")
 
+    # Optional grant-only admin bootstrap.  The value is parsed into a
+    # case-folded set at the boundary; it is never returned by an API.
+    admin_emails: str = Field(default="", alias="ADMIN_EMAILS")
+
+    @field_validator("admin_emails")
+    @classmethod
+    def _validate_admin_emails(cls, value: str) -> str:
+        from app.services.admin_user_service import parse_admin_emails
+
+        try:
+            parse_admin_emails(value)
+        except ValueError as exc:
+            # Keep configured addresses out of validation details/logs.
+            raise ValueError("ADMIN_EMAILS contains invalid email configuration") from exc
+        return value
+
     # DynamoDB table names (Sprint 02+ / 12)
     users_table: str = Field(default="openportfo-users", alias="USERS_TABLE")
     holdings_table: str = Field(default="openportfo-holdings", alias="HOLDINGS_TABLE")
@@ -211,9 +229,27 @@ class Settings(BaseSettings):
         alias="LLM_FALLBACK_MODELS",
     )
     llm_free_only: bool = Field(default=True, alias="LLM_FREE_ONLY")
+    llm_temperature: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=2,
+        allow_inf_nan=False,
+        alias="LLM_TEMPERATURE",
+    )
+    llm_top_p: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        alias="LLM_TOP_P",
+    )
+    llm_system_prompt_extra: Optional[str] = Field(
+        default=None,
+        alias="LLM_SYSTEM_PROMPT_EXTRA",
+    )
     llm_timeout_seconds: float = Field(default=90.0, alias="LLM_TIMEOUT_SECONDS")
     llm_max_tool_rounds: int = Field(default=8, alias="LLM_MAX_TOOL_ROUNDS")
-    llm_max_tokens: int = Field(default=2048, alias="LLM_MAX_TOKENS")
+    llm_max_tokens: int = Field(default=2048, ge=1, le=32768, alias="LLM_MAX_TOKENS")
     llm_retry_max: int = Field(default=2, alias="LLM_RETRY_MAX")
     llm_retry_max_sleep: float = Field(default=8.0, alias="LLM_RETRY_MAX_SLEEP")
     chat_idempotency_ttl_seconds: int = Field(
@@ -237,6 +273,23 @@ class Settings(BaseSettings):
     llm_http_referer: str = Field(default="https://openportfo.local", alias="LLM_HTTP_REFERER")
     llm_app_title: str = Field(default="OpenPortfo", alias="LLM_APP_TITLE")
 
+    @field_validator("llm_temperature", "llm_top_p", "llm_system_prompt_extra", mode="before")
+    @classmethod
+    def _blank_optional_llm_value(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("llm_system_prompt_extra")
+    @classmethod
+    def _validate_llm_prompt_extra(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) > 4000 or any(
+            unicodedata.category(char).startswith("C") and char not in "\n\t" for char in value
+        ):
+            raise ValueError("LLM_SYSTEM_PROMPT_EXTRA must be 1-4000 characters without controls")
+        return value or None
+
     # Market client mode: fixture (default for tests) | http (live HTTP when aws/prod)
     market_client_mode: MarketClientMode = Field(
         default=MarketClientMode.FIXTURE,
@@ -259,6 +312,12 @@ class Settings(BaseSettings):
     @property
     def llm_fallback_model_list(self) -> List[str]:
         return [m.strip() for m in (self.llm_fallback_models or "").split(",") if m.strip()]
+
+    @property
+    def admin_email_set(self) -> frozenset[str]:
+        from app.services.admin_user_service import parse_admin_emails
+
+        return parse_admin_emails(self.admin_emails)
 
     def aws_adapters_enabled(self) -> bool:
         """True when production AWS adapters should be used (not unit-test fakes)."""

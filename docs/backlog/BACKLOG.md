@@ -16,10 +16,10 @@
 | BL-020 | Collapsible sidebar nav, avatar bottom-left | P0 | `done` | Luna implementer | `features/BL-020-sidebar-nav.md` | Architecture-approved 2026-08-23 |
 | BL-021 | User settings modal: light/dark + language + currency | P0 | `done` | Luna implementer | `features/BL-021-user-settings-modal.md` | Architecture-approved 2026-08-23 |
 | BL-022 | DiceBear avatars | P1 | `done` | Luna implementer | `features/BL-022-dicebear-avatars.md` | Architecture-approved 2026-08-23 |
-| BL-023 | Settings page w/ sub-tabs (General + Avatar) | P0 | `ready` | Eng | `features/BL-023-settings-page.md` | Open WebUI-style tabs; sprint-06 |
-| BL-024 | Admin page: user matrix + role/settings control + ADMIN_EMAILS whitelist | P0 | `ready` | Eng | `features/BL-024-admin-page-whitelist.md` | BE user-mgmt API + env whitelist |
-| BL-025 | Chatbot settings tab (models, params) | P1 | `ready` | Eng | `features/BL-025-chatbot-settings.md` | DB overrides env |
-| BL-026 | FX rates settings tab (view + admin refresh) | P1 | `ready` | Eng | `features/BL-026-fx-settings-tab.md` | Absorbs FxRatesPanel |
+| BL-023 | Settings page w/ sub-tabs (General + Avatar) | P0 | `done` | Luna implementer | `features/BL-023-settings-page.md` | Architecture-approved 2026-08-23 |
+| BL-024 | Admin page: user matrix + role/settings control + ADMIN_EMAILS whitelist | P0 | `done` | Luna implementer | `features/BL-024-admin-page-whitelist.md` | Architecture-approved 2026-08-23 |
+| BL-025 | Chatbot settings tab (models, params) | P1 | `done` | Luna implementer | `features/BL-025-chatbot-settings.md` | Architecture-approved 2026-08-23 |
+| BL-026 | FX rates settings tab (view + admin refresh) | P1 | `done` | Luna implementer | `features/BL-026-fx-settings-tab.md` | Architecture-approved 2026-08-23 |
 | BL-011 | Markets stale-while-revalidate + shared BE cache | P0 | `done` | Eng | `features/BL-011-markets-stale-cache.md` | Merged to integration |
 | BL-012 | Configurable 2-decimal number format | P0 | `done` | Eng | `features/BL-012-number-format.md` | Merged to integration |
 | BL-013 | Portfolio Avg cost / Price in session FX | P0 | `done` | Eng | `features/BL-013-portfolio-unit-fx.md` | Merged to integration |

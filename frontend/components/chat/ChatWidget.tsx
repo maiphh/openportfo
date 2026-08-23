@@ -11,12 +11,8 @@ import {
 } from "react";
 import {
   AUTH_CHANGE_EVENT,
-  AuthApiError,
   clearAuthToken,
-  fetchAuthMe,
-  isAuthTokenStorageKey,
   readAuthToken,
-  type AuthProfile,
 } from "@/lib/auth";
 import {
   ChatApiError,
@@ -24,6 +20,7 @@ import {
   type ChatStreamEvent,
 } from "@/lib/chat";
 import {
+  CHAT_SESSION_PREFIX,
   clearChatSession,
   loadChatSession,
   saveChatSession,
@@ -31,6 +28,7 @@ import {
 import ChatLauncher from "@/components/chat/ChatLauncher";
 import ChatPanel from "@/components/chat/ChatPanel";
 import type { ChatUiMessage } from "@/components/chat/ChatMessageRow";
+import { useAuthProfile } from "@/lib/use-auth-profile";
 
 export type Position = { x: number; y: number };
 export type Viewport = { width: number; height: number; offsetLeft: number; offsetTop: number };
@@ -176,11 +174,13 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
   const panelCloseTimer = useRef<number | null>(null);
   const panelOpenFrame = useRef<number | null>(null);
   const reducedMotion = useReducedMotion();
-  const [token, setToken] = useState<string | null>(null);
-  const [profile, setProfile] = useState<AuthProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileRetry, setProfileRetry] = useState(0);
+  const auth = useAuthProfile();
+  const token = auth.token;
+  const profile = auth.profile;
+  const authLoading = !auth.hydrated || auth.loading;
+  const profileError = auth.error
+    ? "Unable to verify your session. Check your connection and retry."
+    : null;
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [messages, setMessages] = useState<ChatUiMessage[]>([]);
@@ -240,82 +240,63 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
     setPosition(clamped);
   }, [leftInset, viewport]);
 
-  const syncToken = useCallback(() => {
-    const nextToken = readAuthToken();
-    // Focus/storage notifications are synchronization signals, not retries.
-    setToken((current) => current === nextToken ? current : nextToken);
-  }, []);
-
   const retryProfile = useCallback(() => {
-    setProfileError(null);
-    setProfileRetry((current) => current + 1);
-  }, []);
+    void auth.reloadProfile();
+  }, [auth]);
 
   useEffect(() => {
-    syncToken();
-    const onStorage = (event: StorageEvent) => {
-      if (isAuthTokenStorageKey(event.key)) syncToken();
-    };
-    window.addEventListener("storage", onStorage);
-    window.addEventListener(AUTH_CHANGE_EVENT, syncToken);
-    window.addEventListener("focus", syncToken);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener(AUTH_CHANGE_EVENT, syncToken);
-      window.removeEventListener("focus", syncToken);
-    };
-  }, [syncToken]);
-
-  useEffect(() => {
-    const generation = ++authGeneration.current;
+    authGeneration.current += 1;
     abortRef.current?.abort();
     setSending(false);
     setPendingId(null);
     setStatusText(null);
     setError(null);
-    setProfileError(null);
     setSessionReady(false);
     setSessionUserId(null);
     setMessages([]);
-    if (!token) {
-      if (activeSessionUser.current) clearChatSession(activeSessionUser.current);
-      activeSessionUser.current = null;
-      setProfile(null);
-      setAuthLoading(false);
+    if (!auth.hydrated) {
       return;
     }
-    setProfile(null);
-    setAuthLoading(true);
-    const controller = new AbortController();
-    void fetchAuthMe({ token, signal: controller.signal })
-      .then((nextProfile) => {
-        if (controller.signal.aborted || generation !== authGeneration.current) return;
-        if (activeSessionUser.current && activeSessionUser.current !== nextProfile.userId) clearChatSession(activeSessionUser.current);
-        setProfile(nextProfile);
-        activeSessionUser.current = nextProfile.userId;
-        setSessionUserId(nextProfile.userId);
-        setMessages(loadChatSession(nextProfile.userId));
-        setSessionReady(true);
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted || generation !== authGeneration.current) return;
-        if (cause instanceof AuthApiError && cause.authRequired) {
-          if (activeSessionUser.current) clearChatSession(activeSessionUser.current);
-          activeSessionUser.current = null;
-          clearAuthToken();
-          setToken(null);
-          setProfileError(null);
-        } else {
-          setProfileError("Unable to verify your session. Check your connection and retry.");
+    if (!token || !profile) {
+      if (activeSessionUser.current) clearChatSession(activeSessionUser.current);
+      activeSessionUser.current = null;
+      return;
+    }
+    if (activeSessionUser.current && activeSessionUser.current !== profile.userId) clearChatSession(activeSessionUser.current);
+    activeSessionUser.current = profile.userId;
+    setSessionUserId(profile.userId);
+    setMessages(loadChatSession(profile.userId));
+    setSessionReady(true);
+  }, [auth.hydrated, profile, token]);
+
+  // Auth changes can arrive before React commits the provider's token state.
+  // Clear the session owner synchronously so a signed-out/switching user can
+  // never observe the previous user's transcript during that transition.
+  useEffect(() => {
+    const onAuthChange = () => {
+      if (activeSessionUser.current) {
+        clearChatSession(activeSessionUser.current);
+        activeSessionUser.current = null;
+      } else if (!readAuthToken()) {
+        try {
+          for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+            const key = window.sessionStorage.key(index);
+            if (key?.startsWith(`${CHAT_SESSION_PREFIX}:`)) window.sessionStorage.removeItem(key);
+          }
+        } catch {
+          // Ignore unavailable session storage.
         }
-        setProfile(null);
-        setSessionReady(false);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted && generation === authGeneration.current) setAuthLoading(false);
-      });
-    return () => controller.abort();
-  }, [profileRetry, token]);
+      }
+      // Stop the persistence effect in the same update so an auth transition
+      // cannot write the previous user's in-memory transcript back after the
+      // storage entry has been removed.
+      setSessionReady(false);
+      setSessionUserId(null);
+      setMessages([]);
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, onAuthChange);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, onAuthChange);
+  }, []);
 
   useEffect(() => {
     if (sessionReady && sessionUserId) saveChatSession(sessionUserId, persistedMessages(messages));
@@ -459,7 +440,6 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
           if (activeSessionUser.current) clearChatSession(activeSessionUser.current);
           activeSessionUser.current = null;
           clearAuthToken();
-          setToken(null);
         }
         // Render a turn failure exactly once in its assistant row so the
         // activity timeline remains attached to the attempted turn.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from threading import RLock
 from typing import Optional
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -12,6 +13,7 @@ from app.ports.admin import (
     AdminValidationError,
     JobRun,
     RssSource,
+    SettingsConflictError,
     SystemSettings,
 )
 
@@ -23,13 +25,25 @@ NotFoundError = AdminNotFoundError
 class InMemorySettingsRepo:
     def __init__(self, initial: Optional[SystemSettings] = None) -> None:
         self._settings = deepcopy(initial) if initial else SystemSettings()
+        self._lock = RLock()
 
     def get(self) -> SystemSettings:
-        return deepcopy(self._settings)
+        with self._lock:
+            return deepcopy(self._settings)
 
-    def save(self, settings: SystemSettings) -> SystemSettings:
-        self._settings = deepcopy(settings)
-        return deepcopy(self._settings)
+    def save(
+        self,
+        settings: SystemSettings,
+        *,
+        expected_version: Optional[int] = None,
+    ) -> SystemSettings:
+        with self._lock:
+            if expected_version is not None and expected_version != self._settings.version:
+                raise SettingsConflictError()
+            stored = deepcopy(settings)
+            stored.version = self._settings.version + 1
+            self._settings = stored
+            return deepcopy(self._settings)
 
 
 class InMemoryRssSourcesRepo:

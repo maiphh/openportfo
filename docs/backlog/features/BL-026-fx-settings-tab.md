@@ -5,14 +5,14 @@
 | **ID** | `BL-026` |
 | **Title** | FX rates tab in Settings: view stored rates, admin on-demand refresh |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | Orchestrator |
-| **Owner (Eng)** | |
+| **Owner (Eng)** | Luna implementer |
 | **Requested by** | Product |
 | **Related PRD / sprint** | sprint-06 |
 | **Created** | 2026-08-23 |
 | **Ready date** | 2026-08-23 |
-| **Done date** | |
+| **Done date** | 2026-08-23 |
 
 ---
 
@@ -58,10 +58,10 @@ As a **user/admin**, I want **to see current FX rates and (as admin) trigger a r
 
 ## 5. Acceptance criteria
 
-- [ ] FX tab lists stored rates + freshness/updated time.
-- [ ] Admin refresh works and errors surface; non-admins get no refresh control.
-- [ ] `FxRatesPanel` retired or reduced to shared logic without dead code.
-- [ ] Unit tests: tab render (user vs admin), refresh success/failure paths; suite green.
+- [x] FX tab lists stored rates + freshness/updated time.
+- [x] Admin refresh works and errors surface; non-admins get no refresh control.
+- [x] `FxRatesPanel` retired or reduced to shared logic without dead code.
+- [x] Unit tests: tab render (user vs admin), refresh success/failure paths; suite green.
 
 ---
 
@@ -96,7 +96,7 @@ As a **user/admin**, I want **to see current FX rates and (as admin) trigger a r
 
 | # | Question | Status | Answer |
 |---|----------|--------|--------|
-| 1 | Show admin defaultDisplayCurrency here or in Chatbot/System tab? | open | SA decision |
+| 1 | Show admin defaultDisplayCurrency here or in Chatbot/System tab? | resolved | Neither in this batch. Keep the existing system field/API for compatibility; per-user preferred currency belongs General/quick settings. |
 
 ---
 
@@ -105,3 +105,5 @@ As a **user/admin**, I want **to see current FX rates and (as admin) trigger a r
 | Date | Question / decision | Outcome |
 |------|---------------------|---------|
 | 2026-08-23 | Batch created | — |
+| 2026-08-23 | Solution architecture resolution | Build an in-page FX tab over shared CurrencyProvider state; admin-only refresh preserves previous rates on 502; delete `FxRatesPanel` and its nested quick-modal entry after parity. |
+| 2026-08-23 | Implementation and acceptance | Implemented by Luna; freshness, retained-data errors, transport cleanup, and old-panel removal passed final Solution Architect review. |

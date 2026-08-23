@@ -62,6 +62,7 @@ class FallbackProvider:
         extra_models: Optional[Sequence[str]] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
     ) -> LlmCompletion:
         candidates = self._candidates(model)
         last_error: Optional[LlmError] = None
@@ -88,6 +89,7 @@ class FallbackProvider:
                         extra_models=extra_clean or None,
                         max_tokens=max_tokens,
                         temperature=temperature,
+                        top_p=top_p,
                     )
                     result.tried_models = tried + [result.model or candidate]
                     return result

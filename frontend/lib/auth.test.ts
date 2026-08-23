@@ -138,6 +138,14 @@ describe("fetchAuthMe", () => {
       email: "ada@example.com",
       name: "Ada",
       role: "user",
+      avatarStyle: null,
+      avatarSeed: null,
+      avatarColor: null,
+      preferredCurrency: null,
+      createdAt: null,
+      updatedAt: null,
+      newsKeywords: undefined,
+      emailOptIn: undefined,
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       `${apiBase()}/api/auth/me`,

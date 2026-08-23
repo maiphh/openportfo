@@ -48,12 +48,16 @@ class ChatOrchestrator:
         *,
         max_rounds: int = 8,
         max_tokens: int = 2048,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
         system_prompt: str = ORCHESTRATOR_SYSTEM,
     ) -> None:
         self._provider = provider
         self._registry = registry
         self._max_rounds = max(1, int(max_rounds))
         self._max_tokens = max_tokens
+        self._temperature = temperature
+        self._top_p = top_p
         self._system_prompt = system_prompt
 
     def run(
@@ -88,6 +92,8 @@ class ChatOrchestrator:
                     model=model,
                     tool_choice="auto",
                     max_tokens=self._max_tokens,
+                    temperature=self._temperature,
+                    top_p=self._top_p,
                 )
             except LlmError as exc:
                 # Preserve completed executions for the service's ambiguity

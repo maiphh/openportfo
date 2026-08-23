@@ -97,6 +97,61 @@ def test_complete_parses_tool_calls() -> None:
     assert result.usage.total_tokens == 3
 
 
+def test_complete_emits_effective_runtime_parameters() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"model": "m", "choices": [{"message": {"content": "ok"}}]},
+        )
+
+    client = OpenAiCompatProvider(
+        "sk-test",
+        "https://openrouter.ai/api/v1",
+        transport=httpx.MockTransport(handler),
+    )
+    client.complete(
+        [ChatMessage(role="user", content="hi")],
+        model="m",
+        max_tokens=321,
+        temperature=0.25,
+        top_p=0.8,
+    )
+    assert captured["model"] == "m"
+    assert captured["max_tokens"] == 321
+    assert captured["temperature"] == 0.25
+    assert captured["top_p"] == 0.8
+
+
+def test_complete_omits_null_runtime_parameters() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"model": "m", "choices": [{"message": {"content": "ok"}}]},
+        )
+
+    client = OpenAiCompatProvider(
+        "sk-test",
+        "https://openrouter.ai/api/v1",
+        transport=httpx.MockTransport(handler),
+    )
+    client.complete(
+        [ChatMessage(role="user", content="hi")],
+        model="m",
+        max_tokens=None,
+        temperature=None,
+        top_p=None,
+    )
+    assert "max_tokens" not in captured
+    assert "temperature" not in captured
+    assert "top_p" not in captured
+
+
 def test_list_models_filters_free_and_tools() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

@@ -31,6 +31,8 @@ from app.services.market_service import MarketService
 from app.services.news_service import NewsService
 from app.services.portfolio_service import PortfolioService
 from app.services.watchlist_service import WatchlistService
+from app.services.chat_settings_service import ChatRuntimeConfig
+from app.services.llm.prompts import ORCHESTRATOR_SYSTEM
 
 
 class ChatConfigError(Exception):
@@ -80,6 +82,7 @@ class ChatService:
         asset_detail: Optional[AssetDetailService] = None,
         news: Optional[NewsService] = None,
         idempotency: Optional[ChatIdempotencyRepo] = None,
+        runtime: Optional[ChatRuntimeConfig] = None,
     ) -> None:
         self._provider = provider
         self._registry = registry
@@ -91,6 +94,14 @@ class ChatService:
         self._asset_detail = asset_detail
         self._news = news
         self._idempotency = idempotency
+        self._runtime = runtime or ChatRuntimeConfig(
+            model=(settings.llm_default_model or "").strip(),
+            fallback_models=tuple(settings.llm_fallback_model_list),
+            temperature=settings.llm_temperature,
+            top_p=settings.llm_top_p,
+            max_tokens=int(settings.llm_max_tokens or 2048),
+            system_prompt_extra=settings.llm_system_prompt_extra,
+        )
 
     def configured(self) -> bool:
         return self._provider is not None
@@ -98,7 +109,7 @@ class ChatService:
     def list_models(self, *, free_only: Optional[bool] = None, tools_only: bool = True) -> list[LlmModelInfo]:
         want_free = _effective_free_only(self._settings, free_only)
         if self._provider is None:
-            return _static_model_catalog(self._settings, free_only=want_free)
+            return _static_model_catalog(self._settings, free_only=want_free, runtime=self._runtime)
         try:
             models = self._provider.list_models(free_only=want_free, tools_only=tools_only)
         except LlmAuthError:
@@ -107,7 +118,7 @@ class ChatService:
             models = []
         if models:
             return models
-        return _static_model_catalog(self._settings, free_only=want_free)
+        return _static_model_catalog(self._settings, free_only=want_free, runtime=self._runtime)
 
     def preflight(
         self,
@@ -124,7 +135,7 @@ class ChatService:
             raise ChatValidationError("message is required")
         if len(text) > 8000:
             raise ChatValidationError("message is too long")
-        chosen = (model or self._settings.llm_default_model or "").strip() or None
+        chosen = (model or self._runtime.model or "").strip() or None
         want_free = _effective_free_only(self._settings, free_only)
         if chosen and want_free and not self._is_allowed_free_model(chosen):
             raise ChatValidationError(
@@ -177,7 +188,7 @@ class ChatService:
             claimed = True
 
         want_free = _effective_free_only(self._settings, free_only)
-        chosen = (model or self._settings.llm_default_model or "").strip() or None
+        chosen = (model or self._runtime.model or "").strip() or None
         if chosen and want_free and not self._is_allowed_free_model(chosen):
             raise ChatValidationError(
                 f"Model '{chosen}' is not a free variant. Pick a :free model or set LLM_FREE_ONLY=false"
@@ -198,7 +209,10 @@ class ChatService:
             self._provider,
             self._registry,
             max_rounds=int(self._settings.llm_max_tool_rounds or 8),
-            max_tokens=int(self._settings.llm_max_tokens or 2048),
+            max_tokens=int(self._runtime.max_tokens),
+            temperature=self._runtime.temperature,
+            top_p=self._runtime.top_p,
+            system_prompt=_orchestrator_prompt(self._runtime.system_prompt_extra),
         )
         text = (message or "").strip()
 
@@ -426,7 +440,7 @@ class ChatService:
     def _is_allowed_free_model(self, model_id: str) -> bool:
         if _looks_free(model_id):
             return True
-        for mid in self._settings.llm_fallback_model_list:
+        for mid in self._runtime.fallback_models:
             if mid == model_id:
                 return _looks_free(mid)
         try:
@@ -445,6 +459,17 @@ def _effective_free_only(settings: Settings, client_flag: Optional[bool]) -> boo
     return bool(client_flag)
 
 
+def _orchestrator_prompt(extra: Optional[str]) -> str:
+    suffix = (extra or "").strip()
+    if not suffix:
+        return ORCHESTRATOR_SYSTEM
+    return (
+        ORCHESTRATOR_SYSTEM
+        + "\n\n--- Administrator guidance (supplemental) ---\n"
+        + suffix
+    )
+
+
 def _looks_free(model_id: str) -> bool:
     mid = (model_id or "").strip()
     if not mid:
@@ -455,12 +480,17 @@ def _looks_free(model_id: str) -> bool:
     return mid.startswith("openrouter/free")
 
 
-def _static_model_catalog(settings: Settings, *, free_only: bool) -> list[LlmModelInfo]:
+def _static_model_catalog(
+    settings: Settings,
+    *,
+    free_only: bool,
+    runtime: Optional[ChatRuntimeConfig] = None,
+) -> list[LlmModelInfo]:
     ids = []
-    default = (settings.llm_default_model or "").strip()
+    default = ((runtime.model if runtime else settings.llm_default_model) or "").strip()
     if default:
         ids.append(default)
-    ids.extend(settings.llm_fallback_model_list)
+    ids.extend(list(runtime.fallback_models) if runtime else settings.llm_fallback_model_list)
     seen: set[str] = set()
     out: list[LlmModelInfo] = []
     for mid in ids:

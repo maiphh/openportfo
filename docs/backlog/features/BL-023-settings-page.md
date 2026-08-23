@@ -5,14 +5,14 @@
 | **ID** | `BL-023` |
 | **Title** | `/settings` page, Open WebUI-style sub-tab layout; General + Avatar tabs |
 | **Priority** | `P0` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | Orchestrator |
-| **Owner (Eng)** | |
+| **Owner (Eng)** | Luna implementer |
 | **Requested by** | Product |
 | **Related PRD / sprint** | sprint-06; depends on BL-020 (sidebar nav entry), BL-022 (DiceBear lib) |
 | **Created** | 2026-08-23 |
 | **Ready date** | 2026-08-23 |
-| **Done date** | |
+| **Done date** | 2026-08-23 |
 
 ---
 
@@ -62,11 +62,11 @@ As a **user**, I want **a settings page with one tab per concern**, so that **I 
 
 ## 5. Acceptance criteria
 
-- [ ] `/settings` renders tab shell; tabs switch content; `?tab=` deep links work.
-- [ ] General tab round-trips preferredCurrency/emailOptIn/newsKeywords via `/api/settings`.
-- [ ] Avatar tab previews and persists style/seed/color; other surfaces render the saved avatar.
-- [ ] Unit tests: tab switching + deep link, General form save/error paths, avatar preview + save.
-- [ ] Suite green.
+- [x] `/settings` renders tab shell; tabs switch content; `?tab=` deep links work.
+- [x] General tab round-trips preferredCurrency/emailOptIn/newsKeywords via `/api/settings`.
+- [x] Avatar tab previews and persists style/seed/color; other surfaces render the saved avatar.
+- [x] Unit tests: tab switching + deep link, General form save/error paths, avatar preview + save.
+- [x] Suite green.
 
 ---
 
@@ -101,8 +101,8 @@ As a **user**, I want **a settings page with one tab per concern**, so that **I 
 
 | # | Question | Status | Answer |
 |---|----------|--------|--------|
-| 1 | Avatar field names + DiceBear style shortlist | open | SA decision |
-| 2 | Should quick-prefs modal (BL-021) link to this page? | open | SA decision |
+| 1 | Avatar field names + DiceBear style shortlist | resolved | Nullable `avatarStyle` / `avatarSeed` / `avatarColor`; use the existing eight-style allowlist in `lib/avatar.ts`. Exact validation is in the sprint-06 architect handoff. |
+| 2 | Should quick-prefs modal (BL-021) link to this page? | resolved | Yes. Retain quick theme/language/currency access, remove nested FX, and link to `/settings` and `/settings?tab=fx`; signed-in currency also persists to the profile. |
 
 ---
 
@@ -111,3 +111,5 @@ As a **user**, I want **a settings page with one tab per concern**, so that **I 
 | Date | Question / decision | Outcome |
 |------|---------------------|---------|
 | 2026-08-23 | Batch created | — |
+| 2026-08-23 | Solution architecture resolution | Static `useSearchParams` subtree is Suspense-wrapped; raw avatar fields are nullable/server-backed; one shared auth profile propagates saves; quick settings links to the page. See sprint-06 `ARCHITECT_HANDOFF.md`. |
+| 2026-08-23 | Implementation and acceptance | Implemented by Luna; all automated gates passed and final Solution Architect review approved BL-023. |

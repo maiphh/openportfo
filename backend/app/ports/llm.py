@@ -112,6 +112,7 @@ class LlmProvider(Protocol):
         extra_models: Optional[Sequence[str]] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
     ) -> LlmCompletion:
         """Run one chat completion. Raises LlmError subclasses."""
         ...

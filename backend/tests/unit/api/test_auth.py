@@ -246,6 +246,74 @@ def test_put_settings_persists() -> None:
     assert me["preferredCurrency"] == "VND"
 
 
+def test_profile_and_settings_include_avatar_fields_and_support_explicit_clear() -> None:
+    client, repo = _make_client()
+    headers = _auth_header("avatar-user")
+    client.get("/api/auth/me", headers=headers)
+    saved = client.put(
+        "/api/settings",
+        headers=headers,
+        json={
+            "avatarStyle": "big-smile",
+            "avatarSeed": "Ada",
+            "avatarColor": "#abc",
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["avatarStyle"] == "big-smile"
+    assert saved.json()["avatarSeed"] == "Ada"
+    assert saved.json()["avatarColor"] == "aabbcc"
+    assert client.get("/api/settings", headers=headers).json()["avatarStyle"] == "big-smile"
+
+    cleared = client.put(
+        "/api/settings",
+        headers=headers,
+        json={"avatarStyle": None, "avatarSeed": None, "avatarColor": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["avatarStyle"] is None
+    assert cleared.json()["avatarSeed"] is None
+    assert cleared.json()["avatarColor"] is None
+    stored = repo.get("avatar-user")
+    assert stored is not None
+    assert stored.avatar_style is None
+    assert stored.avatar_seed is None
+    assert stored.avatar_color is None
+
+
+def test_settings_validation_returns_field_errors() -> None:
+    client, _ = _make_client()
+    headers = _auth_header("validation-user")
+    client.get("/api/auth/me", headers=headers)
+    response = client.put(
+        "/api/settings",
+        headers=headers,
+        json={"newsKeywords": None, "avatarStyle": "not-a-style"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "validation_error"
+    assert set(response.json()["detail"]["errors"]) == {"newsKeywords", "avatarStyle"}
+
+
+def test_settings_malformed_json_fields_use_shared_400_validation_contract() -> None:
+    client, _ = _make_client()
+    headers = _auth_header("raw-validation-user")
+    client.get("/api/auth/me", headers=headers)
+    response = client.put(
+        "/api/settings",
+        headers=headers,
+        json={"newsKeywords": 42, "unexpected": True},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "code": "validation_error",
+        "errors": {
+            "newsKeywords": "must be an array of strings",
+            "unexpected": "is not supported",
+        },
+    }
+
+
 def test_get_settings_returns_slice() -> None:
     client, _ = _make_client()
     headers = _auth_header("dana")
@@ -261,6 +329,9 @@ def test_get_settings_returns_slice() -> None:
         "newsKeywords": ["btc"],
         "emailOptIn": True,
         "preferredCurrency": "USD",
+        "avatarStyle": None,
+        "avatarSeed": None,
+        "avatarColor": None,
     }
 
 

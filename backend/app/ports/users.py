@@ -5,9 +5,31 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from collections.abc import Iterator
-from typing import Literal, Optional, Protocol, Sequence
+from typing import Any, Literal, Optional, Protocol, Sequence
 
 Role = Literal["user", "admin"]
+
+
+class _Unset:
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+UNSET = _Unset()
+
+
+@dataclass(frozen=True)
+class UserSettingsPatch:
+    """Explicit field patch; ``UNSET`` means leave a field unchanged."""
+
+    news_keywords: Any = UNSET
+    email_opt_in: Any = UNSET
+    preferred_currency: Any = UNSET
+    avatar_style: Any = UNSET
+    avatar_seed: Any = UNSET
+    avatar_color: Any = UNSET
 
 
 def utc_now() -> datetime:
@@ -25,6 +47,9 @@ class UserProfile:
     news_keywords: list[str] = field(default_factory=list)
     email_opt_in: bool = False
     preferred_currency: Optional[str] = None
+    avatar_style: Optional[str] = None
+    avatar_seed: Optional[str] = None
+    avatar_color: Optional[str] = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
@@ -45,19 +70,42 @@ class UserProfileRepo(Protocol):
         """Return existing profile or create one with default role=user."""
         ...
 
-    def update_settings(
+    def update_identity(
         self,
         user_id: str,
         *,
-        news_keywords: Optional[Sequence[str]] = None,
-        email_opt_in: Optional[bool] = None,
-        preferred_currency: Optional[str] = None,
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> UserProfile:
+        """Refresh verified identity claims without changing role/settings."""
+        ...
+
+    def update_settings(
+        self,
+        user_id: str,
+        patch: Optional[UserSettingsPatch] = None,
+        *,
+        news_keywords: Any = UNSET,
+        email_opt_in: Any = UNSET,
+        preferred_currency: Any = UNSET,
+        avatar_style: Any = UNSET,
+        avatar_seed: Any = UNSET,
+        avatar_color: Any = UNSET,
     ) -> UserProfile:
         """Patch settings fields; raises KeyError if profile missing."""
         ...
 
     def set_role(self, user_id: str, role: Role) -> UserProfile:
         """Set role (admin bootstrap in tests/ops). Raises KeyError if missing."""
+        ...
+
+    def list_page(
+        self,
+        *,
+        limit: int,
+        start_after: Optional[str] = None,
+    ) -> tuple[list[UserProfile], Optional[str]]:
+        """Return one forward page and the last user id evaluated."""
         ...
 
     def iter_pages(

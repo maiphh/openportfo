@@ -16,6 +16,19 @@ def test_settings_loads_defaults() -> None:
     assert "http://localhost:3000" in settings.cors_origin_list
 
 
+def test_admin_emails_are_parsed_without_exposing_values() -> None:
+    settings = Settings(ADMIN_EMAILS=" A@EXAMPLE.COM, a@example.com ")
+    assert settings.admin_email_set == {"a@example.com"}
+
+
+def test_admin_emails_invalid_configuration_names_only_safe_key() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(ADMIN_EMAILS="secret@example.com bad")
+    message = str(exc_info.value)
+    assert "ADMIN_EMAILS" in message
+    assert "secret@example.com" not in message
+
+
 def test_settings_loads_from_env(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("AUTH_MODE", "fake")

@@ -72,6 +72,21 @@ def test_passes_remaining_models_as_extra() -> None:
     assert extras == ["b", "c"]
 
 
+def test_passes_runtime_sampling_and_token_parameters() -> None:
+    inner = ScriptedLlmProvider([completion_text("ok")])
+    wrapped = FallbackProvider(inner, default_model="a", retry_max=0)
+    wrapped.complete(
+        [],
+        model="a",
+        max_tokens=321,
+        temperature=0.25,
+        top_p=0.8,
+    )
+    assert inner.calls[0]["max_tokens"] == 321
+    assert inner.calls[0]["temperature"] == 0.25
+    assert inner.calls[0]["top_p"] == 0.8
+
+
 def test_empty_completion_usage_ok() -> None:
     result = LlmCompletion(content="x", usage=LlmUsage())
     assert result.usage.total_tokens == 0

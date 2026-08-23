@@ -77,6 +77,21 @@ def test_orchestrator_plain_reply_no_tools() -> None:
     assert result.rounds == 1
 
 
+def test_orchestrator_uses_request_runtime_parameters() -> None:
+    provider = ScriptedLlmProvider([completion_text("runtime")])
+    result = ChatOrchestrator(
+        provider,
+        build_default_registry(),
+        max_tokens=321,
+        temperature=0.25,
+        top_p=0.8,
+    ).run("hi", _ctx(InMemoryHoldingsRepo()))
+    assert result.reply == "runtime"
+    assert provider.calls[0]["max_tokens"] == 321
+    assert provider.calls[0]["temperature"] == 0.25
+    assert provider.calls[0]["top_p"] == 0.8
+
+
 def test_orchestrator_remove_after_add() -> None:
     repo = InMemoryHoldingsRepo()
     ctx = _ctx(repo)

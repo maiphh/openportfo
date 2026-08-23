@@ -59,6 +59,7 @@ def test_admin_get_put_settings() -> None:
         "/api/admin/settings",
         headers=_auth("admin1"),
         json={
+            "version": 0,
             "emailEnabled": True,
             "jobs": {"news": False, "snapshot": True, "email": False, "price": False},
         },
@@ -68,6 +69,33 @@ def test_admin_get_put_settings() -> None:
     assert body["emailEnabled"] is True
     assert body["jobs"]["news"] is False
     assert body["jobs"]["price"] is False
+
+
+def test_admin_chat_settings_are_versioned_and_effective() -> None:
+    client, profiles = _setup()
+    profiles.get_or_create("admin1", email="a@test.com", name="A")
+    profiles.set_role("admin1", "admin")
+    current = client.get("/api/admin/settings", headers=_auth("admin1"))
+    assert current.status_code == 200
+    assert current.json()["version"] == 0
+    updated = client.put(
+        "/api/admin/settings",
+        headers=_auth("admin1"),
+        json={
+            "version": 0,
+            "chat": {"fallbackModels": [], "temperature": 0.5},
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 1
+    assert updated.json()["chat"]["overrides"]["fallbackModels"] == []
+    stale = client.put(
+        "/api/admin/settings",
+        headers=_auth("admin1"),
+        json={"version": 0, "chat": {"temperature": 1}},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "settings_conflict"
 
 
 def test_rss_crud() -> None:

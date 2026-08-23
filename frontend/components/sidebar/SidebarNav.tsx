@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ComponentType } from "react";
-import { Bitcoin, Briefcase, ChevronDown, LayoutDashboard, Search, Star, TrendingUp } from "lucide-react";
+import { Bitcoin, Briefcase, ChevronDown, LayoutDashboard, Search, Settings, ShieldCheck, Star, TrendingUp } from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ export type SidebarNavProps = {
   collapsed: boolean;
   onSearch: () => void;
   onNavigate?: () => void;
+  isAdmin?: boolean;
 };
 
 function NavLink({
@@ -61,7 +62,7 @@ function NavLink({
   );
 }
 
-export default function SidebarNav({ collapsed, onSearch, onNavigate }: SidebarNavProps) {
+export default function SidebarNav({ collapsed, onSearch, onNavigate, isAdmin = false }: SidebarNavProps) {
   const t = useT();
   const pathname = normalizePath(usePathname() ?? "/");
   const [marketOpen, setMarketOpen] = useState(true);
@@ -118,6 +119,25 @@ export default function SidebarNav({ collapsed, onSearch, onNavigate }: SidebarN
         />
       ))}
 
+      <NavLink
+        href="/settings"
+        label={t("nav.settings")}
+        icon={Settings}
+        active={pathname === "/settings"}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+      />
+      {isAdmin ? (
+        <NavLink
+          href="/admin"
+          label={t("nav.admin")}
+          icon={ShieldCheck}
+          active={pathname === "/admin"}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+      ) : null}
+
       <button
         type="button"
         title={collapsed ? t("nav.search") : undefined}
@@ -135,4 +155,3 @@ export default function SidebarNav({ collapsed, onSearch, onNavigate }: SidebarN
     </nav>
   );
 }
-

@@ -70,6 +70,14 @@ export type AuthProfile = {
   email: string;
   name: string | null;
   role?: string;
+  avatarStyle?: string | null;
+  avatarSeed?: string | null;
+  avatarColor?: string | null;
+  newsKeywords?: string[];
+  emailOptIn?: boolean;
+  preferredCurrency?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export class AuthApiError extends Error {
@@ -185,6 +193,17 @@ export async function fetchAuthMe(options?: {
       email: typeof body.email === "string" ? body.email : "",
       name: typeof body.name === "string" && body.name.trim() ? body.name : null,
       role: typeof body.role === "string" ? body.role : undefined,
+      avatarStyle: typeof body.avatarStyle === "string" ? body.avatarStyle : null,
+      avatarSeed: typeof body.avatarSeed === "string" ? body.avatarSeed : null,
+      avatarColor: typeof body.avatarColor === "string" ? body.avatarColor : null,
+      newsKeywords: Array.isArray(body.newsKeywords)
+        ? body.newsKeywords.filter((item): item is string => typeof item === "string")
+        : undefined,
+      emailOptIn: typeof body.emailOptIn === "boolean" ? body.emailOptIn : undefined,
+      preferredCurrency:
+        typeof body.preferredCurrency === "string" ? body.preferredCurrency : null,
+      createdAt: typeof body.createdAt === "string" ? body.createdAt : null,
+      updatedAt: typeof body.updatedAt === "string" ? body.updatedAt : null,
     };
   } finally {
     globalThis.clearTimeout(timeout);

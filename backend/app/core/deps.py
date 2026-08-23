@@ -38,6 +38,7 @@ from app.services.llm.registry import ToolRegistry
 from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
 from app.services.watchlist_service import WatchlistService
+from app.services.admin_user_service import AdminUserService
 
 # Process-local stores (until set / first get)
 _user_profile_repo: Optional[UserProfileRepo] = None
@@ -65,6 +66,7 @@ _rss_fetcher: Optional[RssFetcher] = None
 _llm_provider: Optional[LlmProvider] = None
 _tool_registry: Optional[ToolRegistry] = None
 _chat_idempotency_repo: Optional[ChatIdempotencyRepo] = None
+_admin_user_service: Optional[AdminUserService] = None
 
 # Token verifiers own their JWKS client. Keep one verifier per effective auth
 # configuration for the lifetime of this process so requests share the
@@ -169,12 +171,18 @@ def get_user_profile_repo() -> UserProfileRepo:
     if _user_profile_repo is None:
         settings = get_settings()
         if _use_aws(settings):
+            from app.adapters.dynamodb.base import get_table
             from app.adapters.dynamodb.users import DynamoUserProfileRepo
 
             _user_profile_repo = DynamoUserProfileRepo(
                 settings.users_table,
                 region=_region(settings),
                 endpoint_url=_ddb_endpoint(settings),
+                role_guard_table=get_table(
+                    settings.settings_table,
+                    region=_region(settings),
+                    endpoint_url=_ddb_endpoint(settings),
+                ),
             )
         else:
             from app.adapters.memory.users import InMemoryUserProfileRepo
@@ -184,14 +192,31 @@ def get_user_profile_repo() -> UserProfileRepo:
 
 
 def set_user_profile_repo(repo: Optional[UserProfileRepo]) -> None:
-    global _user_profile_repo
+    global _user_profile_repo, _admin_user_service
     _user_profile_repo = repo
+    _admin_user_service = None
+
+
+def get_admin_user_service(
+    repo: UserProfileRepo = Depends(get_user_profile_repo),
+    settings: Settings = Depends(settings_dep),
+) -> AdminUserService:
+    """Return the process-local role-policy service for the active repo."""
+    global _admin_user_service
+    if (
+        _admin_user_service is None
+        or _admin_user_service.repo is not repo
+        or _admin_user_service.whitelist != settings.admin_email_set
+    ):
+        _admin_user_service = AdminUserService(repo, settings.admin_email_set)
+    return _admin_user_service
 
 
 def get_current_user(
     authorization: Annotated[Optional[str], Header()] = None,
     verifier: TokenVerifier = Depends(get_token_verifier),
     repo: UserProfileRepo = Depends(get_user_profile_repo),
+    admin_service: AdminUserService = Depends(get_admin_user_service),
 ) -> UserProfile:
     """Resolve Bearer JWT → Claims → bootstrap UserProfile (role from repo)."""
     if not authorization:
@@ -213,11 +238,20 @@ def get_current_user(
             detail=exc.detail or "Invalid token",
         ) from exc
 
-    return repo.get_or_create(
+    profile = repo.get_or_create(
         claims.sub,
         email=claims.email,
         name=claims.name,
     )
+    # Keep identity metadata aligned with the verified claim without allowing
+    # a whole-item write to overwrite role/settings.
+    if hasattr(repo, "update_identity"):
+        profile = repo.update_identity(
+            claims.sub,
+            email=claims.email,
+            name=claims.name,
+        )
+    return admin_service.promote_claim(profile, claims.email)
 
 
 def require_admin(
@@ -819,9 +853,32 @@ def set_chat_idempotency_repo(repo: Optional[ChatIdempotencyRepo]) -> None:
 
 
 def get_chat_service() -> ChatService:
+    from app.adapters.llm.fallback import FallbackProvider
+    from app.services.chat_settings_service import resolve_chat_runtime
+
     settings = get_settings()
+    stored = get_settings_repo().get()
+    runtime = resolve_chat_runtime(settings, stored)
+    configured = get_llm_provider()
+    provider: Optional[LlmProvider] = None
+    if configured is not None:
+        # Keep the authenticated HTTP client cached, but build the fallback
+        # routing wrapper from a strongly-read settings snapshot per request.
+        if isinstance(configured, FallbackProvider):
+            inner = getattr(configured, "_inner", configured)
+            provider = FallbackProvider(
+                inner,
+                fallback_models=runtime.fallback_models,
+                default_model=runtime.model,
+                retry_max=int(settings.llm_retry_max or 0),
+                max_retry_sleep=float(settings.llm_retry_max_sleep or 8.0),
+            )
+        else:
+            # Dependency-overridden fakes are already deterministic providers;
+            # leave their scripted model sequence untouched in unit tests.
+            provider = configured
     return ChatService(
-        get_llm_provider(),
+        provider,
         get_tool_registry(),
         settings,
         get_holdings_service(),
@@ -831,6 +888,7 @@ def get_chat_service() -> ChatService:
         asset_detail=get_asset_detail_service(),
         news=get_news_service(),
         idempotency=get_chat_idempotency_repo(),
+        runtime=runtime,
     )
 
 

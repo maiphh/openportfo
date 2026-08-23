@@ -12,6 +12,8 @@ function auth(overrides: Partial<AuthProfileController> = {}): AuthProfileContro
     error: null,
     cognitoConfigured: true,
     refresh: vi.fn(),
+    reloadProfile: vi.fn(async () => null),
+    replaceProfile: vi.fn(),
     signIn: vi.fn(async () => undefined),
     signOut: vi.fn(),
     ...overrides,

@@ -71,6 +71,9 @@ def test_user_profile_roundtrip() -> None:
         news_keywords=["btc", "vnm"],
         email_opt_in=True,
         preferred_currency="VND",
+        avatar_style="notionists",
+        avatar_seed="ada",
+        avatar_color="aabbcc",
         created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
         updated_at=datetime(2026, 3, 2, tzinfo=timezone.utc),
     )
@@ -79,11 +82,17 @@ def test_user_profile_roundtrip() -> None:
     assert back.role == "admin"
     assert back.news_keywords == ["btc", "vnm"]
     assert back.preferred_currency == "VND"
+    assert back.avatar_style == "notionists"
+    assert back.avatar_seed == "ada"
+    assert back.avatar_color == "aabbcc"
 
     unset = UserProfile(user_id="sub-2")
     unset_item = profile_to_item(unset)
     assert not unset_item.get("preferredCurrency")
     assert not item_to_profile(unset_item).preferred_currency
+    assert item_to_profile(unset_item).avatar_style is None
+    assert item_to_profile(unset_item).avatar_seed is None
+    assert item_to_profile(unset_item).avatar_color is None
     assert not item_to_profile({"userId": "sub-2", "preferredCurrency": ""}).preferred_currency
 
 

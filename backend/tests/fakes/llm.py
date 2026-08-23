@@ -43,6 +43,7 @@ class ScriptedLlmProvider:
         extra_models: Optional[Sequence[str]] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
     ) -> LlmCompletion:
         self.calls.append(
             {
@@ -52,6 +53,8 @@ class ScriptedLlmProvider:
                 "tool_choice": tool_choice,
                 "extra_models": list(extra_models or []),
                 "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": top_p,
             }
         )
         if not self.script:

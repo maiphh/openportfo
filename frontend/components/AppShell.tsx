@@ -253,7 +253,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <button ref={drawerCloseRef} type="button" className="rounded-md p-2 text-gray-400 hover:bg-gray-700 hover:text-gray-100" aria-label="Close navigation" onClick={closeDrawer}>×</button>
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-4">
-              <SidebarNav collapsed={false} onSearch={openSearch} onNavigate={closeDrawer} />
+              <SidebarNav
+                collapsed={false}
+                onSearch={openSearch}
+                onNavigate={closeDrawer}
+                isAdmin={auth.profile?.role === "admin"}
+              />
             </div>
             <div className="border-t border-gray-700 px-3 py-3">
               <SidebarUserChip collapsed={false} auth={auth} onOpenSettings={openSettings} />

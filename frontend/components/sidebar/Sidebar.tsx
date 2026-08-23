@@ -45,7 +45,12 @@ export default function Sidebar({ collapsed, auth, onToggleCollapsed, onSearch, 
         </Button>
       </div>
       <div className={cn("flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
-        <SidebarNav collapsed={collapsed} onSearch={onSearch} onNavigate={onNavigate} />
+        <SidebarNav
+          collapsed={collapsed}
+          onSearch={onSearch}
+          onNavigate={onNavigate}
+          isAdmin={auth.profile?.role === "admin"}
+        />
       </div>
       <div className={cn("border-t border-gray-700 py-3", collapsed ? "px-2" : "px-3")}>
         <SidebarUserChip collapsed={collapsed} auth={auth} onOpenSettings={onOpenSettings} />
@@ -53,4 +58,3 @@ export default function Sidebar({ collapsed, auth, onToggleCollapsed, onSearch, 
     </aside>
   );
 }
-

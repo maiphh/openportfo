@@ -17,6 +17,8 @@ const auth = {
   error: null,
   cognitoConfigured: false,
   refresh: vi.fn(),
+  reloadProfile: vi.fn(async () => null),
+  replaceProfile: vi.fn(),
   signIn: vi.fn(async () => undefined),
   signOut: vi.fn(),
 };
@@ -41,4 +43,3 @@ describe("Sidebar", () => {
     expect(onSettings).toHaveBeenCalledTimes(1);
   });
 });
-

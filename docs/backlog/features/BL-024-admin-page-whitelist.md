@@ -5,14 +5,14 @@
 | **ID** | `BL-024` |
 | **Title** | `/admin` page with user matrix; backend user-management API; admin whitelist via env |
 | **Priority** | `P0` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | Orchestrator |
-| **Owner (Eng)** | |
+| **Owner (Eng)** | Luna implementer |
 | **Requested by** | Product |
 | **Related PRD / sprint** | sprint-06; layout ref: Open WebUI admin panel |
 | **Created** | 2026-08-23 |
 | **Ready date** | 2026-08-23 |
-| **Done date** | |
+| **Done date** | 2026-08-23 |
 
 ---
 
@@ -66,11 +66,11 @@ As an **admin**, I want **a table of all users where I can change roles and edit
 
 ## 5. Acceptance criteria
 
-- [ ] `ADMIN_EMAILS` env promotes matching emails to admin on sign-in (unit tested, case-insensitive, whitespace-tolerant).
-- [ ] `GET /api/admin/users` + role/settings update endpoints work admin-only (403 for user, 401 anonymous) — pytest coverage.
-- [ ] `/admin` page renders user matrix for admins; role changes persist; guard rails enforced.
-- [ ] Unit tests: BE endpoints + whitelist semantics; FE table render, gating, role change flow.
-- [ ] Suites green (pytest + vitest).
+- [x] `ADMIN_EMAILS` env promotes matching emails to admin on sign-in (unit tested, case-insensitive, whitespace-tolerant).
+- [x] `GET /api/admin/users` + role/settings update endpoints work admin-only (403 for user, 401 anonymous) — pytest coverage.
+- [x] `/admin` page renders user matrix for admins; role changes persist; guard rails enforced.
+- [x] Unit tests: BE endpoints + whitelist semantics; FE table render, gating, role change flow.
+- [x] Suites green (pytest + vitest).
 
 ---
 
@@ -106,8 +106,8 @@ As an **admin**, I want **a table of all users where I can change roles and edit
 
 | # | Question | Status | Answer |
 |---|----------|--------|--------|
-| 1 | Whitelist demotion policy | open | SA decision |
-| 2 | Pagination for users list | open | SA decision |
+| 1 | Whitelist demotion policy | resolved | Grant-only: matching verified emails are promoted and cannot be demoted; non-matching DB admins are not automatically demoted. Concurrent last-admin protection uses a guarded Dynamo transaction. |
+| 2 | Pagination for users list | resolved | `limit` 1..100 plus validated opaque forward cursor wrapping Dynamo `LastEvaluatedKey`; no sort, total, offset, or snapshot guarantee. |
 
 ---
 
@@ -116,3 +116,5 @@ As an **admin**, I want **a table of all users where I can change roles and edit
 | Date | Question / decision | Outcome |
 |------|---------------------|---------|
 | 2026-08-23 | Batch created | — |
+| 2026-08-23 | Solution architecture resolution | Auth-time grant semantics, exact page/role/settings APIs, Settings-table role guard, transaction retry, IAM change, and frontend gating are fixed in sprint-06 `ARCHITECT_HANDOFF.md`. |
+| 2026-08-23 | Implementation and acceptance | Implemented by Luna; AWS transaction/IAM remediation passed final Solution Architect review and BL-024 was approved. |

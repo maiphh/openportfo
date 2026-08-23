@@ -5,14 +5,14 @@
 | **ID** | `BL-025` |
 | **Title** | Chatbot control tab: model selection, params (temperature, max tokens, …) |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | Orchestrator |
-| **Owner (Eng)** | |
+| **Owner (Eng)** | Luna implementer |
 | **Requested by** | Product |
 | **Related PRD / sprint** | sprint-06; logic ref: Open WebUI model params (temperature/top_p/etc.) |
 | **Created** | 2026-08-23 |
 | **Ready date** | 2026-08-23 |
-| **Done date** | |
+| **Done date** | 2026-08-23 |
 
 ---
 
@@ -64,10 +64,10 @@ As an **admin**, I want **to pick the chatbot model and tune params from the Set
 
 ## 5. Acceptance criteria
 
-- [ ] SystemSettings carries chat fields; both adapters persist them (pytest).
-- [ ] Chat request path honors DB overrides over env defaults (pytest with fake provider asserting received params).
-- [ ] Admin API validates ranges; FE tab saves + shows effective values.
-- [ ] Unit tests green both sides.
+- [x] SystemSettings carries chat fields; both adapters persist them (pytest).
+- [x] Chat request path honors DB overrides over env defaults (pytest with fake provider asserting received params).
+- [x] Admin API validates ranges; FE tab saves + shows effective values.
+- [x] Unit tests green both sides.
 
 ---
 
@@ -102,8 +102,8 @@ As an **admin**, I want **to pick the chatbot model and tune params from the Set
 
 | # | Question | Status | Answer |
 |---|----------|--------|--------|
-| 1 | Exact param set exposed | open | SA decision (temperature, top_p, max_tokens, fallback models, system prompt extra recommended) |
-| 2 | Models list source | open | SA decision (env-derived recommended) |
+| 1 | Exact param set exposed | resolved | Nullable primary model, fallback list, temperature, top-p, max tokens, and bounded system-prompt suffix. Null means env/provider default; `[]` explicitly disables fallbacks. |
+| 2 | Models list source | resolved | Stable union of env default/fallbacks and stored effective IDs, filtered by the server free-only floor. No new/live provider enumeration endpoint. |
 
 ---
 
@@ -112,3 +112,5 @@ As an **admin**, I want **to pick the chatbot model and tune params from the Set
 | Date | Question / decision | Outcome |
 |------|---------------------|---------|
 | 2026-08-23 | Batch created | — |
+| 2026-08-23 | Solution architecture resolution | SystemSettings becomes optimistic-versioned; admin response exposes raw/default/effective values; each new chat request strongly resolves a snapshot while in-flight turns retain the old snapshot. See sprint-06 handoff. |
+| 2026-08-23 | Implementation and acceptance | Implemented by Luna; fresh Dynamo singleton creation and null-provider-parameter coverage closed the final review findings. BL-025 approved. |

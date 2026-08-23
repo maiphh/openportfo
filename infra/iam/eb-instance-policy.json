@@ -30,6 +30,17 @@
       ]
     },
     {
+      "Sid": "AdminRoleTransactions",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:TransactWriteItems"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-users",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-settings"
+      ]
+    },
+    {
       "Sid": "S3DataRW",
       "Effect": "Allow",
       "Action": [

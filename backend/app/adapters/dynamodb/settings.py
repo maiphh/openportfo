@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from botocore.exceptions import ClientError
+
 from app.adapters.dynamodb.base import get_table, sanitize_for_dynamo
-from app.ports.admin import SystemSettings
+from app.ports.admin import SettingsConflictError, SystemSettings
 from app.services.currency_service import normalize_stored_currency
 
 SETTINGS_PK = "SETTINGS"
@@ -30,6 +32,15 @@ def settings_to_item(settings: SystemSettings) -> dict[str, Any]:
             "jobsEmail": bool(settings.jobs_email),
             "jobsPrice": bool(settings.jobs_price),
             "defaultDisplayCurrency": normalize_stored_currency(settings.default_display_currency) or "USD",
+            "version": int(settings.version),
+            "chatModel": settings.chat_model,
+            "chatFallbackModels": list(settings.chat_fallback_models)
+            if settings.chat_fallback_models is not None
+            else None,
+            "chatTemperature": settings.chat_temperature,
+            "chatTopP": settings.chat_top_p,
+            "chatMaxTokens": settings.chat_max_tokens,
+            "chatSystemPromptExtra": settings.chat_system_prompt_extra,
         }
     )
 
@@ -47,6 +58,23 @@ def item_to_settings(item: Optional[dict[str, Any]]) -> SystemSettings:
         jobs_email=bool(item.get("jobsEmail", False)),
         jobs_price=bool(item.get("jobsPrice", True)),
         default_display_currency=normalize_stored_currency(item.get("defaultDisplayCurrency")) or "USD",
+        version=int(item.get("version") or 0),
+        chat_model=item.get("chatModel"),
+        chat_fallback_models=(
+            list(item.get("chatFallbackModels"))
+            if item.get("chatFallbackModels") is not None
+            else None
+        ),
+        chat_temperature=(
+            float(item["chatTemperature"])
+            if item.get("chatTemperature") is not None
+            else None
+        ),
+        chat_top_p=(float(item["chatTopP"]) if item.get("chatTopP") is not None else None),
+        chat_max_tokens=(
+            int(item["chatMaxTokens"]) if item.get("chatMaxTokens") is not None else None
+        ),
+        chat_system_prompt_extra=item.get("chatSystemPromptExtra"),
     )
 
 
@@ -62,12 +90,22 @@ class DynamoSettingsRepo:
         self._table = table or get_table(table_name, region=region, endpoint_url=endpoint_url)
 
     def get(self) -> SystemSettings:
-        resp = self._table.get_item(Key={"pk": SETTINGS_PK, "sk": SETTINGS_SK})
+        resp = self._table.get_item(
+            Key={"pk": SETTINGS_PK, "sk": SETTINGS_SK},
+            ConsistentRead=True,
+        )
         return item_to_settings(resp.get("Item"))
 
-    def save(self, settings: SystemSettings) -> SystemSettings:
-        self._table.put_item(Item=settings_to_item(settings))
-        return SystemSettings(
+    def save(
+        self,
+        settings: SystemSettings,
+        *,
+        expected_version: Optional[int] = None,
+    ) -> SystemSettings:
+        current = self.get()
+        if expected_version is not None and expected_version != current.version:
+            raise SettingsConflictError()
+        saved = SystemSettings(
             email_time=settings.email_time,
             timezone=settings.timezone,
             email_enabled=settings.email_enabled,
@@ -77,7 +115,53 @@ class DynamoSettingsRepo:
             jobs_email=settings.jobs_email,
             jobs_price=settings.jobs_price,
             default_display_currency=settings.default_display_currency,
+            version=current.version + 1,
+            chat_model=settings.chat_model,
+            chat_fallback_models=(
+                list(settings.chat_fallback_models)
+                if settings.chat_fallback_models is not None
+                else None
+            ),
+            chat_temperature=settings.chat_temperature,
+            chat_top_p=settings.chat_top_p,
+            chat_max_tokens=settings.chat_max_tokens,
+            chat_system_prompt_extra=settings.chat_system_prompt_extra,
         )
+        kwargs: dict[str, Any] = {"Item": settings_to_item(saved)}
+        if expected_version is not None:
+            if expected_version == 0:
+                # A missing singleton and legacy items without a version both
+                # read as version zero.  The conditional put is still atomic:
+                # only an absent key, missing version, or explicit zero may
+                # win the initial write.
+                condition = (
+                    "attribute_not_exists(#pk) OR attribute_not_exists(#version) "
+                    "OR #version = :expected"
+                )
+                names = {"#pk": "pk", "#version": "version"}
+            else:
+                # Once a positive version has been observed, a delete between
+                # the strong read and put must become a conflict, never a
+                # recreation of the singleton.
+                condition = (
+                    "attribute_exists(#pk) AND attribute_exists(#sk) "
+                    "AND #version = :expected"
+                )
+                names = {"#pk": "pk", "#sk": "sk", "#version": "version"}
+            kwargs.update(
+                {
+                    "ConditionExpression": condition,
+                    "ExpressionAttributeNames": names,
+                    "ExpressionAttributeValues": {":expected": expected_version},
+                }
+            )
+        try:
+            self._table.put_item(**kwargs)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                raise SettingsConflictError() from exc
+            raise
+        return saved
 
 
 __all__ = [

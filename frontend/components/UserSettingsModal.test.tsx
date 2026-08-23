@@ -17,6 +17,8 @@ const auth: AuthProfileController = {
   error: null,
   cognitoConfigured: false,
   refresh: vi.fn(),
+  reloadProfile: vi.fn(async () => null),
+  replaceProfile: vi.fn(),
   signIn: vi.fn(async () => undefined),
   signOut: vi.fn(),
 };
@@ -96,39 +98,23 @@ describe("UserSettingsModal", () => {
     opener.remove();
   });
 
-  it("opens the real FX rates dialog without closing settings", () => {
-    renderModal();
-    fireEvent.click(screen.getByRole("button", { name: /View FX rates/i }));
-    expect(screen.getByRole("dialog", { name: /Exchange rates/i })).toBeInTheDocument();
-    expect(document.getElementById("user-settings-title")?.closest('[role="dialog"]')).toHaveAttribute("aria-hidden", "true");
-    fireEvent.keyDown(window, { key: "Escape" });
+  it("links to the full FX settings tab without nesting another dialog", () => {
+    const onClose = vi.fn();
+    renderModal(true, onClose);
+    const fxLink = screen.getByRole("link", { name: /View FX rates/i });
+    expect(fxLink).toHaveAttribute("href", "/settings?tab=fx");
     expect(screen.queryByRole("dialog", { name: /Exchange rates/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    fireEvent.click(fxLink);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("makes settings inert and traps FX focus across two Escape presses", () => {
+  it("keeps settings as the only dialog while exposing the FX destination", () => {
     const onClose = vi.fn();
     renderModal(true, onClose);
     const settings = screen.getByRole("dialog", { name: "Settings" });
-    fireEvent.click(screen.getByRole("button", { name: /View FX rates/i }));
-    const fx = screen.getByRole("dialog", { name: /Exchange rates/i });
-    expect(settings).toHaveAttribute("inert");
-    expect(settings).toHaveAttribute("aria-hidden", "true");
-    const focusTargets = Array.from(fx.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"]'));
-    const first = focusTargets[0]!;
-    const last = focusTargets[focusTargets.length - 1]!;
-    first.focus();
-    expect(document.activeElement).toBe(first);
-    last.focus();
-    fireEvent.keyDown(last, { key: "Tab", bubbles: true });
-    expect(document.activeElement).toBe(first);
-    fireEvent.keyDown(first, { key: "Tab", shiftKey: true, bubbles: true });
-    expect(document.activeElement).toBe(last);
-
-    fireEvent.keyDown(last, { key: "Escape", bubbles: true });
-    expect(screen.queryByRole("dialog", { name: /Exchange rates/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(settings).not.toHaveAttribute("aria-hidden", "true");
+    expect(settings).not.toHaveAttribute("inert");
+    expect(screen.getByRole("link", { name: /View FX rates/i })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

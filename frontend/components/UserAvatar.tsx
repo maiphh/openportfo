@@ -31,9 +31,12 @@ export default function UserAvatar({
   className,
   ...props
 }: UserAvatarProps) {
-  const identity = useMemo(() => avatarSeed?.trim() || seed?.trim() || avatarSeedFor(profile), [avatarSeed, profile, seed]);
-  const resolvedStyle = avatarStyle ?? style;
-  const resolvedColor = avatarColor ?? backgroundColor;
+  const identity = useMemo(
+    () => profile?.avatarSeed?.trim() || avatarSeed?.trim() || seed?.trim() || avatarSeedFor(profile),
+    [avatarSeed, profile, seed],
+  );
+  const resolvedStyle = (profile?.avatarStyle as AvatarStyle | null | undefined) ?? avatarStyle ?? style;
+  const resolvedColor = profile?.avatarColor ?? avatarColor ?? backgroundColor;
   const src = identity ? buildAvatarUrl({ seed: identity, style: resolvedStyle, backgroundColor: resolvedColor, size }) : null;
   const [errorSrc, setErrorSrc] = useState<string | null>(null);
 

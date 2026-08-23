@@ -55,6 +55,8 @@ COGNITO_USER_POOL_ID=...
 COGNITO_APP_CLIENT_ID=...
 COGNITO_REGION=us-east-1
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173,https://<eb-url>
+ADMIN_EMAILS=<optional comma-separated grant-only bootstrap emails>
+# Optional chat defaults: LLM_TEMPERATURE, LLM_TOP_P, LLM_SYSTEM_PROMPT_EXTRA
 ```
 
 Smoke:
@@ -62,6 +64,11 @@ Smoke:
 ```bash
 curl -sS https://<eb-url>/health
 ```
+
+The Learner Lab template does not create an instance profile. The existing
+`LabInstanceProfile` (or equivalent profile used for EB) must already allow
+`dynamodb:TransactWriteItems` on both the Users and Settings table ARNs; this
+is required for the concurrency-safe last-admin guard.
 
 ## 4. Deploy Lambda jobs + EventBridge
 

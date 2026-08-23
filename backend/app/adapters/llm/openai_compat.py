@@ -203,6 +203,7 @@ class OpenAiCompatProvider:
         extra_models: Optional[Sequence[str]] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
     ) -> LlmCompletion:
         if not self._api_key:
             raise LlmAuthError("LLM API key is not configured")
@@ -221,6 +222,8 @@ class OpenAiCompatProvider:
             body["max_tokens"] = int(max_tokens)
         if temperature is not None:
             body["temperature"] = float(temperature)
+        if top_p is not None:
+            body["top_p"] = float(top_p)
         extras = [m for m in (extra_models or []) if m and m != chosen]
         if self._enable_route_fallback and extras:
             body["models"] = extras

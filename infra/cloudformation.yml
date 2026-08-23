@@ -392,6 +392,13 @@ Resources:
                   - !GetAtt JobRunsTable.Arn
                   - !GetAtt SnapshotsTable.Arn
                   - !GetAtt ChatIdempotencyTable.Arn
+              - Sid: AdminRoleTransactions
+                Effect: Allow
+                Action:
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt SettingsTable.Arn
               - Sid: S3DataRW
                 Effect: Allow
                 Action:
