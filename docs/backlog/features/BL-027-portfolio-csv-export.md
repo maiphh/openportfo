@@ -5,14 +5,14 @@
 | **ID** | `BL-027` |
 | **Title** | Export portfolio → CSV (display-currency, presigned vs inline decision) |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | Orchestrator demo |
-| **Owner (Eng)** | TBD |
+| **Owner (Eng)** | Implementor |
 | **Requested by** | Demo examiner / user (stretch S3 in PRD) |
 | **Related PRD / sprint** | PRD S3 Export holdings CSV (`S3`), sprint-05-portfolio, docs/orchestration demo |
 | **Created** | 2026-08-23 |
 | **Ready date** | 2026-08-23 |
-| **Done date** | |
+| **Done date** | 2026-08-24 |
 
 ---
 
@@ -75,14 +75,14 @@ As a **portfolio owner**, I want **to download my current portfolio as CSV in my
 
 ## 5. Acceptance criteria
 
-- [ ] **AC1** Given an authenticated user with holdings, When they `GET /portfolio/export?format=csv&displayCurrency=USD`, Then response is `text/csv` (or JSON presigned wrapper — one locked choice) with correct headers and rows match `GET /portfolio` math (qty*price, allocation, etc.) — file:line `backend/tests/unit/api/test_portfolio_export.py`.
-- [ ] **AC2** Given displayCurrency differs from native, When FX stored rate exists, Then converted `marketValue_D`/`costBasis_D` equals native * rate (same `fx_math` as portfolio service) — unit test `test_portfolio_export_fx_conversion`.
-- [ ] **AC3** Given no stored FX rate, When displayCurrency != native, Then CSV includes native values, converted columns empty/`null`, and response header or CSV comment indicates `fxStatus=missing` without live FX call.
-- [ ] **AC4** Given unauthenticated request, Then 401.
-- [ ] **AC5** Given another user's holdings exist, When user A exports, Then only A's holdings appear (isolation).
-- [ ] **AC6** Given empty portfolio, Then 200 with header only.
-- [ ] **AC7** Frontend: Export button triggers download without page reload; shows loading → success/error toast.
-- [ ] **AC8** No `boto3` outside `adapters/`; if S3 path chosen, presigned via `ObjectStorage` port adapter.
+- [x] **AC1** Given an authenticated user with holdings, When they `GET /portfolio/export?format=csv&displayCurrency=USD`, Then response is `text/csv` (or JSON presigned wrapper — one locked choice) with correct headers and rows match `GET /portfolio` math (qty*price, allocation, etc.) — file:line `backend/tests/unit/api/test_portfolio_export.py`.
+- [x] **AC2** Given displayCurrency differs from native, When FX stored rate exists, Then converted `marketValue_D`/`costBasis_D` equals native * rate (same `fx_math` as portfolio service) — unit test `test_portfolio_export_fx_conversion`.
+- [x] **AC3** Given no stored FX rate, When displayCurrency != native, Then CSV includes native values, converted columns empty/`null`, and response header or CSV comment indicates `fxStatus=missing` without live FX call.
+- [x] **AC4** Given unauthenticated request, Then 401.
+- [x] **AC5** Given another user's holdings exist, When user A exports, Then only A's holdings appear (isolation).
+- [x] **AC6** Given empty portfolio, Then 200 with header only.
+- [x] **AC7** Frontend: Export button triggers download without page reload; shows loading → success/error toast.
+- [x] **AC8** No `boto3` outside `adapters/`; if S3 path chosen, presigned via `ObjectStorage` port adapter.
 
 ---
 
@@ -124,7 +124,7 @@ As a **portfolio owner**, I want **to download my current portfolio as CSV in my
 
 | # | Question | Status | Answer |
 |---|----------|--------|--------|
-| 1 | Inline vs presigned S3? | open | SA + Researcher to decide (default inline unless research shows S3 presigned is stronger for rubric) |
+| 1 | Inline vs presigned S3? | resolved | Inline `text/csv` locked (Research Option A; SA D1). Presigned is documented opt-in, not implemented. |
 | 2 | CSV generation lib? Stdlib `csv` vs custom | resolved | Use Python stdlib `csv` + `io.StringIO` (no extra dep) |
 
 ---
@@ -139,6 +139,6 @@ As a **portfolio owner**, I want **to download my current portfolio as CSV in my
 
 ## 11. Implementation notes (Eng fills after `ready`)
 
-- Approach:
-- PR / branch: `feat/BL-027-portfolio-csv-export` → worktree `D:\rmit\cloud\a3-wt-bl027`
-- Verification:
+- Approach: Inline `GET /api/portfolio/export?format=csv` via `ExportService` + `PortfolioService.get_portfolio` (stored FX only). Dashboard Export CSV button downloads Blob. No S3 presigned.
+- PR / branch: `feat/BL-027-portfolio-csv-export` → worktree `D:\rmit\cloud\a3-wt-bl027` → cherry-picked to `workflow-setup` (not `main`). SA review `approve`.
+- Verification: `pytest -q` 529 passed; targeted 17 passed; frontend vitest 43 passed; ports grep empty. Walkthrough + review filed.
