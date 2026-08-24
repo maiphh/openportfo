@@ -6,10 +6,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.core.deps import (
     get_current_user,
+    get_export_service,
     get_fx_service,
     get_portfolio_service,
     get_settings_repo,
@@ -26,6 +27,7 @@ from app.services.currency_service import (
     normalize_stored_currency,
     resolve_currency,
 )
+from app.services.export_service import ExportService, csv_filename
 from app.services.fx_service import FxService
 
 router = APIRouter(tags=["portfolio"])
@@ -123,6 +125,56 @@ def portfolio_view_to_response(view: PortfolioView) -> dict[str, Any]:
         "asOf": _iso(view.as_of),
         "displayCurrency": summary.display_currency,
     }
+
+
+@router.get("/api/portfolio/export")
+def export_portfolio(
+    format: str = Query(default="csv"),  # noqa: A002
+    currency: Optional[str] = Query(default=None),
+    displayCurrency: Optional[str] = Query(default=None),  # noqa: N803
+    assetType: Optional[str] = Query(default=None),  # noqa: N803
+    user: UserProfile = Depends(get_current_user),
+    svc: PortfolioService = Depends(get_portfolio_service),
+    fx: FxService = Depends(get_fx_service),
+    exporter: ExportService = Depends(get_export_service),
+) -> Response:
+    """Export portfolio as CSV (auth, FX-aware, stored rates only)."""
+    if (format or "").strip().lower() != "csv":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format must be csv")
+    settings_default = get_settings_repo().get().default_display_currency
+    preferred = normalize_stored_currency(user.preferred_currency) or normalize_stored_currency(settings_default) or "USD"
+    try:
+        requested = (
+            resolve_currency(currency, legacy=displayCurrency, preferred=preferred)
+            if currency is not None or displayCurrency is not None
+            else None
+        )
+        # Validate assetType early so 400 before market work
+        if assetType is not None and str(assetType).strip() != "" and str(assetType).strip().lower() not in {"crypto", "stock"}:
+            raise ValidationError("assetType must be 'crypto' or 'stock'")
+        view = svc.get_portfolio(
+            user.user_id,
+            display_currency=requested,
+            preferred_currency=preferred,
+            asset_type=assetType,
+            force_refresh=False,
+            fx_context=fx.get_context(),
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail) from exc
+    except CurrencyValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.detail) from exc
+    except MarketDataError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=getattr(exc, "detail", None) or str(exc)) from exc
+    csv_text = exporter.render(view)
+    filename = csv_filename()
+    fx_status = view.summary.fx_status or "missing"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-FX-Status": fx_status,
+        "X-FX-As-Of": _iso(view.summary.fx_as_of) or "",
+    }
+    return Response(content=csv_text, media_type="text/csv; charset=utf-8", headers=headers)
 
 
 @router.get("/api/portfolio")

@@ -39,6 +39,7 @@ from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
 from app.services.watchlist_service import WatchlistService
 from app.services.admin_user_service import AdminUserService
+from app.services.export_service import ExportService
 
 # Process-local stores (until set / first get)
 _user_profile_repo: Optional[UserProfileRepo] = None
@@ -523,6 +524,10 @@ def get_portfolio_service(
 def set_portfolio_service(svc: Optional[PortfolioService]) -> None:
     global _portfolio_service
     _portfolio_service = svc
+
+
+def get_export_service() -> ExportService:
+    return ExportService()
 
 
 # ---------------------------------------------------------------------------

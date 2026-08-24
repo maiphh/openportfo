@@ -183,6 +183,81 @@ export async function refreshPortfolio(options: {
   });
 }
 
+/** Parse RFC 6266 `filename="..."` from Content-Disposition (ASCII fallback). */
+export function filenameFromContentDisposition(header: string | null | undefined): string | null {
+  if (!header) return null;
+  const starred = /filename\*=(?:UTF-8''|)([^;]+)/i.exec(header);
+  if (starred?.[1]) {
+    try {
+      return decodeURIComponent(starred[1].trim().replace(/^"(.*)"$/, "$1"));
+    } catch {
+      return starred[1].trim().replace(/^"(.*)"$/, "$1");
+    }
+  }
+  const quoted = /filename="([^"]+)"/i.exec(header);
+  if (quoted?.[1]) return quoted[1];
+  const plain = /filename=([^;]+)/i.exec(header);
+  if (plain?.[1]) return plain[1].trim().replace(/^"(.*)"$/, "$1");
+  return null;
+}
+
+export function defaultPortfolioCsvFilename(now: Date = new Date()): string {
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `openportfo-portfolio-${y}${m}${d}.csv`;
+}
+
+/**
+ * Trigger a file download from a Blob without navigating / reloading.
+ * Uses `URL.createObjectURL` + a temporary `<a download>` click.
+ */
+export function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportPortfolioCsv(options: {
+  displayCurrency: DisplayCurrency;
+  currency?: DisplayCurrency;
+  assetType?: AssetTypeFilter;
+  token?: string | null;
+  signal?: AbortSignal;
+}): Promise<{ blob: Blob; filename: string }> {
+  const qs = new URLSearchParams(portfolioQuery({
+    displayCurrency: options.displayCurrency,
+    currency: options.currency,
+    assetType: options.assetType,
+  }));
+  qs.set("format", "csv");
+  const token = options.token ?? readAuthToken();
+  const res = await fetch(`${apiBase()}/api/portfolio/export?${qs.toString()}`, {
+    method: "GET",
+    headers: {
+      Accept: "text/csv",
+      ...bearerHeader(token),
+    },
+    signal: options.signal,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new PortfolioApiError(res.status, await parseDetail(res));
+  }
+  const blob = await res.blob();
+  const filename =
+    filenameFromContentDisposition(res.headers.get("Content-Disposition")) ||
+    defaultPortfolioCsvFilename();
+  return { blob, filename };
+}
+
 export function assetSearchQuery(params: { q: string; type: "crypto" | "stock" }): string {
   const q = new URLSearchParams();
   q.set("q", params.q);

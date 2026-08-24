@@ -4,14 +4,18 @@ import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth";
 import {
   assetSearchQuery,
   createHolding,
+  defaultPortfolioCsvFilename,
   describeDonutSlice,
+  exportPortfolioCsv,
   fetchPortfolio,
+  filenameFromContentDisposition,
   parseMoney,
   pieSlices,
   PortfolioApiError,
   portfolioQuery,
   refreshPortfolio,
   searchAssets,
+  triggerBlobDownload,
   unitPriceInDisplay,
   updateHolding,
 } from "@/lib/portfolio";
@@ -278,5 +282,109 @@ describe("portfolio API client", () => {
         }),
       }),
     );
+  });
+
+  it("exportPortfolioCsv fetches text/csv and returns a Blob", async () => {
+    const csvBody = "symbol,assetType\r\nBTC,crypto\r\n";
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(csvBody, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="openportfo-portfolio-20260823.csv"',
+        },
+      }),
+    );
+
+    const result = await exportPortfolioCsv({ displayCurrency: "VND", assetType: "crypto" });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${base}/api/portfolio/export?displayCurrency=VND&assetType=crypto&format=csv`,
+      expect.objectContaining({
+        method: "GET",
+        cache: "no-store",
+        headers: expect.objectContaining({
+          Authorization: "Bearer fake:alice",
+          Accept: "text/csv",
+        }),
+      }),
+    );
+    expect(result.blob).toBeTruthy();
+    expect(result.blob.size).toBeGreaterThan(0);
+    expect(String(result.blob.type)).toContain("text/csv");
+    expect(result.filename).toBe("openportfo-portfolio-20260823.csv");
+    await expect(result.blob.text()).resolves.toContain("BTC");
+  });
+
+  it("exportPortfolioCsv maps 401 to PortfolioApiError.authRequired", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Missing authorization header" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(exportPortfolioCsv({ displayCurrency: "USD" })).rejects.toMatchObject({
+      name: "PortfolioApiError",
+      authRequired: true,
+      status: 401,
+    } satisfies Partial<PortfolioApiError>);
+  });
+
+  it("exportPortfolioCsv maps 400 detail from JSON body", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ detail: "format must be csv" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(exportPortfolioCsv({ displayCurrency: "USD" })).rejects.toMatchObject({
+      name: "PortfolioApiError",
+      status: 400,
+      detail: "format must be csv",
+    });
+  });
+});
+
+describe("portfolio CSV helpers", () => {
+  it("filenameFromContentDisposition reads quoted filename", () => {
+    expect(
+      filenameFromContentDisposition('attachment; filename="openportfo-portfolio-20260823.csv"'),
+    ).toBe("openportfo-portfolio-20260823.csv");
+    expect(filenameFromContentDisposition(null)).toBeNull();
+  });
+
+  it("defaultPortfolioCsvFilename uses UTC YYYYMMDD", () => {
+    expect(defaultPortfolioCsvFilename(new Date("2026-08-23T01:02:03Z"))).toBe(
+      "openportfo-portfolio-20260823.csv",
+    );
+  });
+
+  it("triggerBlobDownload creates an object URL and clicks an anchor without reload", () => {
+    const createObjectURL = vi.fn(() => "blob:test-csv");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, writable: true, value: createObjectURL });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, writable: true, value: revokeObjectURL });
+
+    const click = vi.fn();
+    const origCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, "createElement").mockImplementation((tag: string, options?: ElementCreationOptions) => {
+      const el = origCreate(tag, options);
+      if (tag === "a") {
+        el.click = click;
+      }
+      return el;
+    });
+
+    const hrefBefore = window.location.href;
+    triggerBlobDownload(new Blob(["symbol\r\n"], { type: "text/csv" }), "openportfo-portfolio-20260823.csv");
+
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-csv");
+    expect(window.location.href).toBe(hrefBefore);
+
+    createSpy.mockRestore();
   });
 });

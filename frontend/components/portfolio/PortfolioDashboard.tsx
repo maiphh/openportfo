@@ -14,10 +14,12 @@ import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import {
   createHolding,
   deleteHolding,
+  exportPortfolioCsv,
   fetchPortfolio,
   parseMoney,
   PortfolioApiError,
   refreshPortfolio,
+  triggerBlobDownload,
   updateHolding,
   type AssetTypeFilter,
   type HoldingMutation,
@@ -50,6 +52,10 @@ export default function PortfolioDashboard() {
   const [mutateBusy, setMutateBusy] = useState(false);
   const [mutateError, setMutateError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [toast, setToast] = useState<{ kind: "success" | "error" | "info"; message: string } | null>(
+    null,
+  );
   const loadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -130,7 +136,7 @@ export default function PortfolioDashboard() {
     void load();
   }, [hydrated, load]);
 
-  const lines = data?.lines ?? [];
+  const lines = useMemo(() => data?.lines ?? [], [data]);
   const isEmpty = hydrated && !authRequired && !loading && lines.length === 0 && filter === "all";
 
   const pieItems = useMemo(() => {
@@ -215,6 +221,41 @@ export default function PortfolioDashboard() {
     }
   };
 
+  const handleExport = async () => {
+    const t = readAuthToken();
+    if (!t) {
+      handleAuthFailure();
+      return;
+    }
+    setExporting(true);
+    setToast(null);
+    try {
+      if (lines.length === 0) {
+        setToast({ kind: "info", message: "No holdings to export" });
+      }
+      const { blob, filename } = await exportPortfolioCsv({
+        displayCurrency: currency,
+        currency,
+        assetType: filter,
+        token: t,
+      });
+      triggerBlobDownload(blob, filename);
+      if (lines.length > 0) {
+        setToast({ kind: "success", message: "CSV downloaded" });
+      }
+    } catch (err) {
+      if (err instanceof PortfolioApiError && err.authRequired) {
+        handleAuthFailure(err.detail);
+      } else {
+        const message = err instanceof Error ? err.message : "Export failed";
+        setToast({ kind: "error", message });
+        setError(message);
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleDelete = async (line: PortfolioLine) => {
     const key = `${line.assetType}:${line.symbol}`;
     if (!window.confirm(`Delete ${line.symbol}?`)) return;
@@ -282,6 +323,16 @@ export default function PortfolioDashboard() {
           >
             {refreshing ? "Refreshing…" : "Refresh"}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading || exporting}
+            onClick={() => {
+              void handleExport();
+            }}
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </Button>
           <Button type="button" onClick={openCreate}>
             Add holding
           </Button>
@@ -295,6 +346,21 @@ export default function PortfolioDashboard() {
           </Button>
         ))}
       </div>
+
+      {toast && (
+        <div
+          role="status"
+          className={
+            toast.kind === "error"
+              ? "rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400"
+              : toast.kind === "success"
+                ? "rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+                : "rounded-md border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-300"
+          }
+        >
+          {toast.message}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</div>
