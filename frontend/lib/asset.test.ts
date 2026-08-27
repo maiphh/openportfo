@@ -15,6 +15,7 @@ import {
   normalizeAssetKind,
   parseAssetRouteParams,
   parseChartRange,
+  parseCompanyTimeline,
   AssetApiError,
 } from "@/lib/asset";
 import { AUTH_TOKEN_STORAGE_KEY } from "@/lib/auth";
@@ -100,21 +101,46 @@ describe("asset helpers", () => {
     expect(stock.find((r) => r.label === "Circulating supply")).toBeUndefined();
   });
 
-  it("buildExternalLinks skips empty values and homepage duplicates", () => {
+  it("buildExternalLinks labels website and classifies socials", () => {
     expect(
       buildExternalLinks({
         homepage: "https://example.com",
         links: {
           homepage: "https://example.com",
           twitter: "https://x.com/ex",
+          reddit: "https://reddit.com/r/ex",
+          github: "https://github.com/ex",
           empty: "",
           missing: null,
         },
       }),
     ).toEqual([
-      { label: "Homepage", href: "https://example.com" },
-      { label: "twitter", href: "https://x.com/ex" },
+      { kind: "website", label: "Website", href: "https://example.com" },
+      { kind: "twitter", label: "X", href: "https://x.com/ex" },
+      { kind: "reddit", label: "Reddit", href: "https://reddit.com/r/ex" },
+      { kind: "github", label: "GitHub", href: "https://github.com/ex" },
     ]);
+  });
+
+  it("parseCompanyTimeline extracts dated vnstock history bullets", () => {
+    const events = parseCompanyTimeline(`
+- Ngày 13/09/1988: Tiền thân là Công ty Công nghệ thực phẩm thành lập.
+- Năm 1999: Tiến ra thị trường nước ngoài.
+- Tháng 03/2002: Công ty tiến hành cổ phần hóa.
+  Soft wrap continues the prior event.
+- Tháng 05/2022: Tăng vốn điều lệ.
+`);
+    expect(events).toEqual([
+      { when: "13/09/1988", year: 1988, text: "Tiền thân là Công ty Công nghệ thực phẩm thành lập." },
+      { when: "1999", year: 1999, text: "Tiến ra thị trường nước ngoài." },
+      {
+        when: "03/2002",
+        year: 2002,
+        text: "Công ty tiến hành cổ phần hóa. Soft wrap continues the prior event.",
+      },
+      { when: "05/2022", year: 2022, text: "Tăng vốn điều lệ." },
+    ]);
+    expect(parseCompanyTimeline("Just a prose company blurb.")).toBeNull();
   });
 
   it("historySeries prefers display prices when requested", () => {

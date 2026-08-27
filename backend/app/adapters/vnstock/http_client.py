@@ -488,7 +488,8 @@ class HttpVnstockClient:
         name = _pick(rec, _NAME_KEYS) or symbol
         description = _pick(
             rec,
-            ("company_profile", "history", "history_dev", "description", "overview"),
+            # VN company "about" is usually a dated history timeline (`history`).
+            ("history", "history_dev", "company_profile", "description", "overview", "business_model"),
         ) or None
         industry = _pick(rec, ("industry", "icb_name3", "icb_name2", "icb_name", "sector"))
         exchange = _pick(rec, ("exchange", "exchange_name")) or "HOSE"

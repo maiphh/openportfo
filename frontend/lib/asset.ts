@@ -326,20 +326,132 @@ export function buildAssetStats(
 }
 
 /** External links from homepage + profile.links (nulls skipped). */
+export type ExternalLinkKind =
+  | "website"
+  | "twitter"
+  | "reddit"
+  | "github"
+  | "whitepaper"
+  | "telegram"
+  | "discord"
+  | "other";
+
+export type ExternalLink = {
+  kind: ExternalLinkKind;
+  label: string;
+  href: string;
+};
+
+function classifyExternalLink(key: string, href: string): ExternalLink {
+  const k = key.toLowerCase().replace(/[_\s-]+/g, "");
+  const host = (() => {
+    try {
+      return new URL(href).hostname.toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+
+  if (k === "homepage" || k === "website" || k === "home") {
+    return { kind: "website", label: "Website", href };
+  }
+  if (k.includes("twitter") || k === "x" || host.includes("twitter.com") || host === "x.com" || host.endsWith(".x.com")) {
+    return { kind: "twitter", label: "X", href };
+  }
+  if (k.includes("reddit") || host.includes("reddit.com")) {
+    return { kind: "reddit", label: "Reddit", href };
+  }
+  if (k.includes("github") || host.includes("github.com")) {
+    return { kind: "github", label: "GitHub", href };
+  }
+  if (k.includes("whitepaper") || k.includes("paper")) {
+    return { kind: "whitepaper", label: "Whitepaper", href };
+  }
+  if (k.includes("telegram") || host.includes("t.me") || host.includes("telegram")) {
+    return { kind: "telegram", label: "Telegram", href };
+  }
+  if (k.includes("discord") || host.includes("discord")) {
+    return { kind: "discord", label: "Discord", href };
+  }
+  const label = key.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return { kind: "other", label, href };
+}
+
 export function buildExternalLinks(
   profile: AssetProfileDto | null | undefined,
-): { label: string; href: string }[] {
-  const out: { label: string; href: string }[] = [];
-  const homepage = present(profile?.homepage);
-  if (homepage) out.push({ label: "Homepage", href: homepage });
+): ExternalLink[] {
+  const out: ExternalLink[] = [];
+  const seen = new Set<string>();
+  const push = (key: string, raw: string | null | undefined) => {
+    const href = present(raw);
+    if (!href || seen.has(href)) return;
+    seen.add(href);
+    out.push(classifyExternalLink(key, href));
+  };
+
+  push("homepage", profile?.homepage);
   const links = profile?.links ?? {};
   for (const [key, raw] of Object.entries(links)) {
-    const href = present(raw);
-    if (!href) continue;
-    if (homepage && href === homepage) continue;
-    out.push({ label: key, href });
+    push(key, raw);
   }
   return out;
+}
+
+export type CompanyTimelineEvent = {
+  when: string;
+  year: number;
+  text: string;
+};
+
+const TIMELINE_START =
+  /^\s*[-•]\s*((?:Ngày|Tháng|Năm)\s+[^:]+?)\s*:\s*(.*)$/i;
+
+function timelineYear(whenRaw: string): number | null {
+  const years = whenRaw.match(/(19|20)\d{2}/g);
+  if (!years?.length) return null;
+  const year = Number(years[years.length - 1]);
+  return Number.isFinite(year) ? year : null;
+}
+
+function timelineWhenLabel(whenRaw: string): string {
+  return whenRaw.replace(/^(Ngày|Tháng|Năm)\s+/i, "").trim() || whenRaw.trim();
+}
+
+/**
+ * Detect vnstock-style company history timelines:
+ *   "- Ngày 13/09/1988: …"
+ *   "- Năm 1999: …"
+ *   "- Tháng 03/2002: …"
+ * Soft-wrapped continuation lines are merged into the prior event.
+ */
+export function parseCompanyTimeline(
+  raw: string | null | undefined,
+): CompanyTimelineEvent[] | null {
+  if (!raw?.trim()) return null;
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  const events: CompanyTimelineEvent[] = [];
+
+  for (const line of lines) {
+    const match = line.match(TIMELINE_START);
+    if (match) {
+      const whenRaw = match[1].trim();
+      const year = timelineYear(whenRaw);
+      if (year == null) continue;
+      events.push({
+        when: timelineWhenLabel(whenRaw),
+        year,
+        text: (match[2] || "").trim(),
+      });
+      continue;
+    }
+    const cleaned = line.replace(/^\s*[-•]\s*/, "").trim();
+    if (!cleaned || events.length === 0) continue;
+    const last = events[events.length - 1];
+    last.text = `${last.text} ${cleaned}`.trim();
+  }
+
+  const usable = events.filter((event) => event.text.length > 0);
+  return usable.length >= 2 ? usable : null;
 }
 
 export type ChartPricePoint = {

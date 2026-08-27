@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AssetHistoryChart from "@/components/asset/AssetHistoryChart";
+import AssetExternalLinks from "@/components/asset/AssetExternalLinks";
+import CompanyTimeline from "@/components/asset/CompanyTimeline";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import HoldingFormModal from "@/components/portfolio/HoldingFormModal";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import {
   fetchAssetHistory,
   historyChartPoints,
   parseChartRange,
+  parseCompanyTimeline,
   toPrefillHit,
   type AssetDetailDto,
   type AssetHistoryDto,
@@ -315,6 +318,7 @@ export default function AssetDetailView({
   }
 
   const description = detail.profile?.description?.trim() || fallbackDescription(detail);
+  const timeline = parseCompanyTimeline(description);
   const imageUrl = detail.profile?.imageUrl?.trim() || null;
 
   return (
@@ -414,13 +418,19 @@ export default function AssetDetailView({
         )}
       </section>
 
-      <section className="rounded-xl border border-gray-600 bg-gray-800/40 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-gray-200">About</h2>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{description}</p>
+      <section className="surface-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-gray-200">
+          {timeline ? "Company timeline" : "About"}
+        </h2>
+        {timeline ? (
+          <CompanyTimeline events={timeline} />
+        ) : (
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{description}</p>
+        )}
       </section>
 
       {stats.length > 0 && (
-        <section className="rounded-xl border border-gray-600 bg-gray-800/40 p-4">
+        <section className="surface-card p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-200">
             {detail.assetType === "crypto" ? "Crypto stats" : "Stock stats"}
           </h2>
@@ -436,22 +446,9 @@ export default function AssetDetailView({
       )}
 
       {links.length > 0 && (
-        <section className="rounded-xl border border-gray-600 bg-gray-800/40 p-4">
+        <section className="surface-card p-4">
           <h2 className="mb-3 text-sm font-semibold text-gray-200">Links</h2>
-          <ul className="flex flex-wrap gap-2">
-            {links.map((link) => (
-              <li key={`${link.label}:${link.href}`}>
-                <a
-                  href={link.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex rounded-md border border-gray-600 px-3 py-1.5 text-sm text-teal-400 hover:border-teal-500/50 hover:bg-gray-700/40"
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <AssetExternalLinks links={links} />
         </section>
       )}
 
