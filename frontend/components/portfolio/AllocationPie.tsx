@@ -1,6 +1,7 @@
 "use client";
 
 import AssetLink from "@/components/AssetLink";
+import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import type { AssetKind } from "@/lib/asset";
 import { describeDonutSlice, pieSlices } from "@/lib/portfolio";
 import { formatPct, formatPrice } from "@/lib/utils";
@@ -67,8 +68,13 @@ export default function AllocationPie({
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="inline-block size-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
                     {item.assetType ? (
-                      <AssetLink assetType={item.assetType} id={linkId} className="truncate text-gray-300">
-                        {item.label}
+                      <AssetLink
+                        assetType={item.assetType}
+                        id={linkId}
+                        className="inline-flex min-w-0 items-center gap-2 truncate text-gray-300"
+                      >
+                        <CompanyLogo symbol={item.label} size={16} assetType={item.assetType} />
+                        <span className="truncate">{item.label}</span>
                       </AssetLink>
                     ) : (
                       <span className="truncate text-gray-300">{item.label}</span>

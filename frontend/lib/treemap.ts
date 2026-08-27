@@ -5,6 +5,7 @@ export type TreemapInput = {
   symbol?: string;
   changePct?: number;
   sector?: string;
+  imageUrl?: string | null;
 };
 
 export type TreemapRect = {
@@ -18,6 +19,7 @@ export type TreemapRect = {
   symbol?: string;
   changePct?: number;
   sector?: string;
+  imageUrl?: string | null;
 };
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -41,6 +43,7 @@ function toRect(node: TreemapInput, x: number, y: number, width: number, height:
     symbol: node.symbol,
     changePct: node.changePct,
     sector: node.sector,
+    imageUrl: node.imageUrl,
   };
 }
 

@@ -1,17 +1,86 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { lookupLogo, rememberLogo } from "@/lib/logo-cache";
 import { logoFor } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
+
+/** Same CDN as backend ``stock_logo_url`` — keep paths identical. */
+export function vnStockLogoUrl(symbol: string): string | null {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym || !/^[A-Z0-9]+$/.test(sym)) return null;
+  return `https://companiesmarketcap.com/img/company-logos/128/${sym}.VN.png`;
+}
+
+/**
+ * Resolve display logo URL.
+ * Stocks always use the shared VN CDN so heatmap/detail match.
+ * Crypto prefers provider ``imageUrl`` (CoinGecko), then session logo cache.
+ */
+export function preferLogoSrc(options: {
+  imageUrl?: string | null;
+  assetType?: string | null;
+  symbol: string;
+}): string | null {
+  const kind = (options.assetType || "").trim().toLowerCase();
+  const explicit = options.imageUrl?.trim() || null;
+  if (kind === "stock") {
+    return vnStockLogoUrl(options.symbol) ?? explicit;
+  }
+  if (explicit) return explicit;
+  if (kind === "crypto") {
+    return lookupLogo("crypto", options.symbol);
+  }
+  return null;
+}
 
 export default function CompanyLogo({
   symbol,
   size = 22,
   className,
+  src,
+  assetType,
 }: {
   symbol: string;
   size?: number;
   className?: string;
+  /** Crypto/provider image when available. Stocks ignore this in favor of the shared CDN. */
+  src?: string | null;
+  assetType?: string | null;
 }) {
+  const [failed, setFailed] = useState(false);
+  const imageSrc = preferLogoSrc({ imageUrl: src, assetType, symbol });
   const logo = logoFor(symbol);
   const mark = logo.mark || symbol.slice(0, 1);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [imageSrc, symbol]);
+
+  useEffect(() => {
+    if (imageSrc && assetType) {
+      rememberLogo(assetType, symbol, imageSrc);
+    }
+  }, [assetType, imageSrc, symbol]);
+
+  if (imageSrc && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageSrc}
+        alt=""
+        width={size}
+        height={size}
+        className={cn(
+          "shrink-0 rounded-full border border-gray-600 bg-gray-900 object-contain",
+          className,
+        )}
+        style={{ width: size, height: size }}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
   return (
     <span
       className={cn(

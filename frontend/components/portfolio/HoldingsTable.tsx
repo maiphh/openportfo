@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import AssetLink from "@/components/AssetLink";
+import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import type { ConvertToDisplay, PortfolioLine } from "@/lib/portfolio";
 import { parseMoney } from "@/lib/portfolio";
@@ -77,8 +78,9 @@ export default function HoldingsTable({
                   <AssetLink
                     assetType={line.assetType}
                     id={line.assetId || line.symbol}
-                    className="font-semibold text-gray-100"
+                    className="inline-flex items-center gap-2.5 font-semibold text-gray-100"
                   >
+                    <CompanyLogo symbol={line.symbol} size={20} assetType={line.assetType} />
                     {line.symbol}
                   </AssetLink>
                   <div className="text-xs capitalize text-gray-500">{line.assetType}</div>

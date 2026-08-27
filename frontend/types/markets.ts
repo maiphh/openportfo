@@ -22,6 +22,7 @@ export type HeatmapStock = {
   name: string;
   changePct: number;
   marketCap: number;
+  imageUrl?: string | null;
 };
 
 export type HeatmapSector = {

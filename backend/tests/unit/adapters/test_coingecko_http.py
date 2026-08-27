@@ -17,6 +17,7 @@ def _markets_payload() -> list[dict]:
             "id": "bitcoin",
             "symbol": "btc",
             "name": "Bitcoin",
+            "image": "https://assets.coingecko.com/coins/images/1/large/bitcoin.png",
             "current_price": 65000,
             "price_change_24h": 1200,
             "price_change_percentage_24h": 1.88,
@@ -28,6 +29,7 @@ def _markets_payload() -> list[dict]:
             "id": "uniswap",
             "symbol": "uni",
             "name": "Uniswap",
+            "image": "https://assets.coingecko.com/coins/images/12504/large/uniswap.png",
             "current_price": 8.5,
             "price_change_24h": 0.2,
             "price_change_percentage_24h": 2.4,
@@ -88,6 +90,7 @@ def test_http_crypto_heatmap_uses_markets_payload() -> None:
     btc = next(t for t in tiles if t.symbol == "BTC")
     assert btc.change_pct == pytest.approx(1.88)
     assert btc.market_cap == pytest.approx(1.2e12)
+    assert btc.image_url == "https://assets.coingecko.com/coins/images/1/large/bitcoin.png"
     names = {s.name for s in sectors}
     assert "Layer 1" in names
     assert "DeFi" in names

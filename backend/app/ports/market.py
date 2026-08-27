@@ -79,6 +79,7 @@ class HeatmapStock:
     change_pct: float
     # Tile size weight: market cap when available, else session traded value.
     market_cap: float
+    image_url: Optional[str] = None
 
 
 @dataclass(frozen=True)

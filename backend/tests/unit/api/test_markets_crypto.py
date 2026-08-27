@@ -42,6 +42,12 @@ def test_crypto_heatmap_returns_fixture_sectors() -> None:
     assert "symbol" in first
     assert "changePct" in first
     assert "marketCap" in first
+    btc = next(
+        (t for s in body["sectors"] for t in s["stocks"] if t["symbol"] == "BTC"),
+        None,
+    )
+    if btc is not None:
+        assert btc.get("imageUrl", "").startswith("https://assets.coingecko.com/")
 
 
 def test_crypto_heatmap_uses_injected_client() -> None:

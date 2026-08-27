@@ -294,6 +294,12 @@ class AssetDetailService:
             profile = None
         if profile is None:
             return None
+        if profile.image_url:
+            from app.services.logo_cache import get_logo_cache
+
+            cache = get_logo_cache()
+            cache.put(hit.asset_type, hit.symbol, profile.image_url)
+            cache.put(hit.asset_type, hit.asset_id, profile.image_url)
         if (profile.source or "live") != "fixture-fallback":
             self._storage.put_json(key, self._profile_to_cache(profile))
         return profile
@@ -342,9 +348,23 @@ class AssetDetailService:
         hit: AssetSearchResult,
     ) -> dict[str, Any]:
         if profile is None:
+            image_url = None
+            if hit.asset_type == "stock":
+                from app.adapters.vnstock.logos import stock_logo_url
+                from app.services.logo_cache import get_logo_cache
+
+                cache = get_logo_cache()
+                image_url = cache.get("stock", hit.symbol) or stock_logo_url(hit.symbol)
+                if image_url:
+                    cache.put("stock", hit.symbol, image_url)
+            elif hit.asset_type == "crypto":
+                from app.services.logo_cache import get_logo_cache
+
+                cache = get_logo_cache()
+                image_url = cache.get("crypto", hit.symbol) or cache.get("crypto", hit.asset_id)
             return {
                 "description": f"{hit.name} ({hit.symbol}).",
-                "imageUrl": None,
+                "imageUrl": image_url,
                 "homepage": None,
                 "categories": [],
                 "marketCapRank": None,
@@ -358,9 +378,21 @@ class AssetDetailService:
                 "country": "VN" if hit.asset_type == "stock" else None,
                 "links": {},
             }
+        image_url = profile.image_url
+        if not image_url:
+            from app.services.logo_cache import get_logo_cache
+
+            cache = get_logo_cache()
+            image_url = cache.get(hit.asset_type, hit.symbol) or cache.get(
+                hit.asset_type, hit.asset_id
+            )
+            if not image_url and hit.asset_type == "stock":
+                from app.adapters.vnstock.logos import stock_logo_url
+
+                image_url = stock_logo_url(hit.symbol)
         return {
             "description": profile.description,
-            "imageUrl": profile.image_url,
+            "imageUrl": image_url,
             "homepage": profile.homepage,
             "categories": list(profile.categories or []),
             "marketCapRank": profile.market_cap_rank,

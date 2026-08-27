@@ -342,21 +342,85 @@ export function buildExternalLinks(
   return out;
 }
 
+export type ChartPricePoint = {
+  t: string | null;
+  price: number;
+};
+
+export type ChartCandle = {
+  t: string | null;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+export type ChartMode = "line" | "candle";
+
 export function historySeries(
   history: AssetHistoryDto | null | undefined,
   preferDisplay: boolean,
 ): number[] {
+  return historyChartPoints(history, preferDisplay).map((p) => p.price);
+}
+
+/** Timestamped close series for interactive charts (line + candle). */
+export function historyChartPoints(
+  history: AssetHistoryDto | null | undefined,
+  preferDisplay: boolean,
+): ChartPricePoint[] {
   const points = history?.points ?? [];
-  const values: number[] = [];
+  const out: ChartPricePoint[] = [];
   for (const point of points) {
     const raw = preferDisplay
       ? (point.priceDisplay ?? point.price)
       : (point.price ?? point.priceDisplay);
     if (raw == null || raw === "") continue;
     const n = Number(raw);
-    if (Number.isFinite(n)) values.push(n);
+    if (!Number.isFinite(n)) continue;
+    out.push({ t: point.t ?? null, price: n });
   }
-  return values;
+  return out;
+}
+
+function dayKey(t: string | null): string | null {
+  if (!t) return null;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return t.slice(0, 10) || null;
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Build OHLC candles from close-only history.
+ * Same-day samples become one candle; single-point days use the prior close as open.
+ */
+export function buildCandles(points: ChartPricePoint[]): ChartCandle[] {
+  if (points.length === 0) return [];
+
+  type Bucket = { t: string | null; prices: number[] };
+  const buckets: Bucket[] = [];
+  const indexByDay = new Map<string, number>();
+
+  for (const point of points) {
+    const key = dayKey(point.t);
+    if (key != null && indexByDay.has(key)) {
+      buckets[indexByDay.get(key)!].prices.push(point.price);
+      continue;
+    }
+    if (key != null) indexByDay.set(key, buckets.length);
+    buckets.push({ t: point.t, prices: [point.price] });
+  }
+
+  const candles: ChartCandle[] = [];
+  for (let i = 0; i < buckets.length; i++) {
+    const prices = buckets[i].prices;
+    const close = prices[prices.length - 1];
+    const open = prices.length > 1 ? prices[0] : candles.length ? candles[candles.length - 1].close : close;
+    const high = Math.max(open, close, ...prices);
+    const low = Math.min(open, close, ...prices);
+    candles.push({ t: buckets[i].t, open, high, low, close });
+  }
+  return candles;
 }
 
 export function toPrefillHit(detail: AssetDetailDto): AssetSearchHit {

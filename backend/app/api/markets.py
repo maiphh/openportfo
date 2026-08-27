@@ -34,6 +34,7 @@ def _sector_to_dict(sector: HeatmapSector) -> dict[str, Any]:
                 "name": s.name,
                 "changePct": s.change_pct,
                 "marketCap": s.market_cap,
+                **({"imageUrl": s.image_url} if s.image_url else {}),
             }
             for s in sector.stocks
         ],

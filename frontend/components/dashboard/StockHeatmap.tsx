@@ -5,6 +5,7 @@ import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import { fetchMarketHeatmap, type MarketKind } from "@/lib/api";
+import { rememberLogosFromHeatmap } from "@/lib/logo-cache";
 import { readHeatmapCache, writeHeatmapCache } from "@/lib/markets-cache";
 import { layoutTreemap, type TreemapRect } from "@/lib/treemap";
 import type { HeatmapSector } from "@/types/markets";
@@ -22,6 +23,7 @@ function sectorNodes(sectors: HeatmapSector[]) {
       symbol: stock.symbol,
       changePct: stock.changePct,
       sector: sector.name,
+      imageUrl: stock.imageUrl,
     })),
   }));
 }
@@ -121,6 +123,14 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
     return () => controller.abort();
   }, [market, reloadKey]);
 
+  useEffect(() => {
+    if (sectorsData.length === 0) return;
+    rememberLogosFromHeatmap(
+      market,
+      sectorsData.flatMap((sector) => sector.stocks),
+    );
+  }, [market, sectorsData]);
+
   const showBoard = source === "live" || source === "updating" || source === "stale";
 
   const laid = useMemo(
@@ -196,7 +206,14 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
                     title={cell.symbol}
                   >
                     <span className="flex h-full flex-col items-center justify-center gap-1 px-1 text-center">
-                      {showLogo ? <CompanyLogo symbol={cell.symbol!} size={28} /> : null}
+                      {showLogo ? (
+                        <CompanyLogo
+                          symbol={cell.symbol!}
+                          size={28}
+                          assetType={market}
+                          src={cell.imageUrl}
+                        />
+                      ) : null}
                       {showSymbol ? (
                         <span className="text-[11px] font-semibold leading-none text-white/95">{cell.symbol}</span>
                       ) : null}
@@ -215,7 +232,15 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
                     top: Math.min(hover.y + 8, size.height - 64),
                   }}
                 >
-                  <div className="font-semibold">{hover.symbol}</div>
+                  <div className="flex items-center gap-2 font-semibold">
+                    <CompanyLogo
+                      symbol={hover.symbol}
+                      size={16}
+                      assetType={market}
+                      src={hover.imageUrl}
+                    />
+                    {hover.symbol}
+                  </div>
                   <div className="text-gray-500">{hover.sector}</div>
                   <div className={cn(hover.changePct && hover.changePct > 0 ? "text-teal-400" : "text-red-500")}>
                     {formatPct(hover.changePct ?? 0)}

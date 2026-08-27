@@ -15,12 +15,13 @@ import {
   fallbackDescription,
   fetchAssetDetail,
   fetchAssetHistory,
-  historySeries,
+  historyChartPoints,
   parseChartRange,
   toPrefillHit,
   type AssetDetailDto,
   type AssetHistoryDto,
   type AssetKind,
+  type ChartMode,
   type ChartRange,
 } from "@/lib/asset";
 import AuthGate from "@/components/auth/AuthGate";
@@ -70,6 +71,7 @@ export default function AssetDetailView({
   const [detail, setDetail] = useState<AssetDetailDto | null>(null);
   const [history, setHistory] = useState<AssetHistoryDto | null>(null);
   const [range, setRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
+  const [chartMode, setChartMode] = useState<ChartMode>("line");
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,11 +219,15 @@ export default function AssetDetailView({
   const historyReady =
     history != null && parseChartRange(String(history.range)) === range && !historyLoading;
   const preferDisplay = Boolean(history?.fx?.rate) || detail?.fx?.status !== "missing";
-  const series = useMemo(
-    () => (historyReady ? historySeries(history, preferDisplay) : []),
+  const chartPoints = useMemo(
+    () => (historyReady ? historyChartPoints(history, preferDisplay) : []),
     [history, historyReady, preferDisplay],
   );
   const chartRange = historyReady ? parseChartRange(String(history?.range)) : range;
+  const chartCurrency =
+    preferDisplay && history?.displayCurrency
+      ? history.displayCurrency
+      : history?.nativeCurrency || detail?.displayCurrency || currency;
 
   const price = detail?.quote
     ? parseNum(detail.quote.priceDisplay) ?? parseNum(detail.quote.price)
@@ -315,16 +321,12 @@ export default function AssetDetailView({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-4">
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={imageUrl}
-              alt=""
-              className="h-14 w-14 rounded-full border border-gray-600 bg-gray-900 object-cover"
-            />
-          ) : (
-            <CompanyLogo symbol={detail.symbol} size={56} />
-          )}
+          <CompanyLogo
+            symbol={detail.symbol}
+            size={56}
+            src={imageUrl}
+            assetType={detail.assetType}
+          />
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-gray-500">
               {detail.assetType} · {detail.nativeCurrency}
@@ -402,7 +404,13 @@ export default function AssetDetailView({
         {!historyReady ? (
           <div className="py-16 text-center text-sm text-gray-500">Loading chart…</div>
         ) : (
-          <AssetHistoryChart data={series} range={chartRange} />
+          <AssetHistoryChart
+            points={chartPoints}
+            range={chartRange}
+            currency={chartCurrency}
+            mode={chartMode}
+            onModeChange={setChartMode}
+          />
         )}
       </section>
 

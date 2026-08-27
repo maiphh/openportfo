@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AssetLink from "@/components/AssetLink";
+import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import {
   fetchNews,
@@ -133,8 +134,9 @@ export default function TopStories() {
                           key={`${story.id}-${tag.id}`}
                           assetType={tag.assetType}
                           id={tag.id}
-                          className="font-semibold text-teal-400"
+                          className="inline-flex items-center gap-1.5 font-semibold text-teal-400"
                         >
+                          <CompanyLogo symbol={tag.symbol} size={14} assetType={tag.assetType} />
                           {tag.symbol}
                         </AssetLink>
                       ))}

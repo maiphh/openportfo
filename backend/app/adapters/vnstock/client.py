@@ -15,6 +15,7 @@ from app.adapters.vnstock.catalog import (
     stock_prices,
     stock_profile_meta,
 )
+from app.adapters.vnstock.logos import stock_logo_url
 from app.domain.models import PriceQuote
 from app.ports.market import (
     AssetProfile,
@@ -25,6 +26,7 @@ from app.ports.market import (
     QuoteGroup,
     QuoteRow,
 )
+from app.services.logo_cache import get_logo_cache
 
 
 def _utc_now() -> datetime:
@@ -156,15 +158,17 @@ class FixtureVnstockClient:
         meta = stock_profile_meta(hit.symbol)
         desc = meta.get("description") or f"{hit.name} is a Vietnam-listed equity ({hit.symbol})."
         links: dict[str, str] = {}
-        if meta.get("homepage"):
-            links["homepage"] = str(meta["homepage"])
+        homepage = meta.get("homepage")
+        if homepage:
+            links["homepage"] = str(homepage)
         return AssetProfile(
             asset_type="stock",
             symbol=hit.symbol,
             asset_id=hit.asset_id,
             name=hit.name,
             description=desc,
-            homepage=meta.get("homepage"),
+            image_url=stock_logo_url(hit.symbol, homepage=homepage, explicit=meta.get("image_url")),
+            homepage=homepage,
             industry=meta.get("industry"),
             exchange=meta.get("exchange") or "HOSE",
             country=meta.get("country") or "VN",
@@ -184,12 +188,16 @@ class FixtureVnstockClient:
         cap = max(1, min(int(limit), 300))
         grouped: dict[str, list[HeatmapStock]] = {}
         for symbol, name, industry, change_pct, weight in fixture_heatmap_rows():
+            image_url = stock_logo_url(symbol)
+            if image_url:
+                get_logo_cache().put("stock", symbol, image_url)
             grouped.setdefault(industry, []).append(
                 HeatmapStock(
                     symbol=symbol,
                     name=name,
                     change_pct=change_pct,
                     market_cap=weight,
+                    image_url=image_url,
                 )
             )
         # Prefer larger tiles first, then trim to ``limit``.

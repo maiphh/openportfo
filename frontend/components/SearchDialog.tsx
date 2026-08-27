@@ -254,7 +254,7 @@ export default function SearchDialog({
                       onClick={onClose}
                       className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-gray-700/60 hover:text-inherit"
                     >
-                      <CompanyLogo symbol={hit.symbol} size={24} />
+                      <CompanyLogo symbol={hit.symbol} size={24} assetType={hit.assetType} />
                       <span className="w-16 font-semibold text-gray-200">{hit.symbol}</span>
                       <span className="min-w-0 flex-1 truncate text-sm text-gray-500">{hit.name}</span>
                       <span className="rounded bg-gray-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">

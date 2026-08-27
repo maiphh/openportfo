@@ -220,7 +220,7 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
                               id={row.symbol}
                               className="flex items-center gap-2.5 text-gray-200 hover:text-teal-400"
                             >
-                              <CompanyLogo symbol={row.symbol} size={20} />
+                              <CompanyLogo symbol={row.symbol} size={20} assetType={market} />
                               <span>
                                 <span className="font-medium">{row.symbol}</span>
                                 <span className="ml-2 text-gray-400">{row.name}</span>

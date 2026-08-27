@@ -8,6 +8,8 @@ import {
   buildExternalLinks,
   fetchAssetDetail,
   fetchAssetHistory,
+  buildCandles,
+  historyChartPoints,
   historySeries,
   normalizeAssetId,
   normalizeAssetKind,
@@ -133,6 +135,42 @@ describe("asset helpers", () => {
       true,
     );
     expect(series).toEqual([25000, 50000]);
+  });
+
+  it("historyChartPoints keeps timestamps with preferred prices", () => {
+    expect(
+      historyChartPoints(
+        {
+          assetType: "crypto",
+          symbol: "BTC",
+          assetId: "bitcoin",
+          range: "7d",
+          nativeCurrency: "USD",
+          displayCurrency: "USD",
+          points: [
+            { t: "2026-08-01T00:00:00Z", price: "100", priceDisplay: "100" },
+            { t: "2026-08-02T00:00:00Z", price: "110", priceDisplay: "110" },
+          ],
+        },
+        true,
+      ),
+    ).toEqual([
+      { t: "2026-08-01T00:00:00Z", price: 100 },
+      { t: "2026-08-02T00:00:00Z", price: 110 },
+    ]);
+  });
+
+  it("buildCandles aggregates same-day samples and carries prior close as open", () => {
+    expect(
+      buildCandles([
+        { t: "2026-08-01T08:00:00Z", price: 100 },
+        { t: "2026-08-01T16:00:00Z", price: 120 },
+        { t: "2026-08-02T12:00:00Z", price: 115 },
+      ]),
+    ).toEqual([
+      { t: "2026-08-01T08:00:00Z", open: 100, high: 120, low: 100, close: 120 },
+      { t: "2026-08-02T12:00:00Z", open: 120, high: 120, low: 115, close: 115 },
+    ]);
   });
 });
 

@@ -67,7 +67,7 @@ export default function WatchlistTable({
                     id={item.assetId || item.symbol}
                     className="flex items-center gap-2.5 font-semibold text-gray-100"
                   >
-                    <CompanyLogo symbol={item.symbol} size={20} />
+                    <CompanyLogo symbol={item.symbol} size={20} assetType={item.assetType} />
                     {item.symbol}
                   </AssetLink>
                   <div className="pl-8 text-xs capitalize text-gray-500">{item.assetType}</div>

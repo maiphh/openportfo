@@ -25,6 +25,7 @@ from app.ports.market import (
     QuoteGroup,
     QuoteRow,
 )
+from app.services.logo_cache import get_logo_cache
 
 
 def _utc_now() -> datetime:
@@ -194,13 +195,22 @@ class FixtureCoinGeckoClient:
         self.heatmap_calls = getattr(self, "heatmap_calls", 0) + 1
         cap = max(1, min(int(limit), 300))
         grouped: dict[str, list[HeatmapStock]] = {}
-        for _coin_id, symbol, name, category, change_pct, market_cap in fixture_crypto_heatmap_rows():
+        for coin_id, symbol, name, category, change_pct, market_cap in fixture_crypto_heatmap_rows():
+            image_url = crypto_profile_meta(coin_id).get("image_url")
+            if isinstance(image_url, str) and image_url.strip():
+                image_url = image_url.strip()
+                cache = get_logo_cache()
+                cache.put("crypto", symbol, image_url)
+                cache.put("crypto", coin_id, image_url)
+            else:
+                image_url = None
             grouped.setdefault(category, []).append(
                 HeatmapStock(
                     symbol=symbol,
                     name=name,
                     change_pct=change_pct,
                     market_cap=market_cap,
+                    image_url=image_url,
                 )
             )
         flat: list[tuple[str, HeatmapStock]] = []

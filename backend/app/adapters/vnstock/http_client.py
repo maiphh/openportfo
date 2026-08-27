@@ -14,6 +14,7 @@ from typing import Any, Optional, Sequence
 
 from app.adapters.vnstock.catalog import stock_catalog
 from app.adapters.vnstock.client import FixtureVnstockClient, group_quote_rows
+from app.adapters.vnstock.logos import stock_logo_url
 from app.domain.models import PriceQuote
 from app.ports.market import (
     AssetProfile,
@@ -24,6 +25,7 @@ from app.ports.market import (
     QuoteGroup,
     QuoteRow,
 )
+from app.services.logo_cache import get_logo_cache
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,17 @@ _HOSE_ALIASES = {"HOSE", "HSX", "HOSEBOARD", "HSXBOARD"}
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _stock_heatmap_logo(symbol: str) -> Optional[str]:
+    cache = get_logo_cache()
+    cached = cache.get("stock", symbol)
+    if cached:
+        return cached
+    url = stock_logo_url(symbol)
+    if url:
+        cache.put("stock", symbol, url)
+    return url
 
 
 def _scale_vnstock_price(raw: Any) -> Decimal:
@@ -483,12 +496,14 @@ class HttpVnstockClient:
         if homepage and not homepage.startswith("http"):
             homepage = f"https://{homepage}"
         links = {"homepage": homepage} if homepage else {}
+        image_url = stock_logo_url(symbol, homepage=homepage or None, provider_row=rec)
         return AssetProfile(
             asset_type="stock",
             symbol=symbol,
             asset_id=symbol,
             name=name,
             description=description,
+            image_url=image_url,
             homepage=homepage or None,
             industry=industry or None,
             exchange=exchange,
@@ -590,6 +605,7 @@ class HttpVnstockClient:
                         name=name,
                         change_pct=round(change, 4),
                         market_cap=size,
+                        image_url=_stock_heatmap_logo(symbol),
                     ),
                 )
             )
@@ -663,6 +679,7 @@ class HttpVnstockClient:
                         name=snap.name_map.get(symbol) or symbol,
                         change_pct=round(q["change_pct"], 4),
                         market_cap=size,
+                        image_url=_stock_heatmap_logo(symbol),
                     ),
                 )
             )

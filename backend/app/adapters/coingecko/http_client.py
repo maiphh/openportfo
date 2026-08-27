@@ -25,6 +25,7 @@ from app.ports.market import (
     QuoteGroup,
     QuoteRow,
 )
+from app.services.logo_cache import get_logo_cache
 
 logger = logging.getLogger(__name__)
 _MARKETS_TTL_SECONDS = 120
@@ -318,6 +319,12 @@ class HttpCoinGeckoClient:
             market_cap = _to_float(rec.get("market_cap"))
             if market_cap <= 0:
                 continue
+            image_url = str(rec.get("image") or "").strip() or None
+            if image_url:
+                cache = get_logo_cache()
+                cache.put("crypto", symbol, image_url)
+                if coin_id:
+                    cache.put("crypto", coin_id, image_url)
             paired.append(
                 (
                     crypto_category(coin_id, symbol),
@@ -326,6 +333,7 @@ class HttpCoinGeckoClient:
                         name=str(rec.get("name") or symbol),
                         change_pct=round(_to_float(rec.get("price_change_percentage_24h")), 4),
                         market_cap=market_cap,
+                        image_url=image_url,
                     ),
                 )
             )

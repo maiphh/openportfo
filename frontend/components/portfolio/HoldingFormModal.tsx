@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import { holdingCostLabel, type DisplayCurrency } from "@/lib/currency";
 import {
@@ -173,7 +174,8 @@ export default function HoldingFormModal({
           )}
 
           {mode === "create" && lockedPrefill && selected ? (
-            <p className="text-sm text-gray-300">
+            <p className="flex items-center gap-2 text-sm text-gray-300">
+              <CompanyLogo symbol={selected.symbol} size={20} assetType={selected.assetType} />
               {selected.symbol} · <span className="capitalize">{selected.assetType}</span>
               <span className="ml-2 text-xs text-gray-500">({selected.assetId})</span>
             </p>
@@ -197,15 +199,16 @@ export default function HoldingFormModal({
                     <li key={`${hit.assetType}:${hit.assetId}`}>
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-700/70"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-700/70"
                         onClick={() => {
                           setSelected(hit);
                           setQuery(hit.symbol);
                           setHits([]);
                         }}
                       >
+                        <CompanyLogo symbol={hit.symbol} size={18} assetType={hit.assetType} />
                         <span className="font-medium text-gray-100">{hit.symbol}</span>
-                        <span className="truncate text-xs text-gray-500">{hit.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-gray-500">{hit.name}</span>
                       </button>
                     </li>
                   ))}
@@ -215,13 +218,17 @@ export default function HoldingFormModal({
                 <p className="mt-1 text-xs text-gray-500">No results — pick a valid catalog asset.</p>
               )}
               {selected && (
-                <p className="mt-2 text-xs text-teal-400">
+                <p className="mt-2 flex items-center gap-2 text-xs text-teal-400">
+                  <CompanyLogo symbol={selected.symbol} size={16} assetType={selected.assetType} />
                   Selected {selected.symbol} ({selected.assetId})
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-gray-300">
+            <p className="flex items-center gap-2 text-sm text-gray-300">
+              {initial ? (
+                <CompanyLogo symbol={initial.symbol} size={20} assetType={initial.assetType} />
+              ) : null}
               {initial?.symbol} · <span className="capitalize">{initial?.assetType}</span>
             </p>
           )}
