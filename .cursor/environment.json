@@ -4,7 +4,7 @@
   "terminals": [
     {
       "name": "backend",
-      "command": "cd backend && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      "command": "cd backend && . .venv/bin/activate && VNSTOCK_DISABLE_AGENT_SETUP=1 VNSTOCK_DISABLE_GLOBAL_AGENT=1 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     },
     {
       "name": "frontend",
