@@ -20,6 +20,10 @@ lambda-out-*.json
 node_modules/
 frontend-temp/node_modules/
 
+# vnstock/vnai auto-generated onboarding file (created on import unless
+# VNSTOCK_DISABLE_AGENT_SETUP=1; see .cursor/environment.json)
+backend/AGENTS.md
+
 # IDE / OS
 .idea/
 .vscode/
