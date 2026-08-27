@@ -5,23 +5,34 @@ import { useDisplayCurrency } from "@/components/currency/CurrencyProvider";
 import { Button } from "@/components/ui/button";
 import {
   HEATMAP_WEEKS,
-  PNL_BUCKET_COLORS,
+  PNL_LEGEND_STEPS,
   SNAPSHOTS_EMPTY_COPY,
   buildPnlHeatmapGrid,
   fetchSnapshots,
   heatmapDateWindow,
   isAbortError,
   backendSnapshotsToDailyPnl,
+  pnlBucketFill,
   type HeatmapCell,
+  type PnlHeatmapFilter,
   type SnapshotDto,
 } from "@/lib/portfolio-charts";
 import { PortfolioApiError } from "@/lib/portfolio";
-import { formatPct, formatPrice } from "@/lib/utils";
+import { cn, formatPct, formatPrice } from "@/lib/utils";
 
-const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""] as const;
-const CELL = 11;
-const GAP = 3;
-const COL = CELL + GAP;
+/** Cursor-style: label Mon / Wed / Fri only, single letters. */
+const WEEKDAY_LABELS = ["", "M", "", "W", "", "F", ""] as const;
+const LABEL_GUTTER = 14;
+const MONTH_ROW = 14;
+/** Cursor contribution cells sit ~2px apart and stretch to the card width. */
+const GAP = 2;
+const LEGEND_CELL = 10;
+
+const FILTERS: { id: PnlHeatmapFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "gains", label: "Gains" },
+  { id: "losses", label: "Losses" },
+];
 
 function formatSignedMoney(value: number): string {
   if (value > 0) return `+${formatPrice(value)}`;
@@ -38,12 +49,13 @@ function cellLabel(cell: HeatmapCell, currency: string): string {
 
 function HeatmapSkeleton() {
   return (
-    <div className="animate-pulse overflow-x-auto" data-testid="pnl-heatmap-skeleton">
-      <div className="flex gap-[3px]">
-        {Array.from({ length: 20 }).map((_, week) => (
-          <div key={week} className="flex flex-col gap-[3px]">
+    <div className="animate-pulse" data-testid="pnl-heatmap-skeleton">
+      <div className="mb-3.5 h-3 w-1/2 rounded bg-gray-700/40" style={{ marginLeft: LABEL_GUTTER }} />
+      <div className="flex" style={{ paddingLeft: LABEL_GUTTER, gap: GAP }}>
+        {Array.from({ length: HEATMAP_WEEKS }).map((_, week) => (
+          <div key={week} className="flex min-w-0 flex-1 flex-col" style={{ gap: GAP }}>
             {Array.from({ length: 7 }).map((__, day) => (
-              <div key={day} className="size-[11px] rounded-[2px] bg-gray-700/60" />
+              <div key={day} className="aspect-square w-full rounded-[2px] bg-gray-700/50" />
             ))}
           </div>
         ))}
@@ -58,11 +70,29 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [filter, setFilter] = useState<PnlHeatmapFilter>("all");
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [rowHeight, setRowHeight] = useState(11);
   const hostRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const windowDates = useMemo(() => heatmapDateWindow(), []);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => {
+      const first = el.firstElementChild as HTMLElement | null;
+      if (!first) return;
+      const width = first.getBoundingClientRect().width;
+      if (width > 0) setRowHeight(width);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loading]);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -106,108 +136,125 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
 
   const grid = useMemo(() => buildPnlHeatmapGrid({ series }), [series]);
   const hasSnapshots = (snapshots?.length ?? 0) > 0;
-  const upDays = series.filter((p) => (p.dailyPnl ?? 0) > 0).length;
-  const downDays = series.filter((p) => (p.dailyPnl ?? 0) < 0).length;
+  const activeDays = useMemo(() => {
+    return series.filter((point) => {
+      if (point.dailyPnl == null) return false;
+      if (filter === "gains") return point.dailyPnl > 0;
+      if (filter === "losses") return point.dailyPnl < 0;
+      return point.dailyPnl !== 0;
+    }).length;
+  }, [filter, series]);
   const summary = hasSnapshots
-    ? `Daily PnL for the last ${HEATMAP_WEEKS} weeks. ${upDays} up days, ${downDays} down days.`
+    ? `Daily PnL for the last ${HEATMAP_WEEKS} weeks. ${activeDays} active days (${filter}).`
     : SNAPSHOTS_EMPTY_COPY;
 
-  const showTip = (cell: HeatmapCell, el: HTMLElement) => {
+  const showTip = (cellData: HeatmapCell, el: HTMLElement) => {
     const host = hostRef.current?.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
     if (!host) return;
     setTip({
-      text: cellLabel(cell, currency),
+      text: cellLabel(cellData, currency),
       x: rect.left - host.left + rect.width / 2,
       y: rect.top - host.top,
     });
   };
 
   return (
-    <section className="rounded-xl border border-gray-600 bg-gray-800/60 p-4">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-medium text-gray-200">Daily PnL</h2>
-          <p className="mt-0.5 text-xs text-gray-500">Last {HEATMAP_WEEKS} weeks · day-over-day market value</p>
+    <section className="surface-card overflow-hidden p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[13px] font-medium text-gray-400">Daily PnL</h2>
+          <p className="mt-0.5 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-gray-100">
+            {loading ? "—" : activeDays}
+          </p>
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-gray-500" aria-hidden>
-          <span>Loss</span>
-          {(["down-4", "down-3", "down-2", "down-1", "empty", "up-1", "up-2", "up-3", "up-4"] as const).map((bucket) => (
-            <span
-              key={bucket}
-              className="size-[11px] rounded-[2px]"
-              style={{ background: PNL_BUCKET_COLORS[bucket] }}
-            />
+        <div className="flex shrink-0 items-center gap-0.5" role="tablist" aria-label="PnL filter">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={filter === item.id}
+              data-active={filter === item.id ? "true" : "false"}
+              className={cn(
+                "rounded-md px-2 py-0.5 text-[13px] font-medium transition-colors duration-150",
+                filter === item.id
+                  ? "bg-gray-700/80 text-gray-100"
+                  : "text-gray-500 hover:bg-gray-700/40 hover:text-gray-200",
+              )}
+              onClick={() => setFilter(item.id)}
+            >
+              {item.label}
+            </button>
           ))}
-          <span>Gain</span>
         </div>
       </div>
 
       {loading ? (
         <HeatmapSkeleton />
       ) : error ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-10 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-8 text-center">
           <p className="text-sm text-red-400">{error}</p>
           <Button type="button" size="sm" variant="outline" onClick={() => setReloadKey((n) => n + 1)}>
             Retry
           </Button>
         </div>
       ) : (
-        <div ref={hostRef} className="relative">
-          <div className="overflow-x-auto pb-1">
-            <div
-              className="inline-flex"
-              role="img"
-              aria-label={summary}
-            >
-              <div className="mr-1 flex w-7 shrink-0 flex-col">
-                <div className="h-4" />
+        <div ref={hostRef} className="relative w-full">
+          <div className="w-full" role="img" aria-label={summary}>
+            <div className="flex w-full">
+              <div className="flex shrink-0 flex-col" style={{ width: LABEL_GUTTER }}>
+                <div style={{ height: MONTH_ROW }} />
                 {WEEKDAY_LABELS.map((label, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-end pr-1 text-[10px] leading-none text-gray-500"
-                    style={{ height: CELL, marginBottom: i === 6 ? 0 : GAP }}
+                    className="flex items-center text-[10px] leading-none text-gray-500"
+                    style={{ height: rowHeight, marginBottom: i === 6 ? 0 : GAP }}
                   >
                     {label}
                   </div>
                 ))}
               </div>
-              <div>
-                <div className="relative h-4 text-[10px] text-gray-500">
+
+              <div className="min-w-0 flex-1">
+                <div className="relative text-[10px] text-gray-500" style={{ height: MONTH_ROW }}>
                   {grid.monthLabels.map((month) => (
                     <span
                       key={`${month.weekIndex}-${month.label}`}
-                      className="absolute top-0"
-                      style={{ left: month.weekIndex * COL }}
+                      className="absolute top-0 leading-none"
+                      style={{ left: `${(month.weekIndex / HEATMAP_WEEKS) * 100}%` }}
                     >
                       {month.label}
                     </span>
                   ))}
                 </div>
-                <div className="flex" style={{ gap: GAP }}>
+                <div
+                  ref={gridRef}
+                  className="grid w-full"
+                  style={{
+                    gridTemplateColumns: `repeat(${HEATMAP_WEEKS}, minmax(0, 1fr))`,
+                    gap: GAP,
+                  }}
+                >
                   {grid.weeks.map((week, weekIndex) => (
-                    <div key={weekIndex} className="flex flex-col" style={{ gap: GAP }}>
-                      {week.map((cell) => {
-                        const interactive = cell.inRange;
+                    <div key={weekIndex} className="flex min-w-0 flex-col" style={{ gap: GAP }}>
+                      {week.map((day) => {
+                        const interactive = day.inRange;
                         return (
                           <button
-                            key={cell.date}
+                            key={day.date}
                             type="button"
                             disabled={!interactive}
                             tabIndex={interactive ? 0 : -1}
-                            title={interactive ? cellLabel(cell, currency) : undefined}
-                            aria-label={interactive ? cellLabel(cell, currency) : undefined}
-                            data-date={cell.date}
-                            data-bucket={cell.bucket}
-                            className="rounded-[2px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-400 disabled:cursor-default"
-                            style={{
-                              width: CELL,
-                              height: CELL,
-                              background: PNL_BUCKET_COLORS[cell.bucket],
-                            }}
-                            onMouseEnter={(e) => interactive && showTip(cell, e.currentTarget)}
+                            title={interactive ? cellLabel(day, currency) : undefined}
+                            aria-label={interactive ? cellLabel(day, currency) : undefined}
+                            data-date={day.date}
+                            data-bucket={day.bucket}
+                            className="aspect-square w-full rounded-[2px] transition-[filter] duration-150 hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-400 disabled:cursor-default"
+                            style={{ background: pnlBucketFill(day.bucket, filter) }}
+                            onMouseEnter={(e) => interactive && showTip(day, e.currentTarget)}
                             onMouseLeave={() => setTip(null)}
-                            onFocus={(e) => interactive && showTip(cell, e.currentTarget)}
+                            onFocus={(e) => interactive && showTip(day, e.currentTarget)}
                             onBlur={() => setTip(null)}
                           />
                         );
@@ -218,6 +265,23 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
               </div>
             </div>
           </div>
+
+          <div
+            className="mt-3 flex items-center gap-1.5 text-[11px] text-gray-500"
+            style={{ paddingLeft: LABEL_GUTTER }}
+            aria-hidden
+          >
+            <span>Fewer</span>
+            {PNL_LEGEND_STEPS.map((color) => (
+              <span
+                key={color}
+                className="rounded-[2px]"
+                style={{ width: LEGEND_CELL, height: LEGEND_CELL, background: color }}
+              />
+            ))}
+            <span>More</span>
+          </div>
+
           {tip && (
             <div
               role="tooltip"
@@ -228,7 +292,9 @@ export default function PnlActivityHeatmap({ token }: { token: string | null }) 
             </div>
           )}
           {!hasSnapshots && (
-            <p className="mt-3 text-sm text-gray-500">{SNAPSHOTS_EMPTY_COPY}</p>
+            <p className="mt-3 text-sm text-gray-500" style={{ paddingLeft: LABEL_GUTTER }}>
+              {SNAPSHOTS_EMPTY_COPY}
+            </p>
           )}
         </div>
       )}

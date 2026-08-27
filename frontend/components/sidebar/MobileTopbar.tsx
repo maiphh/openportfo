@@ -19,7 +19,7 @@ export type MobileTopbarProps = {
 export default function MobileTopbar({ menuOpen, menuButtonRef, profile, onMenu, onOpenSettings }: MobileTopbarProps) {
   const t = useT();
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-gray-600 bg-gray-800 px-3 sm:hidden">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-gray-600/70 bg-gray-900/90 px-3 backdrop-blur-md sm:hidden">
       <Button
         ref={menuButtonRef}
         type="button"

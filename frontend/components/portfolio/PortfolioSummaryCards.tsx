@@ -54,12 +54,15 @@ export default function PortfolioSummaryCards({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-600 bg-gray-800/60 p-4">
-            <div className="text-xs uppercase tracking-wide text-gray-500">{card.label}</div>
+        {cards.map((card, index) => (
+          <div
+            key={card.label}
+            className={cn("metric-card page-enter", `stagger-${Math.min(index + 1, 4)}`)}
+          >
+            <div className="text-xs text-gray-500">{card.label}</div>
             <div
               className={cn(
-                "mt-2 text-lg font-semibold tabular-nums text-gray-100",
+                "mt-2 text-2xl font-semibold tracking-tight tabular-nums text-gray-100",
                 "tone" in card && card.tone === "up" && "text-teal-400",
                 "tone" in card && card.tone === "down" && "text-red-500",
               )}

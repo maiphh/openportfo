@@ -38,16 +38,16 @@ export default function HoldingsTable({
 }) {
   if (lines.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-600 bg-gray-800/40 px-4 py-10 text-center text-sm text-gray-500">
+      <div className="surface-card border-dashed px-4 py-10 text-center text-sm text-gray-500">
         No holdings match this filter.
       </div>
     );
   }
 
   return (
-    <div className="table-scroll min-w-0 rounded-xl border border-gray-600" role="region" aria-label="Scrollable holdings" tabIndex={0}>
+    <div className="table-scroll surface-card min-w-0 overflow-hidden" role="region" aria-label="Scrollable holdings" tabIndex={0}>
       <table className="w-max min-w-full text-left text-sm">
-        <thead className="bg-gray-800 text-xs uppercase tracking-wide text-gray-500">
+        <thead className="bg-gray-800/80 text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th className="px-3 py-3 font-medium">Asset</th>
             <th className="px-3 py-3 font-medium">Qty</th>

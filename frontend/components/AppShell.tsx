@@ -11,6 +11,7 @@ import SidebarUserChip from "@/components/sidebar/SidebarUserChip";
 import MobileTopbar from "@/components/sidebar/MobileTopbar";
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "@/components/sidebar/Sidebar";
 import { useAuthProfile } from "@/lib/use-auth-profile";
+import { cn } from "@/lib/utils";
 
 function focusableElements(root: HTMLElement | null): HTMLElement[] {
   if (!root) return [];
@@ -246,13 +247,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"
-            className="fixed inset-y-0 left-0 z-[61] flex w-64 max-w-[85vw] flex-col border-r border-gray-600 bg-gray-800 shadow-2xl sm:hidden"
+            className="drawer-enter fixed inset-y-0 left-0 z-[61] flex w-64 max-w-[85vw] flex-col border-r border-gray-600/70 bg-gray-900 shadow-2xl sm:hidden"
           >
-            <div className="flex h-14 items-center justify-between border-b border-gray-700 px-3">
-              <span className="text-sm font-semibold text-gray-100">OpenPortfo</span>
-              <button ref={drawerCloseRef} type="button" className="rounded-md p-2 text-gray-400 hover:bg-gray-700 hover:text-gray-100" aria-label="Close navigation" onClick={closeDrawer}>×</button>
+            <div className="flex h-14 items-center justify-between border-b border-gray-700/80 px-3">
+              <span className="text-sm font-semibold tracking-tight text-gray-100">OpenPortfo</span>
+              <button
+                ref={drawerCloseRef}
+                type="button"
+                className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-700/70 hover:text-gray-100"
+                aria-label="Close navigation"
+                onClick={closeDrawer}
+              >
+                ×
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-3 py-4">
+            <div className="flex-1 overflow-y-auto px-2.5 py-3">
               <SidebarNav
                 collapsed={false}
                 onSearch={openSearch}
@@ -260,15 +269,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 isAdmin={auth.profile?.role === "admin"}
               />
             </div>
-            <div className="border-t border-gray-700 px-3 py-3">
+            <div className="border-t border-gray-700/80 px-2.5 py-3">
               <SidebarUserChip collapsed={false} auth={auth} onOpenSettings={openSettings} />
             </div>
           </div>
         </>
       ) : null}
 
-      <div className={`min-h-screen transition-[padding] duration-200 ${collapsed ? "sm:pl-16" : "sm:pl-60"}`}>
-        <main className="container min-h-screen py-10 text-gray-400">{children}</main>
+      <div
+        className={cn(
+          "min-h-screen bg-gray-900 transition-[padding] duration-200 ease-out",
+          collapsed ? "sm:pl-16" : "sm:pl-60",
+        )}
+      >
+        <main className="container page-enter min-h-screen py-8 text-gray-400 sm:py-10">{children}</main>
       </div>
 
       <SearchDialog

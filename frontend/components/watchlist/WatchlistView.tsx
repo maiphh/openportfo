@@ -200,11 +200,12 @@ export default function WatchlistView() {
   const isEmpty = !loading && rows.length === 0 && !error;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="page-enter space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-100">Watchlist</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-gray-500">Account</p>
+          <h1 className="page-title mt-1">Watchlist</h1>
+          <p className="mt-1 text-sm text-gray-500">
             Names you track without a holding · display currency {currency} (settings)
           </p>
         </div>
@@ -228,7 +229,7 @@ export default function WatchlistView() {
       {loading && !items ? (
         <WatchlistSkeleton />
       ) : isEmpty ? (
-        <div className="rounded-xl border border-dashed border-gray-600 bg-gray-800/40 px-6 py-16 text-center">
+        <div className="surface-card border-dashed px-6 py-16 text-center">
           <p className="text-gray-300">No names on your watchlist yet.</p>
           <p className="mt-1 text-sm text-gray-500">Search a VN stock or crypto to glance at quotes without adding a holding.</p>
           <Button type="button" className="mt-4" onClick={openAdd}>

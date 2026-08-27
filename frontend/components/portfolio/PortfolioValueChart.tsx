@@ -83,35 +83,38 @@ export default function PortfolioValueChart({ token }: { token: string | null })
   const axis = PERFORMANCE_RANGE_AXIS[range];
 
   return (
-    <section className="rounded-xl border border-gray-600 bg-gray-800/60 p-4">
+    <section className="surface-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-medium text-gray-200">Portfolio value</h2>
-          {last != null && !loading && !error && series.length >= 2 && (
-            <p className="mt-0.5 text-sm tabular-nums text-gray-300">
-              {formatPrice(last)} {currency}
+          {last != null && !loading && !error && series.length >= 2 ? (
+            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-gray-100">
+              {formatPrice(last)}{" "}
+              <span className="text-sm font-medium text-gray-500">{currency}</span>
               {change != null && (
-                <span className={cn("ml-2", change > 0 && "text-teal-400", change < 0 && "text-red-400")}>
+                <span className={cn("ml-2 text-sm font-medium", change > 0 && "text-teal-400", change < 0 && "text-red-400")}>
                   {formatSignedMoney(change)}
                 </span>
               )}
             </p>
+          ) : (
+            <p className="mt-0.5 text-xs text-gray-500">Value over the selected range</p>
           )}
         </div>
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Chart range">
+        <div className="segment-group" role="tablist" aria-label="Chart range">
           {PERFORMANCE_RANGES.map((item) => (
-            <Button
+            <button
               key={item}
               type="button"
-              size="sm"
               role="tab"
               aria-selected={range === item}
-              variant={range === item ? "default" : "outline"}
+              data-active={range === item ? "true" : "false"}
               disabled={loading}
+              className="segment-item disabled:opacity-50"
               onClick={() => setRange(parsePerformanceRange(item))}
             >
               {item}
-            </Button>
+            </button>
           ))}
         </div>
       </div>

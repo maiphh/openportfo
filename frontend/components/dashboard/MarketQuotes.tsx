@@ -158,11 +158,14 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
 
   return (
     <div className="w-full">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-2xl font-semibold text-gray-100">
-          Market Quotes
-          <span className="ml-2 text-sm font-medium text-gray-500">{currency}</span>
-        </h3>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-medium text-gray-200">
+            Market quotes
+            <span className="ml-2 text-xs font-normal text-gray-500">{currency}</span>
+          </h3>
+          <p className="mt-0.5 text-xs text-gray-500">Session board grouped by category</p>
+        </div>
         <div className="flex items-center gap-2 text-[11px] text-gray-500">
           {source === "loading" ? (market === "crypto" ? "Loading crypto quotes…" : "Loading VN quotes…") : null}
           {source === "updating" ? "cached (updating…)" : null}
@@ -176,7 +179,7 @@ export default function MarketQuotes({ market = "stock" }: { market?: MarketKind
           ) : null}
         </div>
       </div>
-      <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
+      <div className="surface-card min-w-0 max-w-full overflow-hidden">
         {source === "error" ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center" data-testid="quotes-error">
             <p className="text-sm text-gray-400">{error ?? "Quotes unavailable"}</p>

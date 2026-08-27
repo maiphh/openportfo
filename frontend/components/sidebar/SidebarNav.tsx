@@ -3,7 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ComponentType } from "react";
-import { Bitcoin, Briefcase, ChevronDown, LayoutDashboard, Search, Settings, ShieldCheck, Star, TrendingUp } from "lucide-react";
+import {
+  Bitcoin,
+  Briefcase,
+  ChevronDown,
+  LayoutDashboard,
+  Search,
+  Settings,
+  ShieldCheck,
+  Star,
+  TrendingUp,
+} from "lucide-react";
 import { useT } from "@/components/LanguageProvider";
 import { cn } from "@/lib/utils";
 
@@ -49,16 +59,25 @@ function NavLink({
       title={collapsed ? label : undefined}
       aria-label={collapsed ? label : undefined}
       onClick={onNavigate}
+      data-active={active ? "true" : "false"}
       className={cn(
-        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-        collapsed ? "justify-center px-2" : "",
-        active ? "bg-gray-700/60 text-gray-100" : "text-gray-500 hover:bg-gray-700/50 hover:text-gray-200",
-        active && "before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-teal-400",
+        "nav-pill",
+        collapsed && "justify-center px-2",
+        active ? "bg-gray-700/70 text-gray-100" : "",
       )}
     >
-      <Icon className="size-5 shrink-0" aria-hidden="true" />
+      <Icon className="size-[18px] shrink-0 opacity-90" aria-hidden="true" />
       <span className={cn("truncate", collapsed && "sr-only")}>{label}</span>
     </Link>
+  );
+}
+
+function SectionLabel({ children, collapsed }: { children: string; collapsed: boolean }) {
+  if (collapsed) return <div className="my-2 h-px bg-gray-700/80" aria-hidden />;
+  return (
+    <p className="mb-1 mt-4 px-3 text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500 first:mt-0">
+      {children}
+    </p>
   );
 }
 
@@ -69,25 +88,46 @@ export default function SidebarNav({ collapsed, onSearch, onNavigate, isAdmin = 
   const marketActive = MARKET_ACTIVE.has(pathname);
 
   return (
-    <nav aria-label="Primary" className="flex flex-col gap-1">
+    <nav aria-label="Primary" className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        title={collapsed ? t("nav.search") : undefined}
+        aria-label={t("nav.search")}
+        onClick={onSearch}
+        className={cn(
+          "nav-pill mb-3 rounded-full border border-gray-600/70 bg-gray-800/50 text-gray-400 hover:border-gray-500 hover:bg-gray-700/50",
+          collapsed && "justify-center px-2",
+        )}
+      >
+        <Search className="size-[18px] shrink-0" aria-hidden="true" />
+        <span className={cn("flex-1 text-left", collapsed && "sr-only")}>{t("nav.search")}</span>
+        {!collapsed ? (
+          <kbd className="rounded-full border border-gray-600 bg-gray-900/80 px-1.5 py-0.5 text-[10px] text-gray-500">
+            ⌘K
+          </kbd>
+        ) : null}
+      </button>
+
+      <SectionLabel collapsed={collapsed}>Overview</SectionLabel>
+
       {!collapsed ? (
         <button
           type="button"
           aria-expanded={marketOpen}
           onClick={() => setMarketOpen((value) => !value)}
-          className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-            marketActive ? "text-gray-100" : "text-gray-500 hover:bg-gray-700/50 hover:text-gray-200",
-          )}
+          className={cn("nav-pill", marketActive && "text-gray-100")}
         >
-          <LayoutDashboard className="size-5 shrink-0" aria-hidden="true" />
+          <LayoutDashboard className="size-[18px] shrink-0" aria-hidden="true" />
           <span className="flex-1 text-left">{t("nav.market")}</span>
-          <ChevronDown className={cn("size-4 transition-transform", marketOpen && "rotate-180")} aria-hidden="true" />
+          <ChevronDown
+            className={cn("size-3.5 text-gray-500 transition-transform duration-200", marketOpen && "rotate-180")}
+            aria-hidden="true"
+          />
         </button>
       ) : null}
 
       {collapsed || marketOpen ? (
-        <div className={cn("flex flex-col gap-1", !collapsed && "ml-4 border-l border-gray-700 pl-2")}>
+        <div className={cn("flex flex-col gap-0.5", !collapsed && "ml-2 border-l border-gray-700/80 pl-2")}>
           <NavLink
             href="/markets/stock"
             label={t("nav.market.stock")}
@@ -119,6 +159,8 @@ export default function SidebarNav({ collapsed, onSearch, onNavigate, isAdmin = 
         />
       ))}
 
+      <SectionLabel collapsed={collapsed}>Account</SectionLabel>
+
       <NavLink
         href="/settings"
         label={t("nav.settings")}
@@ -137,21 +179,6 @@ export default function SidebarNav({ collapsed, onSearch, onNavigate, isAdmin = 
           onNavigate={onNavigate}
         />
       ) : null}
-
-      <button
-        type="button"
-        title={collapsed ? t("nav.search") : undefined}
-        aria-label={t("nav.search")}
-        onClick={onSearch}
-        className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-700/50 hover:text-gray-200",
-          collapsed && "justify-center px-2",
-        )}
-      >
-        <Search className="size-5 shrink-0" aria-hidden="true" />
-        <span className={cn(collapsed && "sr-only")}>{t("nav.search")}</span>
-        {!collapsed ? <kbd className="ml-auto rounded border border-gray-600 px-1.5 py-0.5 text-[10px] text-gray-500">⌘K</kbd> : null}
-      </button>
     </nav>
   );
 }

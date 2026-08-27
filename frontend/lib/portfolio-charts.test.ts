@@ -9,6 +9,7 @@ import {
   PERFORMANCE_RANGE_AXIS,
   PERFORMANCE_RANGES,
   PNL_BUCKET_COLORS,
+  PNL_LEGEND_STEPS,
   SNAPSHOTS_EMPTY_COPY,
   buildPnlHeatmapGrid,
   dailyPnlSeries,
@@ -17,6 +18,7 @@ import {
   heatmapDateWindow,
   parseIsoDate,
   parsePerformanceRange,
+  pnlBucketFill,
   pnlColorBucket,
   snapshotMarketValue,
   snapshotsToDailyPnl,
@@ -136,11 +138,20 @@ describe("color buckets", () => {
     expect(pnlColorBucket(-80, 100)).toBe("down-4");
   });
 
-  it("uses distinct red vs green fills", () => {
-    expect(PNL_BUCKET_COLORS.empty).toBe("#161b22");
-    expect(PNL_BUCKET_COLORS["up-4"]).toBe("#2dd4bf");
-    expect(PNL_BUCKET_COLORS["down-4"]).toBe("#ef4444");
-    expect(PNL_BUCKET_COLORS["up-4"]).not.toBe(PNL_BUCKET_COLORS["down-4"]);
+  it("uses a teal activity scale for intensity", () => {
+    expect(PNL_BUCKET_COLORS.empty).toBe("#21262d");
+    expect(PNL_BUCKET_COLORS["up-4"]).toBe("#0fedbe");
+    expect(PNL_BUCKET_COLORS["down-4"]).toBe("#0fedbe");
+    expect(PNL_BUCKET_COLORS["up-1"]).toBe(PNL_BUCKET_COLORS["down-1"]);
+    expect(PNL_BUCKET_COLORS["up-4"]).not.toBe(PNL_BUCKET_COLORS.empty);
+    expect(PNL_LEGEND_STEPS).toHaveLength(5);
+  });
+
+  it("filters gains and losses for Cursor-style segments", () => {
+    expect(pnlBucketFill("up-4", "all")).toBe("#0fedbe");
+    expect(pnlBucketFill("down-4", "gains")).toBe(PNL_BUCKET_COLORS.empty);
+    expect(pnlBucketFill("up-2", "losses")).toBe(PNL_BUCKET_COLORS.empty);
+    expect(pnlBucketFill("down-3", "losses")).toBe(PNL_BUCKET_COLORS["down-3"]);
   });
 });
 
@@ -181,7 +192,7 @@ describe("empty heatmap grid", () => {
   it("places month labels on week columns", () => {
     const grid = buildPnlHeatmapGrid({ today: parseIsoDate("2026-08-19") });
     expect(grid.monthLabels.length).toBeGreaterThan(0);
-    expect(grid.monthLabels.some((label) => label.label === "Aug")).toBe(true);
+    expect(grid.monthLabels.some((label) => label.label === "A")).toBe(true);
     expect(grid.monthLabels.every((label) => label.weekIndex >= 0 && label.weekIndex < HEATMAP_WEEKS)).toBe(true);
   });
 });

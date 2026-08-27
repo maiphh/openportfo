@@ -81,8 +81,11 @@ export default function TopStories() {
 
   return (
     <div className="w-full">
-      <h3 className="mb-5 text-2xl font-semibold text-gray-100">Top Stories</h3>
-      <div className="min-h-[480px] overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 p-4 xl:h-[560px]">
+      <div className="mb-4">
+        <h3 className="text-sm font-medium text-gray-200">Top stories</h3>
+        <p className="mt-0.5 text-xs text-gray-500">Latest headlines with tagged symbols</p>
+      </div>
+      <div className="surface-card min-h-[480px] overflow-y-auto p-4 xl:h-[560px]">
         {status === "loading" ? <StoriesSkeleton /> : null}
 
         {status === "auth" ? (

@@ -13,9 +13,9 @@ export function BrandMark({ className }: { className?: string }) {
 
 export default function BrandLogo() {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <BrandMark className="h-8 w-8" />
-      <span className="text-[22px] font-semibold tracking-tight text-gray-100">OpenPortfo</span>
+    <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+      <BrandMark className="h-7 w-7" />
+      <span className="text-[17px] font-semibold tracking-tight text-gray-100">OpenPortfo</span>
     </Link>
   );
 }

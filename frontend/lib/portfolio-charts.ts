@@ -94,29 +94,43 @@ export type PnlColorBucket =
   | "down-4";
 
 /**
- * Diverging GitHub-style steps (not the markets treemap scale).
+ * Cursor-style activity intensity (teal scale), not diverging red/green.
  *
  * |daily PnL| vs window maxAbs:
  *   empty — no snapshot or no prior day (no delta)
  *   flat  — |pnl| < 1e-9
- *   1     — 0 < |pnl| ≤ 25% of maxAbs
- *   2     — 25% < |pnl| ≤ 50%
- *   3     — 50% < |pnl| ≤ 75%
- *   4     — |pnl| > 75% of maxAbs
- * Sign picks green (up) vs red (down).
+ *   1–4   — quartiles of |pnl| / maxAbs
+ * Sign is kept on the bucket name for All / Gains / Losses filtering.
  */
 export const PNL_BUCKET_COLORS: Record<PnlColorBucket, string> = {
-  empty: "#161b22",
+  empty: "#21262d",
   flat: "#21262d",
-  "up-1": "#0d3d38",
-  "up-2": "#115e59",
+  "up-1": "#0a3d38",
+  "up-2": "#0f5c56",
   "up-3": "#0d9488",
-  "up-4": "#2dd4bf",
-  "down-1": "#4c1515",
-  "down-2": "#7f1d1d",
-  "down-3": "#b91c1c",
-  "down-4": "#ef4444",
+  "up-4": "#0fedbe",
+  "down-1": "#0a3d38",
+  "down-2": "#0f5c56",
+  "down-3": "#0d9488",
+  "down-4": "#0fedbe",
 };
+
+/** Five-step Fewer → More legend matching Cursor’s activity map. */
+export const PNL_LEGEND_STEPS = ["#21262d", "#0a3d38", "#0f5c56", "#0d9488", "#0fedbe"] as const;
+
+export type PnlHeatmapFilter = "all" | "gains" | "losses";
+
+export function pnlBucketVisible(bucket: PnlColorBucket, filter: PnlHeatmapFilter): boolean {
+  if (filter === "all") return true;
+  if (bucket === "empty" || bucket === "flat") return filter === "all";
+  if (filter === "gains") return bucket.startsWith("up-");
+  return bucket.startsWith("down-");
+}
+
+export function pnlBucketFill(bucket: PnlColorBucket, filter: PnlHeatmapFilter): string {
+  if (!pnlBucketVisible(bucket, filter)) return PNL_BUCKET_COLORS.empty;
+  return PNL_BUCKET_COLORS[bucket];
+}
 
 export type HeatmapCell = {
   date: string;
@@ -135,6 +149,7 @@ export type HeatmapGrid = {
 };
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_LETTER = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 
 export function isAbortError(err: unknown): boolean {
   return (
@@ -356,7 +371,7 @@ export function heatmapMonthLabels(weeks: HeatmapCell[][]): { weekIndex: number;
     if (!first) return;
     const month = parseIsoDate(first.date).getUTCMonth();
     if (month !== lastMonth) {
-      labels.push({ weekIndex, label: MONTH_SHORT[month] });
+      labels.push({ weekIndex, label: MONTH_LETTER[month] ?? MONTH_SHORT[month] });
       lastMonth = month;
     }
   });

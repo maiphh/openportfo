@@ -142,10 +142,15 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
 
   return (
     <div className="w-full">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-2xl font-semibold text-gray-100">
-          {market === "crypto" ? "Crypto Heatmap" : "Stock Heatmap"}
-        </h3>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-medium text-gray-200">
+            {market === "crypto" ? "Crypto heatmap" : "Stock heatmap"}
+          </h3>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {market === "crypto" ? "Sized by market cap · 24h change" : "Sized by liquidity · session change"}
+          </p>
+        </div>
         <div className="flex items-center gap-2 text-[11px] text-gray-500">
           {source === "loading" ? (market === "crypto" ? "Loading crypto market…" : "Loading VN market…") : null}
           {source === "updating" ? "cached (updating…)" : null}
@@ -158,11 +163,11 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
           ) : null}
         </div>
       </div>
-      <div className="overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
+      <div className="surface-card overflow-hidden">
         {source === "loading" ? <HeatmapSkeleton /> : null}
         {source === "error" ? (
           <div
-            className="flex h-[min(72vh,820px)] min-h-[560px] flex-col items-center justify-center gap-3 bg-gray-800 px-4 text-center"
+            className="flex h-[min(72vh,820px)] min-h-[560px] flex-col items-center justify-center gap-3 bg-gray-800/40 px-4 text-center"
             data-testid="heatmap-error"
           >
             <p className="text-sm text-gray-400">{error ?? "Heatmap unavailable"}</p>
@@ -173,7 +178,7 @@ export default function StockHeatmap({ market = "stock" }: { market?: MarketKind
         ) : null}
         {showBoard ? (
           <>
-            <div ref={hostRef} className="relative h-[min(72vh,820px)] min-h-[560px] w-full bg-gray-800">
+            <div ref={hostRef} className="relative h-[min(72vh,820px)] min-h-[560px] w-full bg-gray-900/40">
               {sectors.map((sector) => (
                 <div
                   key={sector.id}

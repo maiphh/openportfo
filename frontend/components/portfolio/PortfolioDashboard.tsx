@@ -303,11 +303,12 @@ export default function PortfolioDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="page-enter space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-100">Portfolio</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-gray-500">Account</p>
+          <h1 className="page-title mt-1">Portfolio</h1>
+          <p className="mt-1 text-sm text-gray-500">
             One implicit portfolio · display currency {currency} (settings)
           </p>
         </div>
@@ -339,11 +340,19 @@ export default function PortfolioDashboard() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="segment-group" role="tablist" aria-label="Holding filter">
         {(["all", "crypto", "stock"] as const).map((f) => (
-          <Button key={f} type="button" size="sm" variant={filter === f ? "default" : "outline"} onClick={() => setFilter(f)}>
+          <button
+            key={f}
+            type="button"
+            role="tab"
+            aria-selected={filter === f}
+            data-active={filter === f ? "true" : "false"}
+            className="segment-item"
+            onClick={() => setFilter(f)}
+          >
             {f === "all" ? "All" : f === "crypto" ? "Crypto" : "Stock"}
-          </Button>
+          </button>
         ))}
       </div>
 
@@ -368,13 +377,13 @@ export default function PortfolioDashboard() {
 
       {data && !isEmpty ? <PortfolioSummaryCards data={data} fallbackCurrency={currency} /> : null}
 
-      <PortfolioValueChart token={token} />
       <PnlActivityHeatmap token={token} />
+      <PortfolioValueChart token={token} />
 
       {loading && !data ? (
         <div className="py-16 text-center text-sm text-gray-500">Loading holdings…</div>
       ) : isEmpty ? (
-        <div className="rounded-xl border border-dashed border-gray-600 bg-gray-800/40 px-6 py-16 text-center">
+        <div className="surface-card border-dashed px-6 py-16 text-center">
           <p className="text-gray-300">No holdings yet.</p>
           <p className="mt-1 text-sm text-gray-500">Add your first VN stock or crypto position to open the portfolio.</p>
           <Button type="button" className="mt-4" onClick={openCreate}>
