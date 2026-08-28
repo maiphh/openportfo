@@ -164,6 +164,30 @@ describe("fetchNews", () => {
     );
   });
 
+  it("GETs /api/news with market and asset search params", async () => {
+    sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
+    vi.mocked(global.fetch).mockResolvedValue(jsonResponse([]));
+
+    await fetchNews({
+      limit: 8,
+      market: "crypto",
+      symbol: "BTC",
+      name: "Bitcoin",
+      assetId: "bitcoin",
+      assetType: "crypto",
+    });
+
+    const [url] = vi.mocked(global.fetch).mock.calls[0] ?? [];
+    const href = String(url);
+    expect(href).toContain(`${base}/api/news?`);
+    expect(href).toContain("limit=8");
+    expect(href).toContain("market=crypto");
+    expect(href).toContain("symbol=BTC");
+    expect(href).toContain("name=Bitcoin");
+    expect(href).toContain("assetId=bitcoin");
+    expect(href).toContain("assetType=crypto");
+  });
+
   it("maps 401 to NewsApiError.authRequired and does not return mock items", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({ detail: "Missing authorization header" }, 401),

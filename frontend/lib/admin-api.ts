@@ -158,3 +158,7 @@ export function fetchAdminJobRuns(
   });
 }
 
+export function runAdminNewsJob(token: string): Promise<AdminJobRun> {
+  return request<AdminJobRun>(token, "/api/admin/jobs/news/run", { method: "POST" });
+}
+

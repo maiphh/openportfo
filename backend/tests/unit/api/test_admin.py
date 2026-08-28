@@ -43,9 +43,50 @@ def test_user_forbidden_on_admin() -> None:
     ):
         r = client.get(path, headers=_auth("u1"))
         assert r.status_code == 403, path
+    r = client.post("/api/admin/jobs/news/run", headers=_auth("u1"))
+    assert r.status_code == 403
 
 
-def test_admin_get_put_settings() -> None:
+def test_admin_run_news_job_force_and_dedupes() -> None:
+    from app.adapters.memory.news import InMemoryNewsRepo
+    from app.core.deps import (
+        get_rss_sources_repo,
+        get_settings_repo,
+        set_news_repo,
+        set_rss_fetcher,
+    )
+    from app.ports.admin import RssSource, SystemSettings
+    from app.ports.rss import RssItem
+    from tests.fakes.rss import FakeRssFetcher
+
+    client, profiles = _setup()
+    profiles.get_or_create("admin1", email="a@test.com", name="A")
+    profiles.set_role("admin1", "admin")
+
+    feed = "https://example.com/feed.xml"
+    news = InMemoryNewsRepo()
+    set_news_repo(news)
+    set_rss_fetcher(
+        FakeRssFetcher({feed: [RssItem(title="Bitcoin rises", url="https://ex/btc")]})
+    )
+    get_settings_repo().save(SystemSettings(jobs_news=False))
+    get_rss_sources_repo().create(
+        RssSource(source_id="s1", name="Ex", url=feed, enabled=True)
+    )
+
+    r1 = client.post("/api/admin/jobs/news/run", headers=_auth("admin1"))
+    assert r1.status_code == 200
+    body1 = r1.json()
+    assert body1["jobType"] == "news"
+    assert body1["status"] == "success"
+    assert body1["counts"]["written"] == 1
+    assert len(news.list_recent(10)) == 1
+
+    r2 = client.post("/api/admin/jobs/news/run", headers=_auth("admin1"))
+    assert r2.status_code == 200
+    assert r2.json()["counts"]["written"] == 1
+    assert len(news.list_recent(10)) == 1
+    assert news.put_calls == 2
     client, profiles = _setup()
     profiles.get_or_create("admin1", email="a@test.com", name="A")
     profiles.set_role("admin1", "admin")

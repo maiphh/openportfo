@@ -78,12 +78,12 @@ describe("TopStories", () => {
       }),
     );
 
-    render(<TopStories />);
+    render(<TopStories market="stock" />);
 
     expect(screen.getByTestId("top-stories-skeleton")).toBeInTheDocument();
     expectNoMockHeadlines();
     expect(fetchNews).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 20, signal: expect.any(AbortSignal) }),
+      expect.objectContaining({ limit: 20, market: "stock", signal: expect.any(AbortSignal) }),
     );
 
     resolveFetch(liveItems);
@@ -96,7 +96,7 @@ describe("TopStories", () => {
   it("401 empty path shows sign-in state and never mock headlines", async () => {
     fetchNews.mockRejectedValue(new NewsApiError(401, "Missing authorization header"));
 
-    render(<TopStories />);
+    render(<TopStories market="stock" />);
 
     await waitFor(() => {
       expect(screen.getByTestId("top-stories-auth")).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("TopStories", () => {
   it("shows No stories yet on an empty authenticated list", async () => {
     fetchNews.mockResolvedValue([]);
 
-    render(<TopStories />);
+    render(<TopStories market="stock" />);
 
     await waitFor(() => {
       expect(screen.getByTestId("top-stories-empty")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("TopStories", () => {
       .mockRejectedValueOnce(new NewsApiError(503, "News HTTP 503"))
       .mockResolvedValueOnce(liveItems);
 
-    render(<TopStories />);
+    render(<TopStories market="stock" />);
 
     await waitFor(() => {
       expect(screen.getByTestId("top-stories-error")).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe("TopStories", () => {
   it("links inferable symbols and opens headlines in a new tab", async () => {
     fetchNews.mockResolvedValue(liveItems);
 
-    render(<TopStories />);
+    render(<TopStories market="stock" />);
 
     await waitFor(() => {
       expect(screen.getByTestId("top-stories-list")).toBeInTheDocument();

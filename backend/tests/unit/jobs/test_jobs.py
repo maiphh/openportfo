@@ -229,7 +229,7 @@ def test_handler_dispatches() -> None:
 def test_news_job_ingests_bounded_slice_when_no_needles() -> None:
     url = "https://example.com/feed.xml"
     many = [
-        RssItem(title=f"Story {i}", url=f"https://ex/{i}") for i in range(40)
+        RssItem(title=f"Stock markets story {i}", url=f"https://ex/{i}") for i in range(40)
     ]
     fetcher = FakeRssFetcher({url: many})
     ctx, bag = _ctx(rss_fetcher=fetcher)
@@ -243,6 +243,29 @@ def test_news_job_ingests_bounded_slice_when_no_needles() -> None:
     assert run.counts["written"] == 25
     assert len(bag["news"].list_recent(50)) == 25
     assert fetcher.fetch_calls == 1
+
+
+def test_news_job_skips_non_market_when_no_needles() -> None:
+    url = "https://example.com/feed.xml"
+    fetcher = FakeRssFetcher(
+        {
+            url: [
+                RssItem(title="Celebrity wedding photos", url="https://ex/celeb"),
+                RssItem(title="Chứng khoán hôm nay tăng mạnh", url="https://ex/ck"),
+                RssItem(title="Local weather forecast", url="https://ex/wx"),
+            ]
+        }
+    )
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    run = run_news_job(ctx)
+    assert run.status == "success"
+    assert run.counts["written"] == 1
+    items = bag["news"].list_recent(10)
+    assert len(items) == 1
+    assert "Chứng khoán" in items[0].title
 
 
 def test_news_job_tags_matched_asset_symbols_not_keywords() -> None:
@@ -281,6 +304,23 @@ def test_news_job_tags_matched_asset_symbols_not_keywords() -> None:
     assert items["https://ex/btc"].symbols == ["BTC"]
     assert items["https://ex/kw"].symbols == []
     assert "secret-kw" not in (items["https://ex/btc"].symbols + items["https://ex/kw"].symbols)
+
+
+def test_news_job_force_runs_when_schedule_disabled() -> None:
+    url = "https://example.com/feed.xml"
+    fetcher = FakeRssFetcher(
+        {url: [RssItem(title="Stock markets open higher", url="https://ex/1")]}
+    )
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["settings_repo"].save(SystemSettings(jobs_news=False))
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    skipped = run_news_job(ctx)
+    assert skipped.status == "skipped"
+    forced = run_news_job(ctx, force=True)
+    assert forced.status == "success"
+    assert forced.counts["written"] == 1
 
 
 def test_news_job_deterministic_dedupe_on_replay() -> None:

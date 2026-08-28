@@ -6,6 +6,7 @@ import {
   deleteAdminRssSource,
   fetchAdminJobRuns,
   fetchAdminRssSources,
+  runAdminNewsJob,
   updateAdminRssSource,
   updateAdminSettings,
 } from "@/lib/admin-api";
@@ -86,5 +87,21 @@ describe("admin-api RSS and jobs helpers", () => {
       message: "settings_conflict",
       status: 409,
     });
+  });
+
+  it("posts news job run", async () => {
+    const run = {
+      runId: "r2",
+      jobType: "news",
+      status: "success",
+      startedAt: null,
+      finishedAt: null,
+      message: null,
+      counts: { written: 1 },
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(run));
+    await expect(runAdminNewsJob("tok")).resolves.toEqual(run);
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[0]).toBe(`${apiBase()}/api/admin/jobs/news/run`);
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
   });
 });

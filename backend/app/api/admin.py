@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.deps import (
+    build_job_context,
     get_admin_user_service,
     get_job_runs_repo,
     get_rss_sources_repo,
@@ -436,16 +437,32 @@ def list_job_runs(
     repo=Depends(get_job_runs_repo),
 ) -> list[dict[str, Any]]:
     _ = admin
-    runs = repo.list_recent(job_type=jobType, limit=limit)
-    return [
-        {
-            "runId": r.run_id,
-            "jobType": r.job_type,
-            "status": r.status,
-            "startedAt": _iso(r.started_at),
-            "finishedAt": _iso(r.finished_at),
-            "message": r.message,
-            "counts": r.counts or {},
-        }
-        for r in runs
-    ]
+    return [_job_run_to_dict(r) for r in repo.list_recent(job_type=jobType, limit=limit)]
+
+
+def _job_run_to_dict(run: Any) -> dict[str, Any]:
+    return {
+        "runId": run.run_id,
+        "jobType": run.job_type,
+        "status": run.status,
+        "startedAt": _iso(run.started_at),
+        "finishedAt": _iso(run.finished_at),
+        "message": run.message,
+        "counts": run.counts or {},
+    }
+
+
+@router.post("/api/admin/jobs/news/run")
+def run_news_ingest(
+    admin: UserProfile = Depends(require_admin),
+) -> dict[str, Any]:
+    """Manually run RSS → News ingest (admin only).
+
+    Uses ``force=True`` so the schedule flag ``jobs.news`` does not block a
+    deliberate UI/API run. Deterministic article ids upsert — no duplicates.
+    """
+    _ = admin
+    from app.jobs.news_job import run_news_job
+
+    run = run_news_job(build_job_context(), force=True)
+    return _job_run_to_dict(run)

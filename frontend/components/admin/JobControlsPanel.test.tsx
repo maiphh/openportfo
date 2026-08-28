@@ -21,11 +21,13 @@ const settings = {
 const mocks = vi.hoisted(() => ({
   fetchAdminSettings: vi.fn(),
   updateAdminSettings: vi.fn(),
+  runAdminNewsJob: vi.fn(),
 }));
 
 vi.mock("@/lib/admin-api", () => ({
   fetchAdminSettings: mocks.fetchAdminSettings,
   updateAdminSettings: mocks.updateAdminSettings,
+  runAdminNewsJob: mocks.runAdminNewsJob,
 }));
 
 const translate = (key: string) =>
@@ -33,6 +35,10 @@ const translate = (key: string) =>
     "admin.jobs.title": "Job controls",
     "admin.jobs.subtitle": "Enable jobs",
     "admin.jobs.news": "News ingest",
+    "admin.jobs.fetchNow": "Fetch news now",
+    "admin.jobs.fetching": "Fetching news…",
+    "admin.jobs.fetchDone": "News run {status} (written={written}). Duplicates upserted.",
+    "admin.jobs.fetchError": "Could not fetch news.",
     "admin.jobs.loading": "Loading job settings…",
     "admin.jobs.loadError": "Could not load job settings.",
     "admin.jobs.saveError": "Could not update job settings.",
@@ -49,6 +55,7 @@ describe("JobControlsPanel", () => {
   beforeEach(() => {
     mocks.fetchAdminSettings.mockReset().mockResolvedValue({ ...settings, jobs: { ...settings.jobs } });
     mocks.updateAdminSettings.mockReset();
+    mocks.runAdminNewsJob.mockReset();
   });
 
   afterEach(cleanup);
@@ -81,5 +88,32 @@ describe("JobControlsPanel", () => {
     );
     expect(mocks.fetchAdminSettings).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.getByLabelText("News ingest")).toBeChecked());
+  });
+
+  it("runs news fetch and notifies parent", async () => {
+    const onNewsFetched = vi.fn();
+    mocks.runAdminNewsJob.mockResolvedValue({
+      runId: "r1",
+      jobType: "news",
+      status: "success",
+      startedAt: null,
+      finishedAt: null,
+      message: null,
+      counts: { written: 3 },
+    });
+    mocks.fetchAdminSettings.mockResolvedValue({ ...settings, jobs: { ...settings.jobs } });
+
+    render(<JobControlsPanel token="admin-token" onNewsFetched={onNewsFetched} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Fetch news now" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Fetch news now" }));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "News run success (written=3). Duplicates upserted.",
+      ),
+    );
+    expect(mocks.runAdminNewsJob).toHaveBeenCalledWith("admin-token");
+    expect(onNewsFetched).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "success", counts: { written: 3 } }),
+    );
   });
 });

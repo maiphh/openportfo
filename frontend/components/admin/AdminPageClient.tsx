@@ -21,6 +21,7 @@ export default function AdminPageClient() {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [rowError, setRowError] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string | null>(null);
+  const [runsRefreshKey, setRunsRefreshKey] = useState(0);
   const editButtons = useRef<Record<string, HTMLButtonElement | null>>({});
   const loadingRef = useRef(false);
 
@@ -209,8 +210,11 @@ export default function AdminPageClient() {
         </button>
       ) : null}
       <RssSourcesPanel token={accessToken} />
-      <JobControlsPanel token={accessToken} />
-      <JobRunsPanel token={accessToken} />
+      <JobControlsPanel
+        token={accessToken}
+        onNewsFetched={() => setRunsRefreshKey((key) => key + 1)}
+      />
+      <JobRunsPanel token={accessToken} refreshKey={runsRefreshKey} />
     </section>
   );
 }

@@ -194,10 +194,26 @@ export async function fetchNews(options?: {
   limit?: number;
   token?: string | null;
   signal?: AbortSignal;
+  /** Markets board: stock | crypto */
+  market?: "stock" | "crypto" | null;
+  /** Asset detail tokens */
+  symbol?: string | null;
+  name?: string | null;
+  assetId?: string | null;
+  assetType?: "stock" | "crypto" | null;
+  /** Extra comma-joined keywords */
+  q?: string | null;
 }): Promise<NewsItemDto[]> {
   const token = options?.token ?? readAuthToken();
   const limit = options?.limit ?? NEWS_DEFAULT_LIMIT;
-  const res = await fetch(`${apiBase()}/api/news?limit=${limit}`, {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (options?.market) params.set("market", options.market);
+  if (options?.symbol?.trim()) params.set("symbol", options.symbol.trim());
+  if (options?.name?.trim()) params.set("name", options.name.trim());
+  if (options?.assetId?.trim()) params.set("assetId", options.assetId.trim());
+  if (options?.assetType) params.set("assetType", options.assetType);
+  if (options?.q?.trim()) params.set("q", options.q.trim());
+  const res = await fetch(`${apiBase()}/api/news?${params.toString()}`, {
     method: "GET",
     headers: {
       Accept: "application/json",

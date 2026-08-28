@@ -12,7 +12,13 @@ function formatCounts(counts: Record<string, unknown>): string {
   return parts.length ? parts.join(", ") : "—";
 }
 
-export default function JobRunsPanel({ token }: { token: string }) {
+export default function JobRunsPanel({
+  token,
+  refreshKey = 0,
+}: {
+  token: string;
+  refreshKey?: number;
+}) {
   const t = useT();
   const [runs, setRuns] = useState<AdminJobRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +38,7 @@ export default function JobRunsPanel({ token }: { token: string }) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return (
     <section className="space-y-4 rounded-xl border border-gray-700 bg-gray-800 p-4" aria-labelledby="admin-runs-heading">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import AssetLink from "@/components/AssetLink";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
+import type { MarketKind } from "@/lib/api";
 import {
   fetchNews,
   isAbortError,
@@ -47,7 +48,7 @@ function StoryHeadline({ story }: { story: TopStory }) {
   return <p className={className}>{story.title}</p>;
 }
 
-export default function TopStories() {
+export default function TopStories({ market }: { market: MarketKind }) {
   const [stories, setStories] = useState<TopStory[]>([]);
   const [status, setStatus] = useState<"loading" | "live" | "empty" | "auth" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +59,7 @@ export default function TopStories() {
     setStories([]);
     setStatus("loading");
     setError(null);
-    fetchNews({ limit: NEWS_DEFAULT_LIMIT, signal: controller.signal })
+    fetchNews({ limit: NEWS_DEFAULT_LIMIT, market, signal: controller.signal })
       .then((items) => {
         if (controller.signal.aborted) return;
         const mapped = mapNewsItems(items);
@@ -77,13 +78,18 @@ export default function TopStories() {
         setError(err instanceof Error ? err.message : "News unavailable");
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [market, reloadKey]);
+
+  const subtitle =
+    market === "crypto"
+      ? "Crypto & digital-asset headlines from stored news"
+      : "Stock & chứng khoán headlines from stored news";
 
   return (
     <div className="w-full">
       <div className="mb-4">
         <h3 className="text-sm font-medium text-gray-200">Top stories</h3>
-        <p className="mt-0.5 text-xs text-gray-500">Latest headlines with tagged symbols</p>
+        <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>
       </div>
       <div className="surface-card min-h-[480px] overflow-y-auto p-4 xl:h-[560px]">
         {status === "loading" ? <StoriesSkeleton /> : null}

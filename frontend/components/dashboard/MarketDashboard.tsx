@@ -23,7 +23,7 @@ export default function MarketDashboard({ market }: { market: MarketKind }) {
           <MarketQuotes market={market} />
         </div>
         <div className="min-w-0 xl:col-span-1">
-          <TopStories />
+          <TopStories market={market} />
         </div>
       </section>
     </div>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AssetHistoryChart from "@/components/asset/AssetHistoryChart";
 import AssetExternalLinks from "@/components/asset/AssetExternalLinks";
+import AssetNewsPanel from "@/components/asset/AssetNewsPanel";
 import CompanyTimeline from "@/components/asset/CompanyTimeline";
 import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import HoldingFormModal from "@/components/portfolio/HoldingFormModal";
@@ -428,6 +429,13 @@ export default function AssetDetailView({
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{description}</p>
         )}
       </section>
+
+      <AssetNewsPanel
+        assetType={detail.assetType}
+        symbol={detail.symbol}
+        name={detail.name}
+        assetId={detail.assetId}
+      />
 
       {stats.length > 0 && (
         <section className="surface-card p-4">

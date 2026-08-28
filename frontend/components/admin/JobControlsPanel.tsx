@@ -4,16 +4,24 @@ import { useCallback, useEffect, useState } from "react";
 import { useT } from "@/components/LanguageProvider";
 import {
   fetchAdminSettings,
+  runAdminNewsJob,
   updateAdminSettings,
+  type AdminJobRun,
   type AdminSettings,
 } from "@/lib/admin-api";
 import { AuthApiError } from "@/lib/auth";
 
-export default function JobControlsPanel({ token }: { token: string }) {
+type Props = {
+  token: string;
+  onNewsFetched?: (run: AdminJobRun) => void;
+};
+
+export default function JobControlsPanel({ token, onNewsFetched }: Props) {
   const t = useT();
   const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -34,7 +42,7 @@ export default function JobControlsPanel({ token }: { token: string }) {
   }, [load]);
 
   const toggleNews = async () => {
-    if (!settings || busy) return;
+    if (!settings || busy || fetching) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -66,6 +74,27 @@ export default function JobControlsPanel({ token }: { token: string }) {
     }
   };
 
+  const fetchNewsNow = async () => {
+    if (fetching || busy) return;
+    setFetching(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const run = await runAdminNewsJob(token);
+      const written = run.counts?.written;
+      setNotice(
+        t("admin.jobs.fetchDone")
+          .replace("{status}", run.status)
+          .replace("{written}", written === undefined ? "—" : String(written)),
+      );
+      onNewsFetched?.(run);
+    } catch {
+      setError(t("admin.jobs.fetchError"));
+    } finally {
+      setFetching(false);
+    }
+  };
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-700 bg-gray-800 p-4" aria-labelledby="admin-jobs-heading">
       <div>
@@ -89,15 +118,26 @@ export default function JobControlsPanel({ token }: { token: string }) {
           {t("admin.jobs.loading")}
         </p>
       ) : (
-        <label className="flex items-center gap-3 text-sm text-gray-100">
-          <input
-            type="checkbox"
-            checked={Boolean(settings.jobs.news)}
-            aria-label={t("admin.jobs.news")}
-            onChange={() => void toggleNews()}
-          />
-          {t("admin.jobs.news")}
-        </label>
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex items-center gap-3 text-sm text-gray-100">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.jobs.news)}
+              disabled={busy || fetching}
+              aria-label={t("admin.jobs.news")}
+              onChange={() => void toggleNews()}
+            />
+            {t("admin.jobs.news")}
+          </label>
+          <button
+            type="button"
+            disabled={busy || fetching}
+            onClick={() => void fetchNewsNow()}
+            className="rounded border border-teal-700/60 bg-teal-900/40 px-3 py-1.5 text-sm text-teal-100 disabled:opacity-50"
+          >
+            {fetching ? t("admin.jobs.fetching") : t("admin.jobs.fetchNow")}
+          </button>
+        </div>
       )}
     </section>
   );

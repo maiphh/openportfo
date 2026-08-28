@@ -6,6 +6,7 @@ import hashlib
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from app.domain.market_news import is_market_relevant
 from app.jobs.context import JobContext
 from app.jobs.job_utils import (
     MAX_ERROR_DETAILS,
@@ -138,13 +139,17 @@ def _bounded_recent(items: list[RssItem]) -> list[RssItem]:
     return ordered[:MAX_ITEMS_PER_SOURCE]
 
 
-def run_news_job(ctx: JobContext) -> JobRun:
+def run_news_job(ctx: JobContext, *, force: bool = False) -> JobRun:
     """Fetch enabled feeds independently and persist one aggregate run.
 
     A source is the isolation boundary: a fetch or write failure marks that
     source failed, but does not prevent later sources from being processed.
     The single JobRun written at the end therefore describes the whole
     invocation instead of whichever source happened to fail first.
+
+    When ``force`` is True (admin manual run), skip the ``jobs.news`` gate so
+    operators can ingest without flipping the schedule flag. Article ids stay
+    deterministic so ``NewsRepo.put`` upserts and does not create duplicates.
     """
 
     started = datetime.now(timezone.utc)
@@ -171,7 +176,7 @@ def run_news_job(ctx: JobContext) -> JobRun:
     try:
         settings = ctx.settings_repo.get()
 
-        if not settings.jobs_news:
+        if not settings.jobs_news and not force:
             return persist(
                 status="skipped",
                 message="jobs.news disabled",
@@ -205,7 +210,15 @@ def run_news_job(ctx: JobContext) -> JobRun:
                 items = _bounded_recent(ctx.rss_fetcher.fetch(src.url))
                 fetched += len(items)
                 for it in items:
-                    if match_needles and not _matches(it.title, match_needles):
+                    symbols = _matched_asset_symbols(it.title, asset_symbols)
+                    user_hit = bool(match_needles) and _matches(it.title, match_needles)
+                    market_hit = is_market_relevant(it.title, symbols=symbols)
+                    # Shared News table feeds the markets board: keep market
+                    # headlines always; also keep explicit user-needle hits.
+                    if match_needles:
+                        if not (user_hit or market_hit):
+                            continue
+                    elif not market_hit:
                         continue
                     date_s = None
                     if it.published_at is not None:
@@ -216,7 +229,7 @@ def run_news_job(ctx: JobContext) -> JobRun:
                         url=it.url,
                         source=src.name or it.source_name or src.url,
                         published_at=it.published_at,
-                        symbols=_matched_asset_symbols(it.title, asset_symbols),
+                        symbols=symbols,
                         date=date_s,
                     )
                     ctx.news_repo.put(news)
