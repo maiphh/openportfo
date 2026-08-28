@@ -122,7 +122,7 @@ export type PnlHeatmapFilter = "all" | "gains" | "losses";
 
 export function pnlBucketVisible(bucket: PnlColorBucket, filter: PnlHeatmapFilter): boolean {
   if (filter === "all") return true;
-  if (bucket === "empty" || bucket === "flat") return filter === "all";
+  if (bucket === "empty" || bucket === "flat") return false;
   if (filter === "gains") return bucket.startsWith("up-");
   return bucket.startsWith("down-");
 }

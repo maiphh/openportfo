@@ -1,0 +1,4 @@
+interface:
+  display_name: "LocalStack Verification"
+  short_description: "Verify local DynamoDB and S3 integration safely"
+  default_prompt: "Use $localstack-verification to verify the affected AWS integration against LocalStack and report evidence."

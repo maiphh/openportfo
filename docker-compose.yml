@@ -27,6 +27,7 @@ services:
       - PERSISTENCE=1
       - DOCKER_HOST=unix:///var/run/docker.sock
       - AWS_DEFAULT_REGION=us-east-1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
     volumes:
       - localstack-data:/var/lib/localstack
       - "./infra/localstack/init-aws.sh:/etc/localstack/init/ready.d/01-init-aws.sh"

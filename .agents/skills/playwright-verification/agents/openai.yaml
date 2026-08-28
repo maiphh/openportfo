@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright Verification"
+  short_description: "Verify OpenPortfo user flows in a real browser"
+  default_prompt: "Use $playwright-verification to verify the affected OpenPortfo browser flow and report evidence."
