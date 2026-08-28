@@ -25,10 +25,27 @@ import {
   loadChatSession,
   saveChatSession,
 } from "@/lib/chat-session";
+import {
+  DEFAULT_CHAT_VIEW_MODE,
+  persistChatViewMode,
+  readChatViewMode,
+  type ChatViewMode,
+} from "@/lib/chat-view";
+import { expandChatCommand } from "@/lib/chat-commands";
 import ChatLauncher from "@/components/chat/ChatLauncher";
 import ChatPanel from "@/components/chat/ChatPanel";
 import type { ChatUiMessage } from "@/components/chat/ChatMessageRow";
 import { useAuthProfile } from "@/lib/use-auth-profile";
+
+export {
+  CHAT_VIEW_MODE_KEY,
+  DEFAULT_CHAT_VIEW_MODE,
+  isChatViewMode,
+  persistChatViewMode,
+  readChatViewMode,
+  saveChatViewMode,
+} from "@/lib/chat-view";
+export type { ChatViewMode } from "@/lib/chat-view";
 
 export type Position = { x: number; y: number };
 export type Viewport = { width: number; height: number; offsetLeft: number; offsetTop: number };
@@ -169,6 +186,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
   const [open, setOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [panelPhase, setPanelPhase] = useState<PanelPhase>("closed");
+  const [fullscreen, setFullscreen] = useState(false);
   const [launcherHidden, setLauncherHidden] = useState(false);
   const [dragging, setDragging] = useState(false);
   const panelCloseTimer = useRef<number | null>(null);
@@ -185,6 +203,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
   const [sessionReady, setSessionReady] = useState(false);
   const [messages, setMessages] = useState<ChatUiMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [viewMode, setViewMode] = useState<ChatViewMode>(DEFAULT_CHAT_VIEW_MODE);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -207,6 +226,10 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
   const bubbleRef = useRef<HTMLButtonElement | null>(null);
   const composerFocusRef = useRef<(() => void) | null>(null);
   const isMobile = viewport.width > 0 && viewport.width < MOBILE_BREAKPOINT;
+
+  useEffect(() => {
+    setViewMode(readChatViewMode());
+  }, []);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -323,6 +346,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
     panelCloseTimer.current = window.setTimeout(() => {
       setPanelMounted(false);
       setPanelPhase("closed");
+      setFullscreen(false);
       panelCloseTimer.current = null;
     }, reducedMotion ? 0 : PANEL_CLOSE_MS);
   }, [reducedMotion, restoreBubbleFocus]);
@@ -332,6 +356,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
       window.clearTimeout(panelCloseTimer.current);
       panelCloseTimer.current = null;
     }
+    setFullscreen(false);
     setPanelMounted(true);
     setOpen(true);
     setPanelPhase("opening");
@@ -349,8 +374,14 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
       else panelRef.current?.focus();
     });
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         event.preventDefault();
+        if (fullscreen) {
+          setFullscreen(false);
+          return;
+        }
+        if (sending && viewMode === "cli") abortRef.current?.abort();
         closePanel();
       }
     };
@@ -359,11 +390,11 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
       cancelFrame(frame);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [authLoading, closePanel, open, profile, profileError, token]);
+  }, [authLoading, closePanel, fullscreen, open, profile, profileError, sending, token, viewMode]);
 
   useEffect(() => {
-    setLauncherHidden(open && isMobile);
-  }, [isMobile, open]);
+    setLauncherHidden(open && (isMobile || fullscreen));
+  }, [fullscreen, isMobile, open]);
 
   useEffect(() => () => {
     abortRef.current?.abort();
@@ -391,7 +422,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
         ...message,
         content: event.content,
         streaming: !event.done,
-        ...(event.toolCalls ? { activities: event.toolCalls } : {}),
+        ...(event.toolCalls?.length ? { activities: event.toolCalls } : {}),
       }));
     } else if (event.type === "done") {
       setStatusText(null);
@@ -408,6 +439,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
       return;
     }
     const requestUserId = sessionUserId;
+    const agentMessage = expandChatCommand(text).slice(0, 8_000);
     const generation = authGeneration.current;
     const assistantId = makeId("assistant");
     const userMessage: ChatUiMessage = { id: makeId("user"), role: "user", content: text.slice(0, 8_000), createdAt: Date.now(), isNew: true };
@@ -424,7 +456,7 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
     try {
       await sendChatMessage({
         token,
-        message: text,
+        message: agentMessage,
         history,
         signal: controller.signal,
         clientRequestId: makeId("request"),
@@ -434,7 +466,16 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
       });
       if (generation === authGeneration.current && requestUserId === sessionUserId) updatePending(assistantId, (message) => ({ ...message, streaming: false }));
     } catch (cause: unknown) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted && !(cause instanceof ChatApiError && cause.ambiguous)) {
+        if (generation === authGeneration.current && requestUserId === sessionUserId) {
+          updatePending(assistantId, (message) => ({
+            ...message,
+            content: message.content || "Request cancelled.",
+            streaming: false,
+          }));
+        }
+        return;
+      }
       if (generation === authGeneration.current && requestUserId === sessionUserId) {
         if (cause instanceof ChatApiError && cause.authRequired) {
           if (activeSessionUser.current) clearChatSession(activeSessionUser.current);
@@ -546,6 +587,11 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
     composerFocusRef.current = focus;
   }, []);
 
+  const changeViewMode = useCallback((mode: ChatViewMode) => {
+    setViewMode(mode);
+    persistChatViewMode(mode);
+  }, []);
+
   const markMessageEntered = useCallback((id: string) => {
     setMessages((current) => {
       const message = current.find((item) => item.id === id);
@@ -556,8 +602,8 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
 
   const chooseSuggestion = useCallback((value: string) => {
     setDraft(value);
-    scheduleFrame(() => document.getElementById("personal-chat-input")?.focus());
-  }, []);
+    scheduleFrame(() => document.getElementById(viewMode === "cli" ? "personal-chat-cli-input" : "personal-chat-input")?.focus());
+  }, [viewMode]);
 
   const availableWidth = viewport.width - (isMobile ? 0 : leftInset);
   const panelWidth = viewport.width
@@ -578,7 +624,14 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
   const desktopPanelTop = viewport.height
     ? Math.min(Math.max(viewportMinTop, viewport.offsetTop + (position.y < viewport.height / 2 ? position.y + BUBBLE_SIZE + PANEL_GAP : position.y - panelHeight - PANEL_GAP)), panelMaxTop)
     : 12;
-  const panelStyle: CSSProperties = isMobile
+  const panelStyle: CSSProperties = fullscreen
+    ? {
+        left: viewport.offsetLeft,
+        top: viewport.offsetTop,
+        width: Math.max(1, viewport.width),
+        height: Math.max(1, viewport.height),
+      }
+    : isMobile
     ? {
         left: viewport.offsetLeft + PANEL_MOBILE_MARGIN,
         top: viewport.offsetTop + Math.max(PANEL_MOBILE_MARGIN, viewport.height - panelHeight - PANEL_MOBILE_MARGIN),
@@ -608,6 +661,8 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
         sending={sending}
         pending={Boolean(pending)}
         pendingId={pendingId}
+        viewMode={viewMode}
+        fullscreen={fullscreen}
         onClose={closePanel}
         onNewChat={startNewChat}
         onRetry={retryProfile}
@@ -616,6 +671,8 @@ export default function ChatWidget({ leftInset = 0 }: { leftInset?: number } = {
         onSuggestion={chooseSuggestion}
         onMessageEntered={markMessageEntered}
         onComposerReady={registerComposer}
+        onViewModeChange={changeViewMode}
+        onFullscreenChange={setFullscreen}
       />
       <ChatLauncher
         open={open}

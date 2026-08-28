@@ -81,12 +81,18 @@ def main() -> int:
         "Remove my BTC",
     ]
     history: list[dict[str, str]] = []
-    for prompt in prompts:
+    for index, prompt in enumerate(prompts, start=1):
         print("\n=== USER ===", prompt)
         res = client.post(
             "/api/chat",
             headers=auth,
-            json={"message": prompt, "model": model_id, "freeOnly": True, "history": history[-8:]},
+            json={
+                "message": prompt,
+                "model": model_id,
+                "freeOnly": True,
+                "history": history[-8:],
+                "clientRequestId": f"live-demo-{index}",
+            },
         )
         print("HTTP", res.status_code)
         if res.status_code != 200:

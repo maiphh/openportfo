@@ -1,6 +1,21 @@
 import { apiBase } from "@/lib/api";
 import { bearerHeader } from "@/lib/auth";
 import type { ChatSessionMessage } from "@/lib/chat-session";
+import {
+  isMutatingPublicChatTool,
+  isPublicChatTool,
+  publicChatToolLabel,
+} from "@/lib/chat-tools";
+
+export {
+  PUBLIC_CHAT_TOOL_LABELS,
+  PUBLIC_CHAT_TOOL_NAMES,
+  PUBLIC_CHAT_TOOL_REGISTRY,
+  isMutatingPublicChatTool,
+  isPublicChatTool,
+  publicChatToolDescription,
+  publicChatToolLabel,
+} from "@/lib/chat-tools";
 
 export type ChatToolActivity = {
   name: string;
@@ -34,27 +49,6 @@ export class ChatApiError extends Error {
   }
 }
 
-export const PUBLIC_CHAT_TOOL_LABELS: Readonly<Record<string, string>> = {
-  search_assets: "Searching assets",
-  add_holding: "Updating holdings",
-  remove_holding: "Updating holdings",
-  list_holdings: "Reading holdings",
-  get_portfolio: "Reading portfolio",
-  get_quote: "Checking a quote",
-  analyze_asset: "Analyzing an asset",
-  analyze_portfolio: "Analyzing portfolio",
-  get_news: "Reading market news",
-  add_watchlist: "Updating watchlist",
-  remove_watchlist: "Updating watchlist",
-};
-
-const MUTATING_CHAT_TOOLS = new Set([
-  "add_holding",
-  "remove_holding",
-  "add_watchlist",
-  "remove_watchlist",
-]);
-
 type FetchLike = typeof fetch;
 
 export type SendChatOptions = {
@@ -70,10 +64,8 @@ export type SendChatOptions = {
 
 function safeTool(value: unknown): ChatToolActivity {
   const candidate = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  const name = typeof candidate.name === "string" && PUBLIC_CHAT_TOOL_LABELS[candidate.name]
-    ? candidate.name
-    : "assistant_action";
-  const label = PUBLIC_CHAT_TOOL_LABELS[name] || "Assistant action";
+  const name = isPublicChatTool(candidate.name) ? candidate.name : "assistant_action";
+  const label = publicChatToolLabel(name);
   const status = candidate.status === "started" || candidate.status === "failed"
     ? candidate.status
     : "completed";
@@ -166,11 +158,11 @@ async function consumeSse(
     if (event.type === "message") {
       content = event.content;
       toolCalls = event.toolCalls || toolCalls;
-      if (toolCalls.some((activity) => MUTATING_CHAT_TOOLS.has(activity.name) && activity.status !== "failed")) {
+      if (toolCalls.some((activity) => isMutatingPublicChatTool(activity.name) && activity.status !== "failed")) {
         mutationActivitySeen = true;
       }
     } else if (event.type === "tool") {
-      if (MUTATING_CHAT_TOOLS.has(event.activity.name) && event.activity.status !== "failed") {
+      if (isMutatingPublicChatTool(event.activity.name) && event.activity.status !== "failed") {
         mutationActivitySeen = true;
       }
     }

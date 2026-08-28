@@ -103,6 +103,11 @@ describe("ChatWidget", () => {
     const panel = await screen.findByRole("dialog");
     expect(Number.parseFloat(panel.style.width)).toBeLessThanOrEqual(180);
     expect(Number.parseFloat(panel.style.height)).toBeLessThanOrEqual(140);
+    expect(panel.querySelector("header")).toHaveAttribute("data-layout", "stacked");
+    expect(screen.getByTestId("chat-panel-actions")).toHaveAttribute("data-layout", "wrapped");
+    expect(screen.getByTestId("chat-panel-actions").className).toContain("flex-wrap");
+    const viewToggle = screen.getByRole("button", { name: /Standard view; switch to CLI view/ });
+    expect(viewToggle).toHaveAttribute("title", "Current view: Standard. Switch to CLI view.");
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(bubble));
@@ -295,12 +300,238 @@ describe("ChatWidget", () => {
     expect(window.sessionStorage.getItem(chatSessionKey("alice"))).toBeNull();
   });
 
+  it("persists the CLI view choice and keeps the canonical transcript when switching views", async () => {
+    window.sessionStorage.setItem(chatSessionKey("alice"), JSON.stringify([
+      { id: "old", role: "user", content: "private message", createdAt: 1 },
+    ]));
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    expect(screen.getByText("private message")).toBeInTheDocument();
+
+    const modeButton = screen.getByRole("button", { name: /Standard view.*CLI view/ });
+    fireEvent.click(modeButton);
+    expect(await screen.findByTestId("chat-cli-view")).toBeInTheDocument();
+    expect(screen.getByText("private message")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CLI view.*Standard view/ })).toBeInTheDocument();
+    expect(window.localStorage.getItem("openportfo.chat-view-mode.v1")).toBe("cli");
+
+    fireEvent.click(screen.getByRole("button", { name: /CLI view.*Standard view/ }));
+    expect(screen.queryByTestId("chat-cli-view")).toBeNull();
+    expect(screen.getByText("private message")).toBeInTheDocument();
+  });
+
+  it("keeps a partial command draft and menu usable across renderer switches", async () => {
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const standardInput = screen.getByRole("combobox", { name: "Message the personal assistant" });
+    standardInput.focus();
+    fireEvent.change(standardInput, { target: { value: "/quo" } });
+    expect(screen.getByRole("listbox", { name: "Agent commands and tools" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Standard view.*CLI view/ }));
+    const cliInput = await screen.findByRole("combobox", { name: "Prompt" });
+    expect(cliInput).toHaveValue("/quo");
+    expect(screen.getByRole("listbox", { name: "Agent commands and tools" })).toBeInTheDocument();
+    expect(document.activeElement).toBe(cliInput);
+    expect(cliInput).toHaveAttribute("aria-controls", "cli-chat-command-menu");
+
+    fireEvent.click(screen.getByRole("button", { name: /CLI view.*Standard view/ }));
+    const restoredInput = await screen.findByRole("combobox", { name: "Message the personal assistant" });
+    expect(restoredInput).toHaveValue("/quo");
+    expect(document.activeElement).toBe(restoredInput);
+  });
+
+  it("dispatches a CLI prompt through the existing authenticated stream flow", async () => {
+    window.sessionStorage.setItem(chatSessionKey("alice"), JSON.stringify([
+      { id: "old", role: "user", content: "prior question", createdAt: 1 },
+    ]));
+    mocks.sendChatMessage.mockImplementationOnce(async (options: { history?: unknown; message: string; onEvent?: (event: unknown) => void }) => {
+      options.onEvent?.({ type: "status", status: "thinking", message: "provider details stay private" });
+      options.onEvent?.({ type: "tool", activity: { name: "get_quote", label: "Checking a quote", status: "completed" } });
+      options.onEvent?.({ type: "message", content: "AAPL is ready.", done: true, toolCalls: [] });
+      options.onEvent?.({ type: "done", ok: true });
+      return { content: "AAPL is ready.", toolCalls: [] };
+    });
+
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: /Standard view.*CLI view/ }));
+    const input = await screen.findByRole("combobox", { name: "Prompt" });
+    fireEvent.change(input, { target: { value: "check AAPL" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(mocks.sendChatMessage).toHaveBeenCalledTimes(1));
+    const options = mocks.sendChatMessage.mock.calls[0][0] as { token: string; message: string; history: Array<{ role: string; content: string }>; signal: AbortSignal; clientRequestId: string };
+    expect(options.token).toBe("token-a");
+    expect(options.message).toBe("check AAPL");
+    expect(options.history).toEqual([{ role: "user", content: "prior question" }]);
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+    expect(options.clientRequestId).toMatch(/^request-/);
+    expect(await screen.findByText("AAPL is ready.")).toBeInTheDocument();
+    expect(screen.getByText("Checking a quote")).toBeInTheDocument();
+    expect(screen.queryByText("provider details stay private")).toBeNull();
+  });
+
+  it("expands an allow-listed slash command into a real agent tool instruction", async () => {
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const input = screen.getByLabelText("Message the personal assistant");
+    fireEvent.change(input, { target: { value: "/quote AAPL" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(mocks.sendChatMessage).toHaveBeenCalledTimes(1));
+    const options = mocks.sendChatMessage.mock.calls[0][0] as { message: string };
+    expect(options.message).toBe("Use the get_quote tool to handle this request. User input: AAPL");
+    expect(screen.getByText("/quote AAPL")).toBeInTheDocument();
+  });
+
+  it("uses Escape to dismiss the command menu without closing the assistant", async () => {
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const input = screen.getByLabelText("Message the personal assistant");
+    fireEvent.change(input, { target: { value: "/" } });
+    expect(screen.getByRole("listbox", { name: "Agent commands and tools" })).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("listbox", { name: "Agent commands and tools" })).toBeNull();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("enters full screen and uses Escape to restore the floating panel before closing", async () => {
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const panel = await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Open assistant full screen" }));
+    expect(panel).toHaveAttribute("data-fullscreen", "true");
+    expect(panel.style.left).toBe("0px");
+    expect(panel.style.top).toBe("0px");
+    expect(panel.style.width).toBe("1024px");
+    expect(panel.style.height).toBe("768px");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(panel).toHaveAttribute("data-fullscreen", "false"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open assistant full screen" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("keeps fullscreen renderer content left-aligned across Standard and CLI", async () => {
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const panel = await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Open assistant full screen" }));
+
+    const standardLog = screen.getByRole("log", { name: "Chat messages" });
+    expect(standardLog).toHaveAttribute("data-fullscreen", "true");
+    expect(standardLog.querySelector(".mx-auto")).toBeNull();
+    expect(standardLog.querySelector(".text-center")).toBeNull();
+    expect(standardLog.firstElementChild?.className).not.toContain("justify-center");
+    expect(standardLog.querySelector('[aria-label="Suggested prompts"]')?.className).not.toContain("justify-center");
+    const standardInput = screen.getByRole("combobox", { name: "Message the personal assistant" });
+    fireEvent.change(standardInput, { target: { value: "/" } });
+    const standardMenu = screen.getByRole("listbox", { name: "Agent commands and tools" });
+    expect(standardMenu.className).not.toContain("justify-center");
+    expect(standardMenu.className).not.toContain("mx-auto");
+
+    fireEvent.click(screen.getByRole("button", { name: /Standard view.*CLI view/ }));
+    const cliView = await screen.findByTestId("chat-cli-view");
+    const cliLog = screen.getByRole("log", { name: "CLI chat messages" });
+    expect(cliView).toHaveAttribute("data-fullscreen", "true");
+    expect(cliLog.querySelector(".mx-auto")).toBeNull();
+    expect(cliView.querySelector(".mx-auto")).toBeNull();
+    const cliMenu = screen.getByRole("listbox", { name: "Agent commands and tools" });
+    expect(cliMenu.className).not.toContain("justify-center");
+    expect(cliMenu.className).not.toContain("mx-auto");
+    expect(screen.getByRole("combobox", { name: "Prompt" }).closest("form")?.className).not.toContain("justify-center");
+    expect(panel).toHaveAttribute("data-fullscreen", "true");
+  });
+
+  it("keeps fullscreen Standard user rows on the right edge and assistant rows on the left", async () => {
+    window.sessionStorage.setItem(chatSessionKey("alice"), JSON.stringify([
+      { id: "user-turn", role: "user", content: "Show my portfolio", createdAt: 1 },
+      { id: "assistant-turn", role: "assistant", content: "Your portfolio is ready.", createdAt: 2 },
+    ]));
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    expect(await screen.findByText("Show my portfolio")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open assistant full screen" }));
+
+    const log = screen.getByRole("log", { name: "Chat messages" });
+    const transcript = log.firstElementChild;
+    expect(transcript).not.toHaveClass("mx-auto", "max-w-3xl");
+    const userRow = log.querySelector('article[data-role="user"]');
+    const assistantRow = log.querySelector('article[data-role="assistant"]');
+    expect(userRow).toHaveClass("chat-message-row--user");
+    expect(userRow).not.toHaveClass("chat-message-row--assistant");
+    expect(assistantRow).toHaveClass("chat-message-row--assistant");
+    expect(assistantRow).not.toHaveClass("chat-message-row--user");
+  });
+
+  it("uses the visual viewport for full screen and reopens at the floating size", async () => {
+    const originalVisualViewport = window.visualViewport;
+    const visualViewport = {
+      width: 390,
+      height: 844,
+      offsetLeft: 17,
+      offsetTop: 29,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: visualViewport });
+    try {
+      await renderReady();
+      const bubble = screen.getByRole("button", { name: "Open personal assistant" });
+      fireEvent.click(bubble);
+      const panel = await screen.findByRole("dialog");
+      fireEvent.click(screen.getByRole("button", { name: "Open assistant full screen" }));
+      expect(panel).toHaveAttribute("data-fullscreen", "true");
+      expect(panel.style.left).toBe("17px");
+      expect(panel.style.top).toBe("29px");
+      expect(panel.style.width).toBe("390px");
+      expect(panel.style.height).toBe("844px");
+      expect(screen.queryByRole("button", { name: "Close personal assistant" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Exit full screen assistant" }));
+      expect(panel).toHaveAttribute("data-fullscreen", "false");
+      expect(panel.style.left).toBe("25px");
+      expect(panel.style.top).toBe("185px");
+      expect(panel.style.width).toBe("374px");
+      expect(panel.style.height).toBe("680px");
+
+      fireEvent.click(screen.getByRole("button", { name: "Close assistant" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      await waitFor(() => expect(document.getElementById("personal-chat-panel")).toBeNull());
+      fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+      const reopened = await screen.findByRole("dialog");
+      expect(reopened).toHaveAttribute("data-fullscreen", "false");
+      expect(reopened.style.width).toBe("374px");
+    } finally {
+      Object.defineProperty(window, "visualViewport", { configurable: true, value: originalVisualViewport });
+    }
+  });
+
+  it("keeps full-screen geometry during the close animation", async () => {
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const panel = await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Open assistant full screen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close assistant" }));
+    expect(panel).toHaveAttribute("data-state", "closing");
+    expect(panel).toHaveAttribute("data-fullscreen", "true");
+    expect(panel.style.width).toBe("1024px");
+    expect(panel.style.height).toBe("768px");
+    await waitFor(() => expect(document.getElementById("personal-chat-panel")).toBeNull());
+  });
+
   it("clears the prior user's transcript when authentication is removed", async () => {
     window.sessionStorage.setItem(chatSessionKey("alice"), JSON.stringify([
       { id: "old", role: "user", content: "private message", createdAt: 1 },
     ]));
     await renderReady();
     expect(window.sessionStorage.getItem(chatSessionKey("alice"))).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    expect(await screen.findByText("private message")).toBeInTheDocument();
     mocks.token = null;
     fireEvent(window, new Event("openportfo:auth-change"));
     await waitFor(() => expect(window.sessionStorage.getItem(chatSessionKey("alice"))).toBeNull());
@@ -377,6 +608,76 @@ describe("ChatWidget", () => {
     expect(await screen.findByText("Thinking about your request")).toBeInTheDocument();
     expect(screen.getAllByText("Thinking about your request")).toHaveLength(1);
     resolveTurn?.();
+  });
+
+  it("keeps Escape close behavior while aborting an active CLI request", async () => {
+    let resolveTurn: ((value: { content: string; toolCalls: [] }) => void) | undefined;
+    mocks.sendChatMessage.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveTurn = resolve;
+    }));
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: /Standard view.*CLI view/ }));
+    const input = await screen.findByRole("combobox", { name: "Prompt" });
+    fireEvent.change(input, { target: { value: "check BTC" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(mocks.sendChatMessage).toHaveBeenCalledTimes(1));
+    const signal = (mocks.sendChatMessage.mock.calls[0][0] as { signal: AbortSignal }).signal;
+    expect(signal.aborted).toBe(false);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(signal.aborted).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    resolveTurn?.({ content: "cancelled", toolCalls: [] });
+  });
+
+  it("preserves ambiguous mutation semantics when a CLI stream aborts", async () => {
+    mocks.sendChatMessage.mockImplementationOnce((options: { signal?: AbortSignal; onEvent?: (event: unknown) => void }) => {
+      options.onEvent?.({
+        type: "tool",
+        activity: { name: "add_holding", label: "Updating holdings", status: "completed" },
+      });
+      return new Promise((_, reject) => {
+        options.signal?.addEventListener("abort", () => {
+          reject(new ChatApiError(502, "stream interrupted", { ambiguous: true }));
+        }, { once: true });
+      });
+    });
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: /Standard view.*CLI view/ }));
+    const input = await screen.findByRole("combobox", { name: "Prompt" });
+    fireEvent.change(input, { target: { value: "add BTC" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByText("Updating holdings")).toBeInTheDocument();
+    const signal = (mocks.sendChatMessage.mock.calls[0][0] as { signal: AbortSignal }).signal;
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("A requested change may have completed.")).toBeInTheDocument();
+    expect(screen.getByText("Updating holdings")).toBeInTheDocument();
+    expect(screen.getAllByText(/Verify your holdings or watchlist before trying again\./)).toHaveLength(1);
+  });
+
+  it("keeps the standard view's Escape close behavior without aborting its request", async () => {
+    let resolveTurn: ((value: { content: string; toolCalls: [] }) => void) | undefined;
+    mocks.sendChatMessage.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveTurn = resolve;
+    }));
+    await renderReady();
+    fireEvent.click(screen.getByRole("button", { name: "Open personal assistant" }));
+    const input = await screen.findByLabelText("Message the personal assistant");
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(mocks.sendChatMessage).toHaveBeenCalledTimes(1));
+    const signal = (mocks.sendChatMessage.mock.calls[0][0] as { signal: AbortSignal }).signal;
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(signal.aborted).toBe(false);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    resolveTurn?.({ content: "done", toolCalls: [] });
   });
 
   it("honors reduced motion while still completing presence cleanup", async () => {

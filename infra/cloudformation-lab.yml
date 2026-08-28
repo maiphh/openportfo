@@ -307,8 +307,8 @@ Resources:
       IdTokenValidity: 1
       RefreshTokenValidity: 30
       TokenValidityUnits:
-        AccessToken: hours
-        IdToken: hours
+        AccessToken: days
+        IdToken: days
         RefreshToken: days
 
 Outputs:

@@ -1,12 +1,13 @@
 "use client";
 
 import { RefObject, useState } from "react";
-import { LoaderCircle, Plus, RotateCcw, ShieldCheck, X } from "lucide-react";
+import { LoaderCircle, Maximize2, Minimize2, Plus, RotateCcw, ShieldCheck, X } from "lucide-react";
 import type { AuthProfile } from "@/lib/auth";
 import { beginHostedUiLogin, isCognitoConfigured } from "@/lib/cognito";
 import ChatComposer from "@/components/chat/ChatComposer";
-import ChatMessageList from "@/components/chat/ChatMessageList";
+import ChatRenderer from "@/components/chat/ChatRenderer";
 import type { ChatUiMessage } from "@/components/chat/ChatMessageRow";
+import type { ChatViewMode } from "@/lib/chat-view";
 
 type ChatPanelProps = {
   mounted: boolean;
@@ -26,6 +27,8 @@ type ChatPanelProps = {
   sending: boolean;
   pending: boolean;
   pendingId: string | null;
+  viewMode: ChatViewMode;
+  fullscreen: boolean;
   onClose: () => void;
   onNewChat: () => void;
   onRetry: () => void;
@@ -34,6 +37,8 @@ type ChatPanelProps = {
   onSuggestion: (value: string) => void;
   onMessageEntered: (id: string) => void;
   onComposerReady: (focus: () => void) => void;
+  onViewModeChange: (mode: ChatViewMode) => void;
+  onFullscreenChange: (fullscreen: boolean) => void;
 };
 
 function StateCard({ children, title, tone = "neutral", action }: { children: React.ReactNode; title?: string; tone?: "neutral" | "warning" | "error"; action?: React.ReactNode }) {
@@ -51,7 +56,7 @@ function StateCard({ children, title, tone = "neutral", action }: { children: Re
   );
 }
 
-export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panelRef, style, profile, token, authLoading, profileError, messages, draft, statusText, error, sending, pending, pendingId, onClose, onNewChat, onRetry, onDraftChange, onSubmit, onSuggestion, onMessageEntered, onComposerReady }: ChatPanelProps) {
+export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panelRef, style, profile, token, authLoading, profileError, messages, draft, statusText, error, sending, pending, pendingId, viewMode, fullscreen, onClose, onNewChat, onRetry, onDraftChange, onSubmit, onSuggestion, onMessageEntered, onComposerReady, onViewModeChange, onFullscreenChange }: ChatPanelProps) {
   const [loginError, setLoginError] = useState<string | null>(null);
   if (!mounted) return null;
   const signedIn = Boolean(token && profile);
@@ -63,6 +68,9 @@ export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panel
     void beginHostedUiLogin({ next: typeof window !== "undefined" ? window.location.pathname : "/" })
       .catch((cause: unknown) => setLoginError(cause instanceof Error ? cause.message : "Unable to start sign-in."));
   };
+  const nextViewMode = viewMode === "standard" ? "cli" : "standard";
+  const currentViewLabel = viewMode === "standard" ? "Standard" : "CLI";
+  const nextViewLabel = nextViewMode === "standard" ? "Standard" : "CLI";
   return (
     <section
       id="personal-chat-panel"
@@ -78,20 +86,47 @@ export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panel
       data-mobile={mobile ? "true" : "false"}
       data-reduced-motion={reducedMotion ? "true" : "false"}
       data-motion={phase === "open" ? "visible" : "hidden"}
-      className={`chat-panel chat-panel--${phase} fixed z-[50] flex flex-col overflow-hidden border border-gray-600/90 bg-gray-800/95 outline-none backdrop-blur-xl ${mobile ? "chat-panel--mobile rounded-2xl" : "rounded-2xl"}`}
+      data-fullscreen={fullscreen ? "true" : "false"}
+      className={`chat-panel chat-panel--${phase} fixed z-[50] flex flex-col overflow-hidden border border-gray-600/90 bg-gray-800/95 outline-none backdrop-blur-xl ${fullscreen ? "chat-panel--fullscreen rounded-none" : mobile ? "chat-panel--mobile rounded-2xl" : "rounded-2xl"}`}
       style={style}
     >
-      <header className="flex shrink-0 items-start justify-between border-b border-gray-700/80 bg-gray-800/90 px-4 py-3.5">
-        <div className="min-w-0 pr-3">
+      <header
+        data-layout={mobile ? "stacked" : "inline"}
+        className={`flex shrink-0 border-b border-gray-700/80 bg-gray-800/90 px-4 py-3.5 ${mobile ? "flex-col gap-2" : "items-start justify-between"}`}
+      >
+        <div className={`min-w-0 ${mobile ? "w-full pr-0" : "pr-3"}`}>
           <div className="flex items-center gap-2">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-teal-400/10 text-teal-400" aria-hidden="true">
               <ShieldCheck className="size-4" />
             </span>
-            <h2 id="personal-chat-title" className="truncate text-sm font-semibold text-gray-100">Personal assistant</h2>
+            <h2 id="personal-chat-title" className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-100">Personal assistant</h2>
           </div>
           <p id="personal-chat-description" className="mt-1 pl-9 text-[11px] leading-4 text-gray-500">Private portfolio help with safe activity updates</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div
+          data-testid="chat-panel-actions"
+          data-layout={mobile ? "wrapped" : "inline"}
+          className={`flex shrink-0 items-center ${mobile ? "w-full flex-wrap justify-end gap-0" : "gap-1"}`}
+        >
+          <button
+            type="button"
+            aria-label={`${currentViewLabel} view; switch to ${nextViewLabel} view`}
+            title={`Current view: ${currentViewLabel}. Switch to ${nextViewLabel} view.`}
+            onClick={() => onViewModeChange(nextViewMode)}
+            className={`segment-item min-h-9 min-w-9 ${mobile ? "mr-0 px-1" : "mr-1 px-2 sm:px-2.5"}`}
+          >
+            <span className="sm:hidden">{viewMode === "standard" ? "Std" : "CLI"}</span>
+            <span className="hidden sm:inline">{currentViewLabel}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onFullscreenChange(!fullscreen)}
+            aria-label={fullscreen ? "Exit full screen assistant" : "Open assistant full screen"}
+            title={fullscreen ? "Exit full screen" : "Full screen"}
+            className="inline-flex size-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-400/70"
+          >
+            {fullscreen ? <Minimize2 className="size-4" aria-hidden="true" /> : <Maximize2 className="size-4" aria-hidden="true" />}
+          </button>
           <button
             type="button"
             onClick={onNewChat}
@@ -142,32 +177,42 @@ export default function ChatPanel({ mounted, phase, mobile, reducedMotion, panel
             ) : (
               <p className="mt-4 rounded-xl border border-gray-700 bg-gray-800/70 px-3 py-2.5 text-xs text-gray-400">Use your account settings to sign in.</p>
             )}
-            {loginError ? <p className="mt-3 text-xs text-red-300" role="alert">{loginError}</p> : null}
+            {loginError ? <p className="mt-3 text-xs text-red-400 dark:text-red-200" role="alert">{loginError}</p> : null}
           </StateCard>
         </div>
       ) : (
-        <ChatMessageList
+        <ChatRenderer
+          mode={viewMode}
           messages={messages}
+          draft={draft}
           statusText={statusText}
+          error={error}
+          sending={sending}
           pending={pending}
           pendingId={pendingId}
           reducedMotion={reducedMotion}
-          empty={messages.length === 0}
+          fullscreen={fullscreen}
+          signedIn={signedIn}
+          onDraftChange={onDraftChange}
+          onSubmit={onSubmit}
           onSuggestion={onSuggestion}
           onMessageEntered={onMessageEntered}
+          onComposerReady={onComposerReady}
         />
       )}
 
-      {error ? <p className="mx-4 mb-2 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-3 py-2.5 text-xs leading-5 text-red-400 dark:text-red-200" role="alert">{error}</p> : null}
-      <ChatComposer
-        value={draft}
-        onChange={onDraftChange}
-        onSubmit={onSubmit}
-        disabled={Boolean(profileError || authLoading)}
-        signedIn={signedIn}
-        sending={sending}
-        onReady={onComposerReady}
-      />
+      {!signedIn || profileError || authLoading ? (
+        <ChatComposer
+          value={draft}
+          onChange={onDraftChange}
+          onSubmit={onSubmit}
+          disabled={Boolean(profileError || authLoading)}
+          signedIn={signedIn}
+          sending={sending}
+          fullscreen={fullscreen}
+          onReady={onComposerReady}
+        />
+      ) : null}
     </section>
   );
 }

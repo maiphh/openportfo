@@ -2,6 +2,7 @@
 
 import { FormEvent, useLayoutEffect, useRef } from "react";
 import { LoaderCircle, Send } from "lucide-react";
+import ChatCommandMenu, { type ChatCommandMenuState } from "@/components/chat/ChatCommandMenu";
 
 type ChatComposerProps = {
   value: string;
@@ -10,10 +11,12 @@ type ChatComposerProps = {
   disabled?: boolean;
   signedIn?: boolean;
   sending?: boolean;
+  fullscreen?: boolean;
   onReady?: (focus: () => void) => void;
+  commandMenu?: ChatCommandMenuState;
 };
 
-export default function ChatComposer({ value, onChange, onSubmit, disabled, signedIn, sending, onReady }: ChatComposerProps) {
+export default function ChatComposer({ value, onChange, onSubmit, disabled, signedIn, sending, fullscreen = false, onReady, commandMenu }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
 
@@ -33,7 +36,8 @@ export default function ChatComposer({ value, onChange, onSubmit, disabled, sign
   }, [onReady]);
 
   return (
-    <form onSubmit={(event) => { event.preventDefault(); void onSubmit(event); }} className="border-t border-gray-700/80 bg-gray-800/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+    <form onSubmit={(event) => { event.preventDefault(); void onSubmit(event); }} data-fullscreen={fullscreen ? "true" : "false"} className="border-t border-gray-700/80 bg-gray-800/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+      {commandMenu ? <ChatCommandMenu state={commandMenu} variant="standard" /> : null}
       <label htmlFor="personal-chat-input" className="sr-only">Message the personal assistant</label>
       <div className="chat-composer flex items-end gap-2 rounded-2xl border border-gray-600 bg-gray-900/80 px-2.5 py-2 transition-colors focus-within:border-teal-400/70 focus-within:ring-1 focus-within:ring-teal-400/25">
         <textarea
@@ -44,6 +48,8 @@ export default function ChatComposer({ value, onChange, onSubmit, disabled, sign
           onCompositionStart={() => { composingRef.current = true; }}
           onCompositionEnd={() => { composingRef.current = false; }}
           onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.nativeEvent.isComposing || composingRef.current)) return;
+            if (commandMenu?.onKeyDown(event)) return;
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !composingRef.current) {
               event.preventDefault();
               void onSubmit();
@@ -53,7 +59,13 @@ export default function ChatComposer({ value, onChange, onSubmit, disabled, sign
           maxLength={8_000}
           disabled={disabled || !signedIn}
           placeholder={signedIn ? "Ask anything about your portfolio…" : "Sign in to start chatting"}
+          role={commandMenu ? "combobox" : undefined}
+          aria-autocomplete={commandMenu ? "list" : undefined}
+          aria-haspopup={commandMenu ? "listbox" : undefined}
           aria-describedby="personal-chat-input-help personal-chat-input-count"
+          aria-expanded={commandMenu ? commandMenu.open : undefined}
+          aria-controls={commandMenu?.open ? "standard-chat-command-menu" : undefined}
+          aria-activedescendant={commandMenu?.open ? `chat-command-standard-${commandMenu.activeIndex}` : undefined}
           className="min-h-11 max-h-[132px] flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-6 text-gray-100 outline-none placeholder:text-gray-500 disabled:cursor-not-allowed"
         />
         <button

@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import { Check, CircleAlert, LoaderCircle, Sparkles } from "lucide-react";
 import type { ChatToolActivity } from "@/lib/chat";
 import type { ChatSessionMessage } from "@/lib/chat-session";
+import { isPublicChatTool, publicChatToolLabel } from "@/lib/chat-tools";
 import SafeMarkdown from "@/components/chat/SafeMarkdown";
 
 export type ChatUiMessage = ChatSessionMessage & {
@@ -13,32 +14,14 @@ export type ChatUiMessage = ChatSessionMessage & {
   failure?: { ambiguous?: boolean };
 };
 
-// Keep the UI boundary closed even when a test or an older deployment feeds
-// an untrusted activity object directly into the component.
-const PUBLIC_CHAT_TOOL_LABELS: Readonly<Record<string, string>> = {
-  search_assets: "Searching assets",
-  add_holding: "Updating holdings",
-  remove_holding: "Updating holdings",
-  list_holdings: "Reading holdings",
-  get_portfolio: "Reading portfolio",
-  get_quote: "Checking a quote",
-  analyze_asset: "Analyzing an asset",
-  analyze_portfolio: "Analyzing portfolio",
-  get_news: "Reading market news",
-  add_watchlist: "Updating watchlist",
-  remove_watchlist: "Updating watchlist",
-};
-
 function safeActivity(activity: ChatToolActivity): ChatToolActivity {
-  const name = typeof activity?.name === "string" && PUBLIC_CHAT_TOOL_LABELS[activity.name]
-    ? activity.name
-    : "assistant_action";
+  const name = isPublicChatTool(activity?.name) ? activity.name : "assistant_action";
   const status = activity?.status === "started" || activity?.status === "failed"
     ? activity.status
     : "completed";
   return {
     name,
-    label: PUBLIC_CHAT_TOOL_LABELS[name] || "Assistant action",
+    label: publicChatToolLabel(name),
     status,
   };
 }

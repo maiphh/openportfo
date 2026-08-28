@@ -278,6 +278,10 @@
     transform-origin: bottom center;
   }
 
+  .chat-panel--fullscreen {
+    transform-origin: center;
+  }
+
   .chat-launcher {
     transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease, box-shadow 160ms ease;
   }

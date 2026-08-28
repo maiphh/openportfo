@@ -12,6 +12,7 @@ type ChatMessageListProps = {
   pending: boolean;
   pendingId?: string | null;
   reducedMotion?: boolean;
+  fullscreen?: boolean;
   empty?: boolean;
   onSuggestion?: (value: string) => void;
   onMessageEntered?: (id: string) => void;
@@ -32,7 +33,7 @@ function isAtBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= PIN_DISTANCE;
 }
 
-export default function ChatMessageList({ messages, statusText, pending, pendingId, reducedMotion = false, empty, onSuggestion, onMessageEntered }: ChatMessageListProps) {
+export default function ChatMessageList({ messages, statusText, pending, pendingId, reducedMotion = false, fullscreen = false, empty, onSuggestion, onMessageEntered }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const enteredMessageIds = useRef(new Set<string>());
   const pinnedRef = useRef(true);
@@ -98,19 +99,20 @@ export default function ChatMessageList({ messages, statusText, pending, pending
         onScroll={onScroll}
         role="log"
         aria-label="Chat messages"
+        data-fullscreen={fullscreen ? "true" : "false"}
         aria-live="polite"
         aria-relevant="additions text"
         className="chat-message-log h-full min-w-0 overflow-y-auto overscroll-contain px-4 py-5"
       >
         {empty ? (
-          <div className="flex min-h-full flex-col justify-center py-8">
-            <div className="mx-auto w-full max-w-sm text-center">
-              <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl border border-teal-400/20 bg-teal-400/10 text-teal-400">
+          <div className={`flex min-h-full flex-col ${fullscreen ? "justify-start" : "justify-center"} py-8`}>
+            <div className={fullscreen ? "w-full max-w-sm text-left" : "mx-auto w-full max-w-sm text-center"}>
+              <div className={`${fullscreen ? "" : "mx-auto "}mb-4 flex size-12 items-center justify-center rounded-2xl border border-teal-400/20 bg-teal-400/10 text-teal-400`}>
                 <MessageCircle className="size-5" aria-hidden="true" />
               </div>
               <h3 className="text-base font-semibold text-gray-100">What can I help with?</h3>
               <p className="mt-2 text-sm leading-6 text-gray-500">Ask about your portfolio, a quote, holdings, watchlist, or recent market news.</p>
-              <div className="mt-5 flex flex-wrap justify-center gap-2" aria-label="Suggested prompts">
+              <div className={`mt-5 flex flex-wrap gap-2 ${fullscreen ? "justify-start" : "justify-center"}`} aria-label="Suggested prompts">
                 {["Show my portfolio", "Check a quote", "Find market news"].map((suggestion) => (
                   <button
                     key={suggestion}
@@ -125,7 +127,7 @@ export default function ChatMessageList({ messages, statusText, pending, pending
             </div>
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+          <div className={fullscreen ? "flex w-full flex-col gap-5" : "mx-auto flex w-full max-w-3xl flex-col gap-5"}>
             {messages.map((message) => {
               const activePendingId = pendingId || (pending ? messages.find((item) => item.streaming)?.id : null);
               return <ChatMessageRow key={message.id} message={message} statusText={message.id === activePendingId ? safeStatusText(statusText) : null} />;
