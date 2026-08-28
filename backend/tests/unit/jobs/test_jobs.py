@@ -226,11 +226,12 @@ def test_handler_dispatches() -> None:
     assert out["status"] == "skipped"
 
 
-def test_news_job_skips_write_when_no_needles() -> None:
+def test_news_job_ingests_bounded_slice_when_no_needles() -> None:
     url = "https://example.com/feed.xml"
-    fetcher = FakeRssFetcher(
-        {url: [RssItem(title="Bitcoin hits ATH", url="https://ex/btc")]}
-    )
+    many = [
+        RssItem(title=f"Story {i}", url=f"https://ex/{i}") for i in range(40)
+    ]
+    fetcher = FakeRssFetcher({url: many})
     ctx, bag = _ctx(rss_fetcher=fetcher)
     bag["rss_repo"].create(
         RssSource(source_id="s1", name="Ex", url=url, enabled=True)
@@ -239,8 +240,96 @@ def test_news_job_skips_write_when_no_needles() -> None:
 
     run = run_news_job(ctx)
     assert run.status == "success"
-    assert run.counts["written"] == 0
-    assert bag["news"].list_recent(10) == []
+    assert run.counts["written"] == 25
+    assert len(bag["news"].list_recent(50)) == 25
+    assert fetcher.fetch_calls == 1
+
+
+def test_news_job_tags_matched_asset_symbols_not_keywords() -> None:
+    url = "https://example.com/feed.xml"
+    fetcher = FakeRssFetcher(
+        {
+            url: [
+                RssItem(title="BTC rallies hard", url="https://ex/btc"),
+                RssItem(title="secret-kw only headline", url="https://ex/kw"),
+                RssItem(title="Weather today", url="https://ex/wx"),
+            ]
+        }
+    )
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    bag["users"].get_or_create("u1", email="u@t.com", name="U")
+    bag["users"].update_settings("u1", news_keywords=["secret-kw"])
+    bag["holdings"].create(
+        HoldingRecord(
+            user_id="u1",
+            asset_type="crypto",
+            symbol="BTC",
+            qty=Decimal("1"),
+            avg_cost=Decimal("30000"),
+            currency="USD",
+            asset_id="bitcoin",
+        )
+    )
+
+    run = run_news_job(ctx)
+    assert run.status == "success"
+    items = {i.url: i for i in bag["news"].list_recent(10)}
+    assert set(items) == {"https://ex/btc", "https://ex/kw"}
+    assert items["https://ex/btc"].symbols == ["BTC"]
+    assert items["https://ex/kw"].symbols == []
+    assert "secret-kw" not in (items["https://ex/btc"].symbols + items["https://ex/kw"].symbols)
+
+
+def test_news_job_deterministic_dedupe_on_replay() -> None:
+    url = "https://example.com/feed.xml"
+    item = RssItem(title="  Bitcoin Hits ATH  ", url="https://ex/btc/")
+    fetcher = FakeRssFetcher({url: [item]})
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["rss_repo"].create(
+        RssSource(source_id="s1", name="Ex", url=url, enabled=True)
+    )
+    bag["users"].get_or_create("u1", email="u@t.com", name="U")
+    bag["users"].update_settings("u1", news_keywords=["bitcoin"])
+
+    first = run_news_job(ctx)
+    second = run_news_job(ctx)
+    assert first.status == "success"
+    assert second.status == "success"
+    assert first.counts["written"] == 1
+    assert second.counts["written"] == 1
+    items = bag["news"].list_recent(10)
+    assert len(items) == 1
+    assert bag["news"].put_calls == 2
+
+
+def test_news_job_skips_disabled_sources() -> None:
+    enabled = "https://example.com/on.xml"
+    disabled = "https://example.com/off.xml"
+    fetcher = FakeRssFetcher(
+        {
+            enabled: [RssItem(title="Bitcoin ok", url="https://ex/1")],
+            disabled: [RssItem(title="Bitcoin hidden", url="https://ex/2")],
+        }
+    )
+    ctx, bag = _ctx(rss_fetcher=fetcher)
+    bag["rss_repo"].create(
+        RssSource(source_id="on", name="On", url=enabled, enabled=True)
+    )
+    bag["rss_repo"].create(
+        RssSource(source_id="off", name="Off", url=disabled, enabled=False)
+    )
+    bag["users"].get_or_create("u1", email="u@t.com", name="U")
+    bag["users"].update_settings("u1", news_keywords=["bitcoin"])
+
+    run = run_news_job(ctx)
+    assert run.status == "success"
+    assert run.counts["sources"] == 1
+    assert run.counts["written"] == 1
+    assert fetcher.fetch_calls == 1
+    assert fetcher.last_url == enabled
 
 
 def test_news_job_matches_holding_symbol() -> None:
@@ -276,6 +365,7 @@ def test_news_job_matches_holding_symbol() -> None:
     items = bag["news"].list_recent(10)
     assert len(items) == 1
     assert "ETH" in items[0].title
+    assert items[0].symbols == ["ETH"]
 
 
 def test_price_job_disabled_skips() -> None:

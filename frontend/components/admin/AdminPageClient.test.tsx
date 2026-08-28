@@ -50,6 +50,15 @@ vi.mock("@/components/LanguageProvider", () => ({ useT: () => (key: string) => (
 vi.mock("@/components/admin/AdminUserEditor", () => ({
   default: ({ onClose }: { onClose: () => void }) => <button type="button" onClick={onClose}>Close editor</button>,
 }));
+vi.mock("@/components/admin/RssSourcesPanel", () => ({
+  default: () => <div>RSS panel</div>,
+}));
+vi.mock("@/components/admin/JobControlsPanel", () => ({
+  default: () => <div>Jobs panel</div>,
+}));
+vi.mock("@/components/admin/JobRunsPanel", () => ({
+  default: () => <div>Runs panel</div>,
+}));
 vi.mock("next/link", () => ({ default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => <a href={href} {...props}>{children}</a> }));
 
 import AdminPageClient from "@/components/admin/AdminPageClient";

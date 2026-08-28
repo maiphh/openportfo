@@ -35,6 +35,23 @@ export type AdminSettings = {
   };
 };
 
+export type AdminRssSource = {
+  sourceId: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+};
+
+export type AdminJobRun = {
+  runId: string;
+  jobType: string;
+  status: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
+  counts: Record<string, unknown>;
+};
+
 async function apiError(response: Response): Promise<AuthApiError> {
   let detail = `HTTP ${response.status}`;
   try {
@@ -60,6 +77,7 @@ async function request<T>(token: string, path: string, init?: RequestInit): Prom
     cache: "no-store",
   });
   if (!response.ok) throw await apiError(response);
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -95,6 +113,48 @@ export function updateAdminSettings(
   return request<AdminSettings>(token, "/api/admin/settings", {
     method: "PUT",
     body: JSON.stringify({ version, ...patch }),
+  });
+}
+
+export function fetchAdminRssSources(token: string, options?: { signal?: AbortSignal }): Promise<AdminRssSource[]> {
+  return request<AdminRssSource[]>(token, "/api/admin/rss-sources", { signal: options?.signal });
+}
+
+export function createAdminRssSource(
+  token: string,
+  body: { name: string; url: string; enabled?: boolean; sourceId?: string },
+): Promise<AdminRssSource> {
+  return request<AdminRssSource>(token, "/api/admin/rss-sources", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateAdminRssSource(
+  token: string,
+  sourceId: string,
+  patch: { name?: string; url?: string; enabled?: boolean },
+): Promise<AdminRssSource> {
+  return request<AdminRssSource>(token, `/api/admin/rss-sources/${encodeURIComponent(sourceId)}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteAdminRssSource(token: string, sourceId: string): Promise<void> {
+  return request<void>(token, `/api/admin/rss-sources/${encodeURIComponent(sourceId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchAdminJobRuns(
+  token: string,
+  options?: { jobType?: string; limit?: number; signal?: AbortSignal },
+): Promise<AdminJobRun[]> {
+  const params = new URLSearchParams({ limit: String(options?.limit ?? 20) });
+  if (options?.jobType) params.set("jobType", options.jobType);
+  return request<AdminJobRun[]>(token, `/api/admin/job-runs?${params.toString()}`, {
+    signal: options?.signal,
   });
 }
 

@@ -5,9 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 from threading import RLock
 from typing import Optional
-from urllib.parse import urlparse
 from uuid import uuid4
 
+from app.adapters.rss.fetcher import assert_public_http_url
 from app.ports.admin import (
     AdminNotFoundError,
     AdminValidationError,
@@ -102,9 +102,10 @@ class InMemoryJobRunsRepo:
 
 
 def _validate_url(url: str) -> None:
-    parsed = urlparse(url or "")
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise AdminValidationError("URL must be http(s) with a host")
+    try:
+        assert_public_http_url(url)
+    except ValueError as exc:
+        raise AdminValidationError(str(exc) or "URL host is not allowed") from exc
 
 
 __all__ = [

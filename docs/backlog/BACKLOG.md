@@ -21,6 +21,8 @@
 | BL-025 | Chatbot settings tab (models, params) | P1 | `done` | Luna implementer | `features/BL-025-chatbot-settings.md` | Architecture-approved 2026-08-23 |
 | BL-026 | FX rates settings tab (view + admin refresh) | P1 | `done` | Luna implementer | `features/BL-026-fx-settings-tab.md` | Architecture-approved 2026-08-23 |
 | BL-027 | Portfolio CSV export (authenticated, FX-aware) | P1 | `done` | Eng | `features/BL-027-portfolio-csv-export.md` | SA `approve` 2026-08-24; cherry-picked to `workflow-setup` (not `main`) |
+| BL-028 | RSS source news completion | P0 | `done` | Eng | `features/BL-028-rss-news.md` | SA `approve` 2026-08-28; worktree `a3-wt-bl028` — not merged |
+| BL-029 | Lambda + EventBridge newsletter | P0 | `done` | Eng | `features/BL-029-lambda-eventbridge.md` | Sibling worktree `a3-wt-bl029`; SA `approve` — not merged |
 | BL-011 | Markets stale-while-revalidate + shared BE cache | P0 | `done` | Eng | `features/BL-011-markets-stale-cache.md` | Merged to integration |
 | BL-012 | Configurable 2-decimal number format | P0 | `done` | Eng | `features/BL-012-number-format.md` | Merged to integration |
 | BL-013 | Portfolio Avg cost / Price in session FX | P0 | `done` | Eng | `features/BL-013-portfolio-unit-fx.md` | Merged to integration |
@@ -50,6 +52,7 @@
 
 | ID | Title | Done date | Feature file |
 |----|-------|-----------|--------------|
+| BL-028 | RSS source news completion | 2026-08-28 | `features/BL-028-rss-news.md` |
 | BL-027 | Portfolio CSV export | 2026-08-24 | `features/BL-027-portfolio-csv-export.md` |
 | BL-019 | Rebrand OpenPortfo | 2026-08-23 | `features/BL-019-rebrand-openportfo.md` |
 | BL-020 | Collapsible sidebar nav | 2026-08-23 | `features/BL-020-sidebar-nav.md` |

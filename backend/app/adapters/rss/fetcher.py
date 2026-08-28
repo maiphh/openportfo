@@ -12,15 +12,16 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.ports.rss import RssItem
+from app.ports.rss import RssFetchError, RssItem
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "localhost.localdomain"})
 _MAX_REDIRECTS = 5
 
 
 def _ip_is_blocked(ip: Any) -> bool:
-    if ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
     return bool(
         ip.is_private
         or ip.is_loopback
@@ -117,11 +118,17 @@ def _parse_published(entry: Any) -> Optional[datetime]:
         if not raw:
             continue
         try:
-            return parsedate_to_datetime(str(raw))
+            dt = parsedate_to_datetime(str(raw))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
         except (TypeError, ValueError, IndexError):
             try:
                 s = str(raw).replace("Z", "+00:00")
-                return datetime.fromisoformat(s)
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(timezone.utc)
             except ValueError:
                 continue
     return None
@@ -149,10 +156,12 @@ class HttpRssFetcher:
         try:
             _assert_public_http_url(url)
             content = self._get_public_feed(url)
-        except httpx.HTTPError:
-            return []
-        except ValueError:
-            return []
+        except RssFetchError:
+            raise
+        except httpx.HTTPError as exc:
+            raise RssFetchError(str(exc) or "RSS HTTP fetch failed") from exc
+        except ValueError as exc:
+            raise RssFetchError(str(exc) or "URL host is not allowed") from exc
 
         parsed = feedparser.parse(content)
         source_name = getattr(parsed.feed, "title", None) if getattr(parsed, "feed", None) else None
@@ -181,17 +190,21 @@ class HttpRssFetcher:
             headers={"User-Agent": self._user_agent},
         ) as client:
             for _ in range(_MAX_REDIRECTS + 1):
-                _assert_public_http_url(current)
+                try:
+                    _assert_public_http_url(current)
+                except ValueError as exc:
+                    raise RssFetchError(str(exc) or "URL host is not allowed") from exc
                 resp = client.get(current)
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:
-                        raise httpx.HTTPError("Redirect missing Location")
+                        raise RssFetchError("Redirect missing Location")
                     current = str(resp.url.join(location))
                     continue
-                resp.raise_for_status()
+                if resp.status_code < 200 or resp.status_code >= 300:
+                    raise RssFetchError(f"RSS HTTP {resp.status_code}")
                 return resp.text
-        raise httpx.HTTPError("Too many redirects")
+        raise RssFetchError("Too many redirects")
 
 
-__all__ = ["HttpRssFetcher", "assert_public_http_url"]
+__all__ = ["HttpRssFetcher", "assert_public_http_url", "RssFetchError"]

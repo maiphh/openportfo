@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.deps import (
@@ -124,3 +125,42 @@ def test_job_runs_empty() -> None:
     r = client.get("/api/admin/job-runs", headers=_auth("admin1"))
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_memory_rejects_unsafe_rss_urls() -> None:
+    """InMemoryRssSourcesRepo shares assert_public_http_url with Dynamo (D2)."""
+    client, profiles = _setup()
+    profiles.get_or_create("admin1", email="a@test.com", name="A")
+    profiles.set_role("admin1", "admin")
+    for url in (
+        "https://127.0.0.1/feed.xml",
+        "http://localhost/rss",
+        "https://10.1.2.3/rss",
+        "https://169.254.169.254/latest",
+        "ftp://example.com/feed",
+    ):
+        r = client.post(
+            "/api/admin/rss-sources",
+            headers=_auth("admin1"),
+            json={"name": "Bad", "url": url},
+        )
+        assert r.status_code == 400, url
+
+
+def test_memory_and_dynamo_reject_same_unsafe_rss_urls() -> None:
+    from app.adapters.dynamodb.rss import _validate_url as dynamo_validate
+    from app.adapters.memory.admin import AdminValidationError, InMemoryRssSourcesRepo
+    from app.ports.admin import RssSource
+
+    repo = InMemoryRssSourcesRepo()
+    unsafe = [
+        "https://127.0.0.1/feed.xml",
+        "http://localhost/rss",
+        "https://192.168.0.1/rss",
+        "https://169.254.1.1/meta",
+    ]
+    for url in unsafe:
+        with pytest.raises(AdminValidationError):
+            repo.create(RssSource(source_id="x", name="n", url=url, enabled=True))
+        with pytest.raises(AdminValidationError):
+            dynamo_validate(url)

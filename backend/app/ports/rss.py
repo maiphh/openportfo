@@ -15,10 +15,18 @@ class RssItem:
     source_name: Optional[str] = None
 
 
+class RssFetchError(Exception):
+    """Transport, HTTP, redirect, or SSRF failure while fetching a feed."""
+
+
 class RssFetcher(Protocol):
     def fetch(self, url: str) -> list[RssItem]:
-        """Fetch and parse feed at ``url``."""
+        """Fetch and parse feed at ``url``.
+
+        Raises:
+            RssFetchError: on transport, non-2xx, redirect, or SSRF failures.
+        """
         ...
 
 
-__all__ = ["RssItem", "RssFetcher"]
+__all__ = ["RssItem", "RssFetcher", "RssFetchError"]

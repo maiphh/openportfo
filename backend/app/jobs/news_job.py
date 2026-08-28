@@ -1,4 +1,4 @@
-"""Daily news ingest job: RSS → keyword match → NewsRepo."""
+"""Daily news ingest job: RSS → keyword/symbol match → NewsRepo."""
 
 from __future__ import annotations
 
@@ -16,19 +16,47 @@ from app.jobs.job_utils import (
 )
 from app.ports.admin import JobRun
 from app.ports.news import NewsItem
+from app.ports.rss import RssItem
+
+MAX_ITEMS_PER_SOURCE = 25
+
+
+def _normalize_url(url: str) -> str:
+    return (url or "").strip().rstrip("/")
+
+
+def _normalize_title(title: str) -> str:
+    return " ".join((title or "").split()).casefold()
 
 
 def _item_id(url: str, title: str) -> str:
-    raw = f"{url}|{title}".encode("utf-8")
+    raw = f"{_normalize_url(url)}|{_normalize_title(title)}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:24]
 
 
-def _matches(title: str, keywords: list[str]) -> bool:
-    t = (title or "").lower()
-    for kw in keywords:
-        if kw and kw.lower() in t:
+def _matches(title: str, needles: list[str]) -> bool:
+    t = (title or "").casefold()
+    for kw in needles:
+        if kw and kw.casefold() in t:
             return True
     return False
+
+
+def _matched_asset_symbols(title: str, asset_symbols: list[str]) -> list[str]:
+    t = (title or "").casefold()
+    found: list[str] = []
+    seen: set[str] = set()
+    for symbol in asset_symbols:
+        text = (symbol or "").strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        if key in t:
+            seen.add(key)
+            found.append(text)
+    return found
 
 
 def _iter_profiles(ctx: JobContext):
@@ -49,45 +77,65 @@ def _iter_holding_users(ctx: JobContext):
     yield from ctx.holdings_repo.list_all_users()
 
 
-def _collect_needles(ctx: JobContext) -> list[str]:
-    """Collect matching needles while profiles/users are traversed lazily.
+def _collect_needles(ctx: JobContext) -> tuple[list[str], list[str]]:
+    """Return (asset_symbols, keyword_needles) without retaining full user graphs."""
+    asset_seen: set[str] = set()
+    asset_symbols: list[str] = []
+    keyword_seen: set[str] = set()
+    keyword_needles: list[str] = []
 
-    The feed must be fetched once per source, so the unique needle set is
-    retained, but complete profile/user/holding collections are not.
-    """
-    seen: set[str] = set()
-    needles: list[str] = []
-
-    def add(raw: str | None) -> None:
+    def add_asset(raw: str | None) -> None:
         text = (raw or "").strip()
         if not text:
             return
-        key = text.lower()
-        if key in seen:
+        key = text.casefold()
+        if key in asset_seen:
             return
-        seen.add(key)
-        needles.append(text)
+        asset_seen.add(key)
+        asset_symbols.append(text)
+
+    def add_keyword(raw: str | None) -> None:
+        text = (raw or "").strip()
+        if not text:
+            return
+        key = text.casefold()
+        if key in keyword_seen:
+            return
+        keyword_seen.add(key)
+        keyword_needles.append(text)
 
     profile_user_ids: set[str] = set()
 
     def add_user_assets(user_id: str) -> None:
         for holding in ctx.holdings_repo.list(user_id):
-            add(holding.symbol)
+            add_asset(holding.symbol)
         for item in ctx.watchlist_repo.list(user_id):
-            add(item.symbol)
+            add_asset(item.symbol)
 
     for profile in _iter_profiles(ctx):
         profile_user_ids.add(profile.user_id)
         for kw in profile.news_keywords or []:
-            add(kw)
+            add_keyword(kw)
         add_user_assets(profile.user_id)
 
-    # A holding may exist before a profile is created.  The distinct-user
-    # adapter traversal covers those records without re-reading profile users.
     for user_id in _iter_holding_users(ctx):
         if user_id not in profile_user_ids:
             add_user_assets(user_id)
-    return needles
+
+    return asset_symbols, keyword_needles
+
+
+def _bounded_recent(items: list[RssItem]) -> list[RssItem]:
+    def sort_key(item: RssItem) -> datetime:
+        if item.published_at is not None:
+            dt = item.published_at
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    ordered = sorted(items, key=sort_key, reverse=True)
+    return ordered[:MAX_ITEMS_PER_SOURCE]
 
 
 def run_news_job(ctx: JobContext) -> JobRun:
@@ -117,7 +165,6 @@ def run_news_job(ctx: JobContext) -> JobRun:
             message=message,
             counts=counts,
         )
-        # Exactly one aggregate result is persisted for this invocation.
         ctx.job_runs_repo.put(run)
         return run
 
@@ -141,7 +188,8 @@ def run_news_job(ctx: JobContext) -> JobRun:
                 },
             )
 
-        needles = _collect_needles(ctx)
+        asset_symbols, keyword_needles = _collect_needles(ctx)
+        match_needles = [*asset_symbols, *keyword_needles]
         sources = [s for s in ctx.rss_sources_repo.list() if s.enabled]
         fetched = 0
         written = 0
@@ -150,38 +198,35 @@ def run_news_job(ctx: JobContext) -> JobRun:
         sources_failed = 0
         failures: list[str] = []
 
-        # Empty needles intentionally means no feed request.  This avoids
-        # ingesting every item in every feed and is a successful no-op.
-        if needles:
-            for src in sources:
-                sources_attempted += 1
-                label = sanitize_error(src.source_id or src.name or src.url, limit=80)
-                try:
-                    items = ctx.rss_fetcher.fetch(src.url)
-                    fetched += len(items)
-                    for it in items:
-                        if not _matches(it.title, needles):
-                            continue
-                        date_s = None
-                        if it.published_at is not None:
-                            date_s = it.published_at.date().isoformat()
-                        news = NewsItem(
-                            id=_item_id(it.url, it.title),
-                            title=it.title,
-                            url=it.url,
-                            source=src.name or it.source_name or src.url,
-                            published_at=it.published_at,
-                            symbols=[],
-                            date=date_s,
-                        )
-                        ctx.news_repo.put(news)
-                        written += 1
-                except Exception as exc:  # noqa: BLE001 - isolate this source
-                    sources_failed += 1
-                    if len(failures) < MAX_ERROR_DETAILS:
-                        failures.append(f"{label}: {sanitize_error(exc)}")
-                else:
-                    sources_succeeded += 1
+        for src in sources:
+            sources_attempted += 1
+            label = sanitize_error(src.source_id or src.name or src.url, limit=80)
+            try:
+                items = _bounded_recent(ctx.rss_fetcher.fetch(src.url))
+                fetched += len(items)
+                for it in items:
+                    if match_needles and not _matches(it.title, match_needles):
+                        continue
+                    date_s = None
+                    if it.published_at is not None:
+                        date_s = it.published_at.date().isoformat()
+                    news = NewsItem(
+                        id=_item_id(it.url, it.title),
+                        title=it.title,
+                        url=it.url,
+                        source=src.name or it.source_name or src.url,
+                        published_at=it.published_at,
+                        symbols=_matched_asset_symbols(it.title, asset_symbols),
+                        date=date_s,
+                    )
+                    ctx.news_repo.put(news)
+                    written += 1
+            except Exception as exc:  # noqa: BLE001 - isolate this source
+                sources_failed += 1
+                if len(failures) < MAX_ERROR_DETAILS:
+                    failures.append(f"{label}: {sanitize_error(exc)}")
+            else:
+                sources_succeeded += 1
 
         status = aggregate_status(sources_attempted, sources_failed)
         message = None
@@ -224,4 +269,4 @@ def run_news_job(ctx: JobContext) -> JobRun:
         )
 
 
-__all__ = ["run_news_job"]
+__all__ = ["run_news_job", "MAX_ITEMS_PER_SOURCE"]
