@@ -10,13 +10,20 @@ Parameters:
     Default: openportfo
     Description: Prefix for DynamoDB table names (match backend Settings defaults).
 
+  # BL-031 single-EB hosting: pass the real EB origin via --parameter-overrides,
+  # e.g. CognitoCallbackUrls="...,https://<env>.elasticbeanstalk.com/auth/callback/"
+  # (trailing slash required: frontend callbackRedirectUri ends with /auth/callback/).
+  # EB_PLACEHOLDER entries below are inert documentation defaults - replace them,
+  # never commit a real EB URL in this file.
   CognitoCallbackUrls:
     Type: CommaDelimitedList
-    Default: "http://localhost:3000/auth/callback,http://localhost:5173/auth/callback,https://placeholder.cloudfront.net/auth/callback"
+    Description: OAuth redirect_uris (local dev + CloudFront placeholder + EB placeholder).
+    Default: "http://localhost:3000/auth/callback,http://localhost:5173/auth/callback,https://placeholder.cloudfront.net/auth/callback,https://EB_PLACEHOLDER/auth/callback/"
 
   CognitoLogoutUrls:
     Type: CommaDelimitedList
-    Default: "http://localhost:3000/,http://localhost:5173/,https://placeholder.cloudfront.net/"
+    Description: OAuth post-logout redirect URIs (local dev + CloudFront placeholder + EB placeholder).
+    Default: "http://localhost:3000/,http://localhost:5173/,https://placeholder.cloudfront.net/,https://EB_PLACEHOLDER/"
 
 Resources:
   DataBucket:

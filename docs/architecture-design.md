@@ -245,6 +245,14 @@ EventBridge (cron from Admin: e.g. 08:00 ICT)
 CORS: FastAPI allows CloudFront origin only.  
 **Locked:** Lambda = schedule only; no API Gateway for user APIs.
 
+> **Lab variance (BL-031):** the Academy lab blocks CloudFront, so the lab
+> deployment serves the same Next.js static export from the Beanstalk API
+> process itself (single `uvicorn`, `StaticFiles` + SPA fallback, same-origin
+> `/api/*`). This is a hosting-only variance: no SSR, no `next start` second
+> server, no API Gateway, no browser-direct market APIs. S3 stays in the
+> rubric via the **data** bucket (price history / snapshots) queried by
+> Athena. See `docs/runbooks/eb-single-hosting.md`.
+
 ### 3.3 Why this shape (marks + $50)
 
 | Service | Category | Marks | Role | Cost control |

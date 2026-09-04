@@ -8,8 +8,13 @@ const DEFAULT_API = "http://127.0.0.1:8000";
 export type MarketKind = "stock" | "crypto";
 
 export function apiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API).trim();
-  return raw.replace(/\/$/, "");
+  // BL-031 single-EB hosting: an explicitly empty NEXT_PUBLIC_API_URL means
+  // same-origin (relative `/api/*`); only undefined/null falls back to local.
+  const raw = process.env.NEXT_PUBLIC_API_URL;
+  if (raw === undefined || raw === null) return DEFAULT_API;
+  const trimmed = raw.trim();
+  if (trimmed === "") return "";
+  return trimmed.replace(/\/+$/, "");
 }
 
 /** Query value for portfolio `displayCurrency` / asset `currency` (BL-001/002). */

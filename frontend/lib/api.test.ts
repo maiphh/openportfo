@@ -132,3 +132,53 @@ describe("market API client", () => {
     await expect(fetchMarketQuotes({ market: "crypto" })).resolves.toEqual(body);
   });
 });
+
+describe("apiBase same-origin behaviour (BL-031)", () => {
+  const ENV_KEY = "NEXT_PUBLIC_API_URL";
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("empty string means same-origin relative base", () => {
+    vi.stubEnv(ENV_KEY, "");
+    expect(apiBase()).toBe("");
+  });
+
+  it("whitespace-only means same-origin relative base", () => {
+    vi.stubEnv(ENV_KEY, "   ");
+    expect(apiBase()).toBe("");
+  });
+
+  it("unset env falls back to the local default", () => {
+    vi.stubEnv(ENV_KEY, "");
+    delete process.env[ENV_KEY];
+    expect(apiBase()).toBe("http://127.0.0.1:8000");
+  });
+
+  it("trims whitespace and trailing slashes", () => {
+    vi.stubEnv(ENV_KEY, "  https://eb.example.com///  ");
+    expect(apiBase()).toBe("https://eb.example.com");
+  });
+
+  it("keeps an explicit absolute URL sans trailing slash", () => {
+    vi.stubEnv(ENV_KEY, "http://127.0.0.1:8000/");
+    expect(apiBase()).toBe("http://127.0.0.1:8000");
+  });
+
+  it("builds relative /api/* URLs when same-origin", async () => {
+    vi.stubEnv(ENV_KEY, "");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ limit: 80, groups: [], source: "coingecko" }),
+      ),
+    );
+    try {
+      await fetchMarketQuotes({ market: "crypto" });
+      expect(lastFetchUrl()).toBe("/api/markets/crypto/quotes?limit=80");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

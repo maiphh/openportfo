@@ -248,3 +248,57 @@ def test_create_app_accepts_explicit_production_fixture_override(monkeypatch) ->
         assert create_app().title == "OpenPortfo"
     finally:
         clear_settings_cache()
+
+
+# ---------------------------------------------------------------------------
+# BL-031: single-EB hosting settings (SERVE_FRONTEND / FRONTEND_DIR)
+# ---------------------------------------------------------------------------
+
+
+def test_frontend_settings_defaults() -> None:
+    from app.core.config import DEFAULT_FRONTEND_DIR
+
+    clear_settings_cache()
+    try:
+        settings = Settings()
+        assert settings.serve_frontend is True
+        assert settings.frontend_dir == DEFAULT_FRONTEND_DIR
+        assert settings.frontend_dir_resolved.name == DEFAULT_FRONTEND_DIR
+        assert settings.frontend_dir_resolved.is_absolute()
+    finally:
+        clear_settings_cache()
+
+
+def test_frontend_settings_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("SERVE_FRONTEND", "false")
+    monkeypatch.setenv("FRONTEND_DIR", "custom_web")
+    clear_settings_cache()
+    try:
+        settings = get_settings()
+        assert settings.serve_frontend is False
+        assert settings.frontend_dir == "custom_web"
+        assert str(settings.frontend_dir_resolved).endswith("custom_web")
+    finally:
+        clear_settings_cache()
+
+
+def test_resolve_frontend_dir_absolute_passthrough(tmp_path) -> None:
+    from app.core.config import resolve_frontend_dir
+
+    assert resolve_frontend_dir(str(tmp_path)) == tmp_path
+
+
+def test_resolve_frontend_dir_prefers_top_level_over_legacy(tmp_path) -> None:
+    """Default resolves under backend/; legacy app/static_web is fallback."""
+    from app.core.config import _BACKEND_ROOT, resolve_frontend_dir
+
+    assert resolve_frontend_dir() == _BACKEND_ROOT / "static_web"
+    assert resolve_frontend_dir("custom_web") == _BACKEND_ROOT / "custom_web"
+
+
+def test_frontend_bundle_present_requires_index_html(tmp_path) -> None:
+    from app.core.config import frontend_bundle_present
+
+    assert frontend_bundle_present(str(tmp_path)) is False
+    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
+    assert frontend_bundle_present(str(tmp_path)) is True
