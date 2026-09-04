@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from app.jobs.context import JobContext
@@ -67,6 +67,24 @@ def snapshot_storage_key(user_id: str, date: str) -> str:
     return f"snapshots/userId={user_id}/dt={date}/part.json"
 
 
+def _resolve_snapshot_date(date_override: Any = None) -> str:
+    """Validate manual date override or fall back to UTC today.
+
+    Accepts ``None``/empty (→ today) or a strict ``YYYY-MM-DD`` string.
+    Raises ``ValueError`` with a ``YYYY-MM-DD`` message on invalid input.
+    """
+    if date_override is None:
+        return datetime.now(timezone.utc).date().isoformat()
+    raw = str(date_override).strip() if isinstance(date_override, str) else str(date_override or "").strip()
+    if not raw:
+        return datetime.now(timezone.utc).date().isoformat()
+    try:
+        parsed = date.fromisoformat(raw)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("date_override must be YYYY-MM-DD") from exc
+    return parsed.isoformat()
+
+
 def _iter_profiles(ctx: JobContext):
     """Use the lazy repository traversal, with legacy-repo compatibility."""
     iterator = getattr(ctx.user_profile_repo, "iter_all", None)
@@ -76,18 +94,23 @@ def _iter_profiles(ctx: JobContext):
     yield from ctx.user_profile_repo.list_all()
 
 
-def run_snapshot_job(ctx: JobContext) -> JobRun:
+def run_snapshot_job(ctx: JobContext, date_override: Optional[str] = None) -> JobRun:
     """Write snapshots per user and continue after an individual failure.
 
     A user with no holdings is an intentional no-op and is counted as
     skipped.  Any failure while computing or publishing one user's snapshot
     marks only that user failed; the aggregate JobRun is persisted once after
     all users have been attempted.
+
+    Args:
+        ctx: Job ports.
+        date_override: Optional manual ``YYYY-MM-DD`` (Lambda console/CLI).
+            ``None``/empty → UTC today. Invalid → ``ValueError`` before writes.
     """
 
     started = datetime.now(timezone.utc)
     run_id = str(uuid4())
-    date = started.date().isoformat()
+    date = _resolve_snapshot_date(date_override)
 
     def persist(
         *,
@@ -230,4 +253,4 @@ def run_snapshot_job(ctx: JobContext) -> JobRun:
         )
 
 
-__all__ = ["run_snapshot_job", "snapshot_storage_key"]
+__all__ = ["_resolve_snapshot_date", "run_snapshot_job", "snapshot_storage_key"]

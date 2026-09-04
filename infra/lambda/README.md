@@ -5,6 +5,7 @@
 - Module: `lambda_handler.handler` (file `backend/lambda_handler.py`)
 - Or: `app.jobs.lambda_entry.handler`
 - Event: `{"job":"news"}` | `{"job":"price"}` | `{"job":"snapshot"}`
+- Manual backfill (BL-030): `{"job":"snapshot","date":"YYYY-MM-DD"}` (also `snapshot_date` alias)
 - **No FX job / schedule**
 
 ## Build zip (from repo root, Linux/WSL preferred for manylinux wheels)
@@ -64,6 +65,19 @@ aws lambda invoke \
   --payload '{"job":"news"}' \
   out.json && cat out.json
 ```
+
+Manual snapshot backfill (BL-030 — Lambda console Test or CLI):
+
+```bash
+aws lambda invoke \
+  --region us-east-1 \
+  --function-name openportfo-jobs \
+  --payload '{"job":"snapshot","date":"2026-09-03"}' \
+  out-snap.json && cat out-snap.json
+```
+
+Omitted `date` writes UTC today; invalid `date` fails fast with
+`event.date must be YYYY-MM-DD` and writes nothing.
 
 ## EventBridge
 

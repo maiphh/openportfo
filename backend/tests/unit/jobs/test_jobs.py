@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 from app.domain.models import PriceQuote
 from app.jobs.context import JobContext
 from app.jobs.handler import handler
@@ -764,3 +766,80 @@ def test_snapshot_repo_failure_leaves_retry_safe_object_and_other_users_continue
     assert snapshots.get("u2", date) is not None
     assert ctx.object_storage.list_keys(prefix="snapshots/userId=u1/") == [u1_key]
     assert ctx.object_storage.list_keys(prefix="snapshots/userId=u2/") == [u2_key]
+
+
+def _seed_snapshot_user(bag: dict[str, Any], user_id: str = "u1") -> None:
+    bag["users"].get_or_create(user_id, email=f"{user_id}@t.com", name="U")
+    bag["holdings"].create(
+        HoldingRecord(
+            user_id=user_id,
+            asset_type="crypto",
+            symbol="BTC",
+            qty=Decimal("1"),
+            avg_cost=Decimal("30000"),
+            currency="USD",
+            asset_id="bitcoin",
+        )
+    )
+    bag["cache"].put(
+        PriceQuote(
+            asset_type="crypto",
+            symbol="BTC",
+            price=Decimal("40000"),
+            currency="USD",
+            as_of=datetime(2026, 8, 9, tzinfo=timezone.utc),
+        ),
+        ttl_seconds=600,
+    )
+
+
+def test_snapshot_date_override_writes_requested_date() -> None:
+    """BL-030 AC1: direct job call with override writes that date only."""
+    ctx, bag = _ctx()
+    _seed_snapshot_user(bag, "u1")
+    run = run_snapshot_job(ctx, date_override="2026-09-03")
+    assert run.status == "success"
+    assert run.counts["date"] == "2026-09-03"
+    record = bag["snaps"].get("u1", "2026-09-03")
+    assert record is not None
+    assert record.payload["date"] == "2026-09-03"
+    key = snapshot_storage_key("u1", "2026-09-03")
+    stored = bag["storage"].get_json(key)
+    assert stored is not None
+    assert stored["date"] == "2026-09-03"
+
+
+def test_handler_snapshot_date_override() -> None:
+    """BL-030 AC1: Lambda event date override flows through handler."""
+    ctx, bag = _ctx()
+    _seed_snapshot_user(bag, "u1")
+    out = handler({"job": "snapshot", "date": "2026-09-02"}, ctx)
+    assert out["jobType"] == "snapshot"
+    assert out["status"] == "success"
+    assert out["counts"]["date"] == "2026-09-02"
+    assert bag["snaps"].get("u1", "2026-09-02") is not None
+    assert bag["storage"].get_json(snapshot_storage_key("u1", "2026-09-02")) is not None
+
+
+def test_handler_snapshot_date_alias_snapshot_date() -> None:
+    """BL-030: snapshot_date alias behaves like date."""
+    ctx, bag = _ctx()
+    _seed_snapshot_user(bag, "u1")
+    out = handler({"job": "snapshot", "snapshot_date": "2026-09-01"}, ctx)
+    assert out["counts"]["date"] == "2026-09-01"
+    assert bag["snaps"].get("u1", "2026-09-01") is not None
+
+
+def test_snapshot_date_override_invalid_raises_and_writes_nothing() -> None:
+    """BL-030 AC2: invalid override fails fast with no writes."""
+    ctx, bag = _ctx()
+    _seed_snapshot_user(bag, "u1")
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        run_snapshot_job(ctx, date_override="not-a-date")
+    assert bag["snaps"].get("u1", "not-a-date") is None
+    assert bag["storage"].list_keys(prefix="snapshots/userId=u1/") == []
+    assert bag["job_runs"].list_recent(job_type="snapshot") == []
+
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        handler({"job": "snapshot", "date": "2026-13-40"}, ctx)
+    assert bag["storage"].list_keys(prefix="snapshots/userId=u1/") == []
