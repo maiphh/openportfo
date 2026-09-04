@@ -150,10 +150,30 @@ describe("apiBase same-origin behaviour (BL-031)", () => {
     expect(apiBase()).toBe("");
   });
 
-  it("unset env falls back to the local default", () => {
+  it("unset env falls back to the local default on localhost", () => {
     vi.stubEnv(ENV_KEY, "");
     delete process.env[ENV_KEY];
-    expect(apiBase()).toBe("http://127.0.0.1:8000");
+    vi.stubGlobal("window", {
+      location: { hostname: "localhost" },
+    });
+    try {
+      expect(apiBase()).toBe("http://127.0.0.1:8000");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("unset env uses same-origin on a public host (missed bake safety)", () => {
+    vi.stubEnv(ENV_KEY, "");
+    delete process.env[ENV_KEY];
+    vi.stubGlobal("window", {
+      location: { hostname: "openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com" },
+    });
+    try {
+      expect(apiBase()).toBe("");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("trims whitespace and trailing slashes", () => {

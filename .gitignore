@@ -15,6 +15,8 @@ backend/.venv/
 openportfo-jobs.zip
 openportfo-api.zip
 lambda-out-*.json
+# package-eb copies frontend/out → backend/static_web (rebuild locally; do not commit)
+backend/static_web/
 
 # Node
 node_modules/

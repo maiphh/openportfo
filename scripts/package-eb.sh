@@ -42,16 +42,19 @@ test -f "$OUT_DIR/index.html" || { echo "missing $OUT_DIR/index.html" >&2; exit 
 test -d "$OUT_DIR/_next" || { echo "missing $OUT_DIR/_next" >&2; exit 1; }
 echo "[package-eb] export OK: index.html + _next/ present"
 
-# 3. Leak guard: baked absolute localhost API calls must not ship.
-# NOTE: the inert `DEFAULT_API = "http://127.0.0.1:8000"` fallback literal in
-# lib/api.ts is intentionally still bundled (dead branch when built with
-# NEXT_PUBLIC_API_URL=""), so the guard fails only on absolute *API calls*
-# (`127.0.0.1:8000/api`), which prove a stale absolute base survived.
+# 3. Leak guard: same-origin bake must inline NEXT_PUBLIC_API_URL.
 if grep -rE -q --include='*.js' --include='*.html' --include='*.json' \
     '127\.0\.0\.1:8000/api' "$OUT_DIR"; then
   grep -rE --include='*.js' --include='*.html' --include='*.json' \
     '127\.0\.0\.1:8000/api' "$OUT_DIR" | head -5
   echo "leak guard: absolute localhost API URL baked into frontend/out (rebuild with NEXT_PUBLIC_API_URL=\"\")" >&2
+  exit 1
+fi
+if grep -rE -q --include='*.js' --include='*.html' --include='*.json' \
+    '\.env\.NEXT_PUBLIC_API_URL' "$OUT_DIR"; then
+  grep -rE --include='*.js' --include='*.html' --include='*.json' \
+    '\.env\.NEXT_PUBLIC_API_URL' "$OUT_DIR" | head -5
+  echo "leak guard: NEXT_PUBLIC_API_URL was not inlined at build time" >&2
   exit 1
 fi
 INERT_COUNT=$(grep -rE --include='*.js' -c '127\.0\.0\.1:8000' "$OUT_DIR" 2>/dev/null | wc -l | tr -d ' ')
@@ -72,7 +75,7 @@ from pathlib import Path
 
 backend = Path(sys.argv[1])
 out_zip = Path(sys.argv[2])
-allow = ["app", "Procfile", "requirements.txt", ".ebextensions", "static_web"]
+allow = ["app", "Procfile", "requirements.txt", ".ebextensions", ".platform", "static_web"]
 for name in allow:
     assert (backend / name).exists(), f"missing backend/{name} - cannot package"
 
@@ -91,7 +94,13 @@ with zipfile.ZipFile(out_zip, "w", zipfile.ZIP_DEFLATED) as zf:
                     continue
                 if f.suffix in {".pyc", ".pyo"}:
                     continue
-                zf.write(f, (Path(name) / rel).as_posix())
+                arc = (Path(name) / rel).as_posix()
+                info = zipfile.ZipInfo(arc)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                mode = 0o755 if "/hooks/" in arc and arc.endswith(".sh") else 0o644
+                info.external_attr = (mode & 0xFFFF) << 16
+                info.date_time = (2026, 1, 1, 0, 0, 0)
+                zf.writestr(info, f.read_bytes())
                 count += 1
         else:
             zf.write(src, name)

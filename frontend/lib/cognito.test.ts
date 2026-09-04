@@ -75,6 +75,24 @@ describe("Cognito public config", () => {
     ).toEqual(CONFIG);
   });
 
+  it("prefers window.location.origin over a stale baked APP_URL", () => {
+    vi.stubGlobal("window", {
+      location: { origin: "https://openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com" },
+    });
+    try {
+      expect(
+        readCognitoConfig({
+          NEXT_PUBLIC_COGNITO_DOMAIN: CONFIG.domain,
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: CONFIG.clientId,
+          NEXT_PUBLIC_COGNITO_REGION: "us-east-1",
+          NEXT_PUBLIC_APP_URL: "http://openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com",
+        })?.appUrl,
+      ).toBe("https://openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("builds trailing-slash callback and logout URIs", () => {
     expect(callbackRedirectUri(CONFIG.appUrl)).toBe("http://localhost:3000/auth/callback/");
     expect(buildLogoutUrl(CONFIG)).toBe(
@@ -94,6 +112,30 @@ describe("PKCE helper", () => {
   it("matches the RFC 7636 S256 challenge test vector", async () => {
     const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     await expect(generateCodeChallenge(verifier)).resolves.toBe("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+  });
+
+  it("matches the RFC 7636 vector without SubtleCrypto (HTTP / insecure context)", async () => {
+    const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    await expect(generateCodeChallenge(verifier, null)).resolves.toBe(
+      "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    );
+  });
+
+  it("prepareHostedUiLogin works when crypto.subtle is undefined", async () => {
+    const session = memoryStorage();
+    const cryptoNoSubtle = {
+      getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
+      subtle: undefined,
+    } as unknown as Crypto;
+    const prepared = await prepareHostedUiLogin({
+      config: CONFIG,
+      next: "/portfolio/",
+      sessionStorage: session,
+      crypto: cryptoNoSubtle,
+    });
+    expect(prepared.url).toContain("code_challenge_method=S256");
+    expect(prepared.url).toContain("code_challenge=");
+    expect(session.getItem(PKCE_STORAGE_KEY)).toContain(prepared.verifier);
   });
 
   it("never puts the verifier in the authorize URL", async () => {

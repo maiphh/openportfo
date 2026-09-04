@@ -18,17 +18,15 @@ Open [http://localhost:3000](http://localhost:3000).
 - Markets `/markets` — stub
 - Search — live symbol search from the app sidebar (`Cmd/Ctrl+K`)
 
-Static export (`output: "export"`) is enabled on **`next build` only** (for S3 + CloudFront).
-`next dev` omits it so `/stock/[id]` and `/crypto/[id]` work for any ticker without pre-listing.
+Static export (`output: "export"`) is always on for `npm run build` (S3 / single-EB).
 
 ```powershell
 npm run build
 ```
 
-Output is written to `out/`. Asset detail links use the universal static
-`/asset?type=...&id=...` route, which resolves arbitrary ids in the browser.
-The legacy `/stock/[id]` and `/crypto/[id]` paths remain available for seeded
-compatibility links and no longer require a live markets API during the build.
+Output is written to `out/`. Asset detail uses the universal static
+`/asset?type=...&id=...` route, which resolves arbitrary ids in the browser
+(no per-symbol HTML pages at build time).
 
 ## Auth (Cognito Hosted UI)
 

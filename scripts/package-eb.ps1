@@ -38,16 +38,47 @@ Write-Host "[package-eb] repo: $RepoRoot"
 Write-Host "[package-eb] app-url: $AppUrl"
 
 # 1. Build frontend with same-origin API base (BL-031 D3).
+# IMPORTANT: PowerShell `$env:VAR = ""` *removes* the variable, so Next never
+# sees an empty string and leaves a runtime env lookup that falls back to
+# 127.0.0.1:8000 in the browser. Bake via .env.production.local instead.
+$prodEnvLocal = Join-Path $FrontendDir ".env.production.local"
+$prodEnvBackup = Join-Path $FrontendDir ".env.production.local.package-eb.bak"
+$hadProdEnvLocal = Test-Path -LiteralPath $prodEnvLocal
+if ($hadProdEnvLocal) {
+  Copy-Item -LiteralPath $prodEnvLocal -Destination $prodEnvBackup -Force
+}
+@(
+  "NEXT_PUBLIC_API_URL="
+  "NEXT_PUBLIC_APP_URL=$AppUrl"
+) | Set-Content -LiteralPath $prodEnvLocal -Encoding utf8
+# process.env wins over dotenv files. A stale shell NEXT_PUBLIC_APP_URL from a
+# prior package (e.g. http:// EB) would otherwise override .env.production.local.
+Remove-Item Env:NEXT_PUBLIC_API_URL -ErrorAction SilentlyContinue
+$env:NEXT_PUBLIC_APP_URL = $AppUrl
+# Drop turbopack/.next caches so a prior http:// APP_URL bake cannot stick.
+foreach ($stale in @(".next", "out")) {
+  $stalePath = Join-Path $FrontendDir $stale
+  if (Test-Path -LiteralPath $stalePath) {
+    Remove-Item -LiteralPath $stalePath -Recurse -Force
+  }
+}
 Push-Location $FrontendDir
 try {
-  $env:NEXT_PUBLIC_API_URL = ""
-  $env:NEXT_PUBLIC_APP_URL = $AppUrl
-  Write-Host "[package-eb] npm run build (NEXT_PUBLIC_API_URL=`"`")"
+  Write-Host "[package-eb] npm run build (NEXT_PUBLIC_API_URL baked empty via .env.production.local)"
+  Write-Host "[package-eb] NEXT_PUBLIC_APP_URL=$AppUrl (process env + .env.production.local)"
   npm run build
   if ($LASTEXITCODE -ne 0) { throw "frontend build failed (exit $LASTEXITCODE)" }
 }
 finally {
   Pop-Location
+  Remove-Item Env:NEXT_PUBLIC_APP_URL -ErrorAction SilentlyContinue
+  Remove-Item Env:NEXT_PUBLIC_API_URL -ErrorAction SilentlyContinue
+  if ($hadProdEnvLocal -and (Test-Path -LiteralPath $prodEnvBackup)) {
+    Move-Item -LiteralPath $prodEnvBackup -Destination $prodEnvLocal -Force
+  } else {
+    Remove-Item -LiteralPath $prodEnvLocal -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $prodEnvBackup -Force -ErrorAction SilentlyContinue
+  }
 }
 
 # 2. Assert export output exists.
@@ -57,20 +88,29 @@ if (-not (Test-Path -LiteralPath $indexHtml)) { throw "missing $indexHtml - stat
 if (-not (Test-Path -LiteralPath $nextDir)) { throw "missing $nextDir - static export failed?" }
 Write-Host "[package-eb] export OK: index.html + _next/ present"
 
-# 3. Leak guard: baked absolute localhost API calls must not ship.
-# NOTE: the inert `DEFAULT_API = "http://127.0.0.1:8000"` fallback literal in
-# lib/api.ts is intentionally still bundled (dead branch when built with
-# NEXT_PUBLIC_API_URL=""), so the guard fails only on absolute *API calls*
-# (`127.0.0.1:8000/api`), which prove a stale absolute base survived.
-$leaks = Get-ChildItem -LiteralPath $OutDir -Recurse -Include *.js, *.html, *.json -File |
-  Select-String -Pattern "127\.0\.0\.1:8000/api" -SimpleMatch:$false
+# 3. Leak guard: same-origin bake must actually inline NEXT_PUBLIC_API_URL.
+# - Contiguous `127.0.0.1:8000/api` = stale absolute base survived.
+# - Runtime `.env.NEXT_PUBLIC_API_URL` access = empty PowerShell env deleted
+#   the var at build time (must not ship).
+$outJs = Get-ChildItem -LiteralPath $OutDir -Recurse -Include *.js, *.html, *.json -File
+$leaks = $outJs | Select-String -Pattern "127\.0\.0\.1:8000/api" -SimpleMatch:$false
 if ($leaks) {
   $leaks | Select-Object -First 5 | ForEach-Object { Write-Host $_.Path }
   throw "leak guard: absolute localhost API URL baked into frontend/out (rebuild with NEXT_PUBLIC_API_URL=`"`")"
 }
-$inert = (Get-ChildItem -LiteralPath $OutDir -Recurse -Include *.js -File |
-  Select-String -Pattern "127\.0\.0\.1:8000" | Measure-Object).Count
+$runtimeEnv = $outJs | Select-String -Pattern "\.env\.NEXT_PUBLIC_API_URL"
+if ($runtimeEnv) {
+  $runtimeEnv | Select-Object -First 5 | ForEach-Object { Write-Host $_.Path }
+  throw "leak guard: NEXT_PUBLIC_API_URL was not inlined (empty PowerShell env removes the var; bake via .env.production.local)"
+}
+$inert = ($outJs | Select-String -Pattern "127\.0\.0\.1:8000" | Measure-Object).Count
 Write-Host "[package-eb] leak guard OK (inert DEFAULT_API literal occurrences: $inert)"
+if ($AppUrl -match '^https://') {
+  $httpBake = $outJs | Select-String -Pattern ('NEXT_PUBLIC_APP_URL:"' + ($AppUrl -replace '^https://','http://') + '"')
+  if ($httpBake) {
+    throw "APP_URL guard: expected https bake but found http:// NEXT_PUBLIC_APP_URL (clean .next and rebuild)"
+  }
+}
 
 # 4. Clean + copy out/ -> backend/static_web/.
 if (Test-Path -LiteralPath $StaticWebDir) {
@@ -87,7 +127,7 @@ $stage = Join-Path ([System.IO.Path]::GetTempPath()) "openportfo-eb-stage"
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item -Path (Join-Path $BackendDir "app") -Destination (Join-Path $stage "app") -Recurse
-foreach ($name in @("Procfile", "requirements.txt", ".ebextensions", "static_web")) {
+foreach ($name in @("Procfile", "requirements.txt", ".ebextensions", ".platform", "static_web")) {
   $src = Join-Path $BackendDir $name
   if (-not (Test-Path -LiteralPath $src)) { throw "missing backend/$name - cannot package" }
   Copy-Item -Path $src -Destination (Join-Path $stage $name) -Recurse
@@ -104,17 +144,41 @@ Get-ChildItem -LiteralPath (Join-Path $stage "app") -Recurse -Force -File -Error
 if (Test-Path -LiteralPath (Join-Path $stage ".pytest_cache")) {
   Remove-Item -LiteralPath (Join-Path $stage ".pytest_cache") -Recurse -Force
 }
-Write-Host "[package-eb] staged: app/ Procfile requirements.txt .ebextensions/ static_web/"
+Write-Host "[package-eb] staged: app/ Procfile requirements.txt .ebextensions/ .platform/ static_web/"
 
-# 6. Zip staging dir (zip root == EB application root).
+# 6. Zip staging dir with forward-slash entry names (Compress-Archive uses
+# backslashes; Linux unzip on EB rejects those bundles). Preserve +x on
+# .platform/hooks scripts so postdeploy hooks run.
 if (Test-Path -LiteralPath $OutputZip) { Remove-Item -LiteralPath $OutputZip -Force }
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $OutputZip -Force
+python -c @"
+import zipfile
+from pathlib import Path
+stage = Path(r'$stage')
+out_zip = Path(r'$OutputZip')
+with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for f in sorted(stage.rglob('*')):
+        if not f.is_file():
+            continue
+        rel = f.relative_to(stage).as_posix()
+        info = zipfile.ZipInfo(rel)
+        info.compress_type = zipfile.ZIP_DEFLATED
+        # EB requires executable bit on .platform/hooks/*
+        mode = 0o755 if '/hooks/' in rel and rel.endswith('.sh') else 0o644
+        info.external_attr = (mode & 0xFFFF) << 16
+        info.date_time = (2026, 1, 1, 0, 0, 0)
+        zf.writestr(info, f.read_bytes())
+"@
+if ($LASTEXITCODE -ne 0) { throw "python zip failed (exit $LASTEXITCODE)" }
 
 # 7. Contents check + size.
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead($OutputZip)
 try {
   $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+  $rawNames = @($zip.Entries | ForEach-Object { $_.FullName })
+  if (@($rawNames | Where-Object { $_ -match '\\' }).Count -gt 0) {
+    throw "bundle has backslash path separators (EB Linux unzip will fail)"
+  }
   foreach ($required in @("static_web/index.html", "Procfile", "app/main.py")) {
     if (-not ($entries -contains $required)) { throw "bundle missing required entry: $required" }
   }

@@ -7,11 +7,22 @@ const DEFAULT_API = "http://127.0.0.1:8000";
 
 export type MarketKind = "stock" | "crypto";
 
+function isLocalBrowserHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
 export function apiBase(): string {
   // BL-031 single-EB hosting: an explicitly empty NEXT_PUBLIC_API_URL means
-  // same-origin (relative `/api/*`); only undefined/null falls back to local.
+  // same-origin (relative `/api/*`). Unset falls back to local only on
+  // localhost / non-browser; public hosts use same-origin so a missed bake
+  // cannot point the browser at loopback (Private Network Access block).
   const raw = process.env.NEXT_PUBLIC_API_URL;
-  if (raw === undefined || raw === null) return DEFAULT_API;
+  if (raw === undefined || raw === null) {
+    if (typeof window !== "undefined" && !isLocalBrowserHost()) return "";
+    return DEFAULT_API;
+  }
   const trimmed = raw.trim();
   if (trimmed === "") return "";
   return trimmed.replace(/\/+$/, "");
