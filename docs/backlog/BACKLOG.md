@@ -37,6 +37,7 @@
 | BL-008 | Admin FX refresh UI | P1 | `done` | Eng | `features/BL-008-admin-fx-refresh.md` | Merged to integration |
 | BL-009 | Live SearchDialog | P1 | `done` | Eng | `features/BL-009-live-search-dialog.md` | Merged to integration |
 | BL-010 | BE: no markets catalog fixture fallback | P1 | `done` | Eng | `features/BL-010-no-markets-fixture.md` | Merged to integration |
+| BL-031 | Single-EB hosting (serve static frontend from Beanstalk API, no CloudFront) | P0 | `ready` | Eng (unassigned) | `features/BL-031-single-eb-hosting.md` | SA design `docs/orchestration/designs/BL-031-single-eb-hosting-design.md` 2026-09-04; plan only, no code yet |
 
 ---
 
