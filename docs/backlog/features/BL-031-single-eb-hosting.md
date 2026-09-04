@@ -141,6 +141,29 @@ As a **demo viewer**, I want **to open the EB URL and use the full app (login, d
 
 ## 11. Implementation notes (Eng fills after `ready`)
 
-- Approach:
-- PR / branch:
-- Verification:
+- Approach: single-process static serving per SA design D1–D7. `Settings`
+  gains `SERVE_FRONTEND` (default true) + `FRONTEND_DIR` (default
+  `static_web`) with `resolve_frontend_dir()` preferring top-level
+  `backend/static_web/` over legacy `backend/app/static_web/`
+  (`backend/app/core/config.py`). `backend/app/main.py` mounts `/_next`
+  via `StaticFiles`, explicit `GET /`, and a guarded catch-all
+  `GET /{full_path:path}` that excludes `api/health/docs/openapi.json/redoc`,
+  serves exact files + trailing-slash `index.html` dirs, else SPA fallback;
+  missing/empty bundle (or `SERVE_FRONTEND=false`) degrades to API-only
+  (`/` → JSON 404, warning log). `apiBase()` fixed so `""` means same-origin
+  (`frontend/lib/api.ts`); `next.config.ts` always `output:"export"`.
+  Packaging via `scripts/package-eb.ps1`/`.sh` (build with
+  `NEXT_PUBLIC_API_URL=""`, leak-guard on `127.0.0.1:8000/api`, allow-list
+  zip). Cognito params gain `EB_PLACEHOLDER` entries
+  (`infra/cloudformation-lab.yml`); deploy order + rollback in
+  `docs/runbooks/eb-single-hosting.md`; arch variance note in
+  `docs/architecture-design.md` §3.2.
+- Deviations: settings coverage added to `backend/tests/unit/test_settings.py`
+  (SA named a non-existent `tests/unit/core/test_config.py`); leak guard
+  fails on `127.0.0.1:8000/api` rather than any `127.0.0.1:8000` because the
+  inert `DEFAULT_API` fallback literal ships in the bundle by design.
+- PR / branch: `feat/BL-031-single-eb-hosting` (worktree `../a3-wt-bl031`).
+- Verification: `tests/unit/api/test_static_hosting.py` (9 tests) +
+  `test_settings.py` frontend-settings block green; `lib/api.test.ts` 16/16
+  green; full backend pytest + `npm run lint/test/build` + Playwright smoke
+  evidence in `docs/orchestration/walkthroughs/BL-031-walkthrough.md`.

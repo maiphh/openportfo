@@ -6,6 +6,7 @@ import os
 import unicodedata
 from enum import Enum
 from functools import lru_cache
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from pydantic import Field, field_validator
@@ -57,6 +58,43 @@ _DURABLE_TABLE_FIELDS: tuple[tuple[str, str], ...] = (
     ("SNAPSHOTS_TABLE", "snapshots_table"),
     ("CHAT_IDEMPOTENCY_TABLE", "chat_idempotency_table"),
 )
+
+
+# Absolute backend package root (``backend/``), used to resolve the bundled
+# Next.js static export without depending on the process working directory.
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+#: Default relative directory (under ``backend/``) holding the prebuilt
+#: Next.js static export (``frontend/out/`` copied by ``scripts/package-eb``).
+DEFAULT_FRONTEND_DIR = "static_web"
+
+
+def resolve_frontend_dir(frontend_dir: str = DEFAULT_FRONTEND_DIR) -> Path:
+    """Return the absolute path of the bundled frontend directory.
+
+    Absolute values are returned as-is (tests point at ``tmp_path`` bundles).
+    Relative values resolve under ``backend/``. For the default
+    ``"static_web"``, prefer top-level ``backend/static_web/`` (outside the
+    ``app/`` import path) and fall back to ``backend/app/static_web/`` when
+    only the legacy location exists.
+    """
+    raw = (frontend_dir or "").strip() or DEFAULT_FRONTEND_DIR
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return candidate
+    top_level = _BACKEND_ROOT / raw
+    if raw == DEFAULT_FRONTEND_DIR:
+        legacy = _BACKEND_ROOT / "app" / raw
+        if not top_level.is_dir() and legacy.is_dir():
+            return legacy
+        return top_level
+    return top_level
+
+
+def frontend_bundle_present(frontend_dir: str = DEFAULT_FRONTEND_DIR) -> bool:
+    """True when the resolved dir holds a usable bundle (has ``index.html``)."""
+    resolved = resolve_frontend_dir(frontend_dir)
+    return resolved.is_dir() and (resolved / "index.html").is_file()
 
 
 def _missing_settings(
@@ -164,6 +202,12 @@ class Settings(BaseSettings):
         default="http://localhost:3000,http://127.0.0.1:5500,http://localhost:5173",
         alias="CORS_ORIGINS",
     )
+
+    # Single-EB hosting (BL-031): serve the prebuilt Next.js static export
+    # from the same uvicorn process. FRONTEND_DIR resolves under backend/
+    # via resolve_frontend_dir(); absolute values are used as-is (tests).
+    serve_frontend: bool = Field(default=True, alias="SERVE_FRONTEND")
+    frontend_dir: str = Field(default=DEFAULT_FRONTEND_DIR, alias="FRONTEND_DIR")
 
     # Cognito (Sprint 02 / 12)
     cognito_region: str = Field(default="us-east-1", alias="COGNITO_REGION")
@@ -308,6 +352,11 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def frontend_dir_resolved(self) -> Path:
+        """Absolute path of the bundled frontend (see resolve_frontend_dir)."""
+        return resolve_frontend_dir(self.frontend_dir)
 
     @property
     def llm_fallback_model_list(self) -> List[str]:

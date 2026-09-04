@@ -1,0 +1,11 @@
+# BL-031: EB CLI (`eb deploy` from backend/) ignore list. The packaging
+# scripts (scripts/package-eb.*) use an explicit allow-list instead, but this
+# keeps direct `eb deploy` bundles small and free of local-only artefacts.
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+.next/
+*.zip
