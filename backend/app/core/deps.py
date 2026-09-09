@@ -33,7 +33,7 @@ from app.services.holdings_service import HoldingsService
 from app.services.market_service import MarketService
 from app.services.news_service import NewsService
 from app.services.asset_detail_service import AssetDetailService
-from app.services.llm.chat_service import ChatService
+from app.services.llm.chat_service import ChatConfigError, ChatService
 from app.services.llm.registry import ToolRegistry
 from app.services.portfolio_service import PortfolioService
 from app.services.snapshot_service import SnapshotService
@@ -859,11 +859,21 @@ def set_chat_idempotency_repo(repo: Optional[ChatIdempotencyRepo]) -> None:
 
 def get_chat_service() -> ChatService:
     from app.adapters.llm.fallback import FallbackProvider
-    from app.services.chat_settings_service import resolve_chat_runtime
+    from app.services.chat_settings_service import (
+        ChatSettingsValidationError,
+        resolve_chat_runtime,
+    )
 
     settings = get_settings()
     stored = get_settings_repo().get()
-    runtime = resolve_chat_runtime(settings, stored)
+    try:
+        runtime = resolve_chat_runtime(settings, stored)
+    except ChatSettingsValidationError as exc:
+        # Invalid effective settings (e.g. a non-:free default model while
+        # LLM_FREE_ONLY=true, as happened on EB with LLM_DEFAULT_MODEL=openrouter).
+        # Surface as ChatConfigError so api/chat maps it to 503 with detail
+        # instead of an unhandled 500.
+        raise ChatConfigError(f"Chat settings are invalid: {exc.errors}") from exc
     configured = get_llm_provider()
     provider: Optional[LlmProvider] = None
     if configured is not None:

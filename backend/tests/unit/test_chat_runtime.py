@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from app.adapters.memory.admin import InMemorySettingsRepo
 from app.adapters.llm.fallback import FallbackProvider
 from app.core import deps
 from app.core.config import Settings
 from app.ports.admin import SystemSettings
+from app.services.llm.chat_service import ChatConfigError
 from tests.fakes.llm import ScriptedLlmProvider
 
 
@@ -53,3 +56,20 @@ def test_chat_service_reads_a_fresh_settings_snapshot_per_request(monkeypatch) -
     assert second._runtime.top_p == 0.8
     assert second._runtime.max_tokens == 321
     assert isinstance(second._provider, FallbackProvider)
+
+
+def test_chat_service_maps_invalid_effective_settings_to_config_error(monkeypatch) -> None:
+    """Regression: EB shipped LLM_DEFAULT_MODEL=openrouter with FREE_ONLY=true.
+
+    resolve_chat_runtime rejects that combination; the dependency must surface
+    it as ChatConfigError (HTTP 503 via api/chat) instead of an unhandled 500.
+    """
+    runtime_settings = Settings(
+        LLM_DEFAULT_MODEL="openrouter",
+        LLM_FREE_ONLY=True,
+    )
+    monkeypatch.setattr(deps, "get_settings", lambda: runtime_settings)
+    monkeypatch.setattr(deps, "get_settings_repo", lambda: InMemorySettingsRepo())
+
+    with pytest.raises(ChatConfigError, match="Chat settings are invalid"):
+        deps.get_chat_service()

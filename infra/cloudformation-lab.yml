@@ -25,6 +25,24 @@ Parameters:
     Description: OAuth post-logout redirect URIs (local dev + CloudFront placeholder + EB placeholder).
     Default: "http://localhost:3000/,http://localhost:5173/,https://placeholder.cloudfront.net/,https://EB_PLACEHOLDER/"
 
+  GoogleClientId:
+    Type: String
+    Default: ""
+    Description: >
+      Google OAuth client ID for Cognito federated sign-in. Leave empty to skip
+      creating the Google identity provider (email-only login).
+
+  GoogleClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >
+      Google OAuth client secret. Never commit a real value; pass via
+      --parameter-overrides at deploy time.
+
+Conditions:
+  HasGoogleIdP: !Not [!Equals [!Ref GoogleClientId, ""]]
+
 Resources:
   DataBucket:
     Type: AWS::S3::Bucket
@@ -288,8 +306,29 @@ Resources:
         - Suffix: !Select [2, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]]]
       UserPoolId: !Ref UserPool
 
+  # Optional Google federated sign-in. Created only when GoogleClientId is
+  # supplied (secret passed via --parameter-overrides, never committed).
+  # Mirrors the live pool wiring: authorize_scopes openid/email/profile and
+  # attribute mapping email->email, username->sub.
+  UserPoolGoogleIdP:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogleIdP
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
+        username: sub
+
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
+    # Ignored when HasGoogleIdP is false (condition-excluded resource).
+    DependsOn: UserPoolGoogleIdP
     Properties:
       ClientName: openportfo-web
       UserPoolId: !Ref UserPool
@@ -298,8 +337,7 @@ Resources:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
         - ALLOW_USER_PASSWORD_AUTH
-      SupportedIdentityProviders:
-        - COGNITO
+      SupportedIdentityProviders: !If [HasGoogleIdP, [COGNITO, Google], [COGNITO]]
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows:
         - code
