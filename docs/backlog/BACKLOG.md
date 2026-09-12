@@ -1,6 +1,6 @@
 # Backlog board
 
-**Last updated:** 2026-08-24
+**Last updated:** 2026-09-12
 **How to use:** see `docs/backlog/README.md`
 
 **Orchestration:** PLAN `6cc30007` complete on `integration/backlog-batch-6cc30007` (**not merged to main**).  
@@ -38,6 +38,7 @@
 | BL-009 | Live SearchDialog | P1 | `done` | Eng | `features/BL-009-live-search-dialog.md` | Merged to integration |
 | BL-010 | BE: no markets catalog fixture fallback | P1 | `done` | Eng | `features/BL-010-no-markets-fixture.md` | Merged to integration |
 | BL-031 | Single-EB hosting (serve static frontend from Beanstalk API, no CloudFront) | P0 | `done` | Eng | `features/BL-031-single-eb-hosting.md` | SA design + implementor done, review `approve` 2026-09-04; branch `feat/BL-031-single-eb-hosting` — not merged |
+| BL-032 | Daily SES portfolio balance-change email (opt-in + 00:00 ICT jobs, email +15 min) | P1 | `ready` | — | `features/BL-032-daily-ses-balance-email.md` | Plan-only 2026-09-12; design `docs/orchestration/designs/BL-032-daily-ses-balance-email-design.md` |
 
 ---
 

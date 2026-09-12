@@ -446,6 +446,7 @@ def _mint_cognito_token(
     pool_id: str = "us-east-1_POOL",
     token_use: str = "id",
     exp_delta_seconds: int = 3600,
+    iat_skew_seconds: int = 0,
     email: str = "c@example.com",
     extra_headers: dict[str, str] | None = None,
 ) -> str:
@@ -459,7 +460,7 @@ def _mint_cognito_token(
         "iss": issuer,
         "aud": client_id,
         "exp": now + timedelta(seconds=exp_delta_seconds),
-        "iat": now,
+        "iat": now + timedelta(seconds=iat_skew_seconds),
     }
     headers = {"kid": "test-kid-1", "alg": "RS256"}
     if extra_headers:
@@ -529,7 +530,55 @@ def test_cognito_verifier_rejects_expired() -> None:
         client_id=client_id,
         region=region,
         pool_id=pool_id,
-        exp_delta_seconds=-10,
+        exp_delta_seconds=-300,
+    )
+    verifier = CognitoJwtVerifier(
+        region=region,
+        user_pool_id=pool_id,
+        app_client_id=client_id,
+        jwks_fetcher=lambda _url: {"keys": [jwk]},
+    )
+    with pytest.raises(UnauthorizedError):
+        verifier.verify(token)
+
+
+def test_cognito_verifier_tolerates_small_clock_skew() -> None:
+    """Fresh Cognito tokens must verify when IdP clock is slightly ahead.
+
+    Regression: with zero leeway, PyJWT rejects a just-minted token with
+    "The token is not yet valid (iat)" whenever the IdP clock runs ahead of
+    the API host clock (observed: local dev clock ~seconds behind Cognito).
+    """
+    private_key, jwk = _rsa_keypair()
+    region, pool_id, client_id = "us-east-1", "us-east-1_POOL", "app-client-id"
+    token = _mint_cognito_token(
+        private_key,
+        client_id=client_id,
+        region=region,
+        pool_id=pool_id,
+        iat_skew_seconds=30,
+    )
+    verifier = CognitoJwtVerifier(
+        region=region,
+        user_pool_id=pool_id,
+        app_client_id=client_id,
+        jwks_fetcher=lambda _url: {"keys": [jwk]},
+    )
+    claims = verifier.verify(token)
+    assert claims.sub == "cognito-sub-1"
+
+
+def test_cognito_verifier_rejects_far_future_iat() -> None:
+    """Leeway is bounded: a token minted far in the future still fails."""
+    private_key, jwk = _rsa_keypair()
+    region, pool_id, client_id = "us-east-1", "us-east-1_POOL", "app-client-id"
+    token = _mint_cognito_token(
+        private_key,
+        client_id=client_id,
+        region=region,
+        pool_id=pool_id,
+        exp_delta_seconds=7200,
+        iat_skew_seconds=3600,
     )
     verifier = CognitoJwtVerifier(
         region=region,

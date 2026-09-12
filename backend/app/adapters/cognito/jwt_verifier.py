@@ -29,6 +29,7 @@ class CognitoJwtVerifier:
         jwks_client: Optional[PyJWKClient] = None,
         jwks_fetcher: Optional[JwksFetcher] = None,
         jwks_cache_ttl: float = 300.0,
+        clock_skew_leeway: float = 120.0,
     ) -> None:
         if not region or not user_pool_id or not app_client_id:
             raise ValueError(
@@ -42,6 +43,11 @@ class CognitoJwtVerifier:
         self._jwks_fetcher = jwks_fetcher
         self._jwks_client = jwks_client
         self._jwks_cache_ttl = jwks_cache_ttl
+        # Tolerance (seconds) for IdP/API clock skew on iat/exp/nbf. Without
+        # this, a just-minted token is rejected with "not yet valid (iat)"
+        # whenever the Cognito clock runs slightly ahead of the API host
+        # (typical on dev machines without tight NTP sync).
+        self._clock_skew_leeway = clock_skew_leeway
         if self._jwks_client is None and self._jwks_fetcher is None:
             # Live JWKS client with short lifespan cache
             self._jwks_client = PyJWKClient(
@@ -62,6 +68,7 @@ class CognitoJwtVerifier:
                 algorithms=["RS256"],
                 audience=self.app_client_id,
                 issuer=self.issuer,
+                leeway=self._clock_skew_leeway,
                 options={
                     "require": ["exp", "iss", "sub"],
                     "verify_at_hash": False,
