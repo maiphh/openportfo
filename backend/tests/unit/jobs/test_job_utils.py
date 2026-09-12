@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.jobs.job_utils import sanitize_error
+from datetime import datetime, timezone
+
+from app.jobs.job_utils import ict_today, sanitize_error
 
 
 @pytest.mark.parametrize(
@@ -53,3 +55,13 @@ def test_sanitize_error_keeps_context_after_redacted_header() -> None:
     assert "request failed" in sanitized
     assert "request_id=42" in sanitized
     assert "\n" not in sanitized
+
+
+def test_ict_today_at_1700_utc_is_next_calendar_day() -> None:
+    now = datetime(2026, 9, 12, 17, 0, 0, tzinfo=timezone.utc)
+    assert ict_today(now) == "2026-09-13"
+
+
+def test_ict_today_morning_utc_matches_ict_date() -> None:
+    now = datetime(2026, 9, 12, 1, 30, 0, tzinfo=timezone.utc)
+    assert ict_today(now) == "2026-09-12"

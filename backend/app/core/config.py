@@ -249,6 +249,15 @@ class Settings(BaseSettings):
     # S3 (Sprint 07 / 12)
     data_bucket: str = Field(default="", alias="DATA_BUCKET")
 
+    # SES (BL-032 daily email). Verified identity; not required for news/price/snapshot.
+    ses_from_email: str = Field(default="", alias="SES_FROM_EMAIL")
+    # Gmail SMTP demo fallback (BL-034) when Academy SES is blocked.
+    smtp_host: str = Field(default="smtp.gmail.com", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, ge=1, le=65535, alias="SMTP_PORT")
+    smtp_username: str = Field(default="", alias="SMTP_USERNAME")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD", repr=False)
+    smtp_from: str = Field(default="", alias="SMTP_FROM")
+
     # Third-party (never commit real secrets)
     exchange_rate_api_key: str = Field(default="", alias="EXCHANGE_RATE_API_KEY", repr=False)
     coingecko_api_key: str = Field(default="", alias="COINGECKO_API_KEY", repr=False)

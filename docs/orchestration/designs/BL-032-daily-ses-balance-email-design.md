@@ -4,7 +4,7 @@
 |-------|-------|
 | **ID** | `BL-032` |
 | **Title** | User opt-in daily SES email: PnL, per-asset performance, holdings/watchlist news |
-| **Status** | `ready_for_implementation` |
+| **Status** | `implemented` |
 | **Author (SA)** | SA |
 | **Date** | 2026-09-12 |
 | **Complexity** | `simple` |
@@ -193,6 +193,7 @@ ASCII:
 | D11 | Per-asset performance | Every `payload.lines[]` row: PnL vs cost, PnL%, day Δ marketValue vs yesterday line keyed by `(assetType, symbol)` | Holdings only (snapshot scope) | Watchlist quotes from PriceCache |
 | D12 | Related news | Needles = holding symbols ∪ watchlist symbols. Match title or `item.symbols` (same `_matches` idea as news_service). Cap 5, newest first. **No** `newsKeywords`. **No** market-board fallback | Empty section if none | `NewsService.list_for_user` (dumps market news) |
 | D13 | Caps | Holdings: all lines up to **30**, then “and N more”. News: **5** | Keeps SES small | Full dump |
+| D14 | Snapshot prices | Snapshot **always** force-refreshes holdings+watchlist quotes once before per-user `get_portfolio(force_refresh=False)`, even if `jobs.price` is disabled. Does **not** write a price JobRun | Correct PnL if EventBridge fires snapshot before/without the price job | Same-minute sibling price Lambda only; per-user `force_refresh=True` (N extra provider calls) |
 
 ---
 
@@ -270,6 +271,7 @@ HTML: simple tables for holdings + an `<ul>` of news links. Same fields. No CSV/
 3. **Failing:** no today snapshot → 0 sends, `skipped_no_snapshot`.
 4. **Failing:** flags off → `status=skipped`, 0 sends.
 5. **Failing:** snapshot omitted date at 17:00 UTC is ICT date per §7 table (update existing UTC-today tests).
+5b. **Failing:** stale cache 40000 + fixture 65000 → snapshot payload uses 65000 and `price_calls >= 1`.
 6. **Failing:** news item matching holding/watchlist symbol appears in body; market-only / keywords-only item does **not**; zero matches still sends with empty news line.
 7. SES adapter unit test with stubbed boto3 client (or botocore stub).
 8. CFN: news+price+snapshot `cron(0 17 * * ? *)`; email `cron(15 17 * * ? *)`; delete `cron(0 1 * * ? *)` news rule; `ses:SendEmail` on `LambdaExecutionRole`.
@@ -297,6 +299,7 @@ HTML: simple tables for holdings + an `<ul>` of news links. Same fields. No CSV/
 - [ ] AC7: news section = holdings/watchlist matches only, max 5; empty news still sends.
 - [ ] AC8: ports isolation; SES IAM; fake in unit tests.
 - [ ] AC9: backend suite + frontend tests + Playwright settings; no LocalStack-as-SES.
+- [ ] AC10: snapshot warms prices (`force=True`) before portfolio math.
 
 ---
 

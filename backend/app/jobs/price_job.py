@@ -97,6 +97,88 @@ def _iter_quote_keys(ctx: JobContext):
             yield from user_keys(user_id)
 
 
+def refresh_price_cache(
+    ctx: JobContext, *, batch_size: int = PRICE_BATCH_SIZE
+) -> dict[str, object]:
+    """Force-refresh PriceCache for holdings + watchlist. Does not write JobRun.
+
+    Snapshot calls this before portfolio math so PnL is not computed from a
+    stale same-minute cache. The dedicated price job also uses this helper.
+    """
+
+    cap = max(1, int(batch_size))
+    quotes_count = 0
+    missing_count = 0
+    batches_attempted = 0
+    batches_succeeded = 0
+    batches_failed = 0
+    failures: list[str] = []
+    degraded_details: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    pending: dict[str, list[QuoteKey]] = {}
+
+    def process_batch(asset_type: str, batch: list[QuoteKey]) -> None:
+        nonlocal quotes_count, missing_count
+        nonlocal batches_attempted, batches_succeeded, batches_failed
+        batches_attempted += 1
+        label = f"batch {batches_attempted} ({asset_type}, {len(batch)} symbols)"
+        try:
+            quotes = ctx.market_service.get_quotes(batch, force=True)
+            quotes_count += len(quotes)
+            missing = _missing_quote_labels(batch, list(quotes))
+            missing_count += len(missing)
+            if missing:
+                remaining = MAX_ERROR_DETAILS - len(degraded_details)
+                if remaining > 0:
+                    degraded_details.extend(
+                        f"{label}: missing {symbol}"
+                        for symbol in missing[:remaining]
+                    )
+        except Exception as exc:  # noqa: BLE001 - isolate this batch
+            batches_failed += 1
+            if len(failures) < MAX_ERROR_DETAILS:
+                failures.append(f"{label}: {sanitize_error(exc)}")
+        else:
+            batches_succeeded += 1
+
+    for key in _iter_quote_keys(ctx):
+        asset_type = str(key.asset_type).strip().lower()
+        symbol = str(key.symbol).strip().upper()
+        identity = (asset_type, symbol)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        normalized = QuoteKey(
+            asset_type=asset_type,
+            symbol=symbol,
+            asset_id=key.asset_id,
+        )
+        batch = pending.setdefault(asset_type, [])
+        batch.append(normalized)
+        if len(batch) >= cap:
+            process_batch(asset_type, batch)
+            pending[asset_type] = []
+
+    for asset_type, batch in pending.items():
+        if batch:
+            process_batch(asset_type, batch)
+
+    details = failures + degraded_details
+    return {
+        "symbols": len(seen),
+        "quotes": quotes_count,
+        "quotes_missing": missing_count,
+        "batches": batches_attempted,
+        "batches_attempted": batches_attempted,
+        "batches_succeeded": batches_succeeded,
+        "batches_failed": batches_failed,
+        "attempted": batches_attempted,
+        "succeeded": batches_succeeded,
+        "failed": batches_failed,
+        "message": error_summary(details),
+    }
+
+
 def run_price_job(ctx: JobContext, *, batch_size: int = PRICE_BATCH_SIZE) -> JobRun:
     """Warm prices in bounded, independently reported work units.
 
@@ -107,7 +189,6 @@ def run_price_job(ctx: JobContext, *, batch_size: int = PRICE_BATCH_SIZE) -> Job
 
     started = datetime.now(timezone.utc)
     run_id = str(uuid4())
-    cap = max(1, int(batch_size))
 
     def persist(
         *,
@@ -124,7 +205,6 @@ def run_price_job(ctx: JobContext, *, batch_size: int = PRICE_BATCH_SIZE) -> Job
             message=message,
             counts=counts,
         )
-        # One aggregate audit result per invocation, after all batches settle.
         ctx.job_runs_repo.put(run)
         return run
 
@@ -149,96 +229,17 @@ def run_price_job(ctx: JobContext, *, batch_size: int = PRICE_BATCH_SIZE) -> Job
                 },
             )
 
-        quotes_count = 0
-        missing_count = 0
-        batches_attempted = 0
-        batches_succeeded = 0
-        batches_failed = 0
-        failures: list[str] = []
-        degraded_details: list[str] = []
-
-        # Keep one bounded pending batch per provider.  ``seen`` is the
-        # minimal cross-user index needed to prevent a holding and watchlist
-        # entry for the same asset from causing duplicate provider requests.
-        # No complete user/symbol collection is retained.
-        seen: set[tuple[str, str]] = set()
-        pending: dict[str, list[QuoteKey]] = {}
-
-        def process_batch(asset_type: str, batch: list[QuoteKey]) -> None:
-            nonlocal quotes_count, missing_count
-            nonlocal batches_attempted, batches_succeeded, batches_failed
-            batches_attempted += 1
-            label = f"batch {batches_attempted} ({asset_type}, {len(batch)} symbols)"
-            try:
-                quotes = ctx.market_service.get_quotes(batch, force=True)
-                quotes_count += len(quotes)
-                missing = _missing_quote_labels(batch, list(quotes))
-                missing_count += len(missing)
-                if missing:
-                    # A call that completed but did not resolve every request
-                    # is degraded rather than a transport failure.  Keep the
-                    # detail bounded; the full missing count remains truthful.
-                    remaining = MAX_ERROR_DETAILS - len(degraded_details)
-                    if remaining > 0:
-                        degraded_details.extend(
-                            f"{label}: missing {symbol}"
-                            for symbol in missing[:remaining]
-                        )
-            except Exception as exc:  # noqa: BLE001 - isolate this batch
-                batches_failed += 1
-                if len(failures) < MAX_ERROR_DETAILS:
-                    failures.append(f"{label}: {sanitize_error(exc)}")
-            else:
-                batches_succeeded += 1
-
-        for key in _iter_quote_keys(ctx):
-            asset_type = str(key.asset_type).strip().lower()
-            symbol = str(key.symbol).strip().upper()
-            identity = (asset_type, symbol)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            normalized = QuoteKey(
-                asset_type=asset_type,
-                symbol=symbol,
-                asset_id=key.asset_id,
-            )
-            batch = pending.setdefault(asset_type, [])
-            batch.append(normalized)
-            if len(batch) >= cap:
-                process_batch(asset_type, batch)
-                pending[asset_type] = []
-
-        # Flush the at-most-one partial batch for each provider.  Each
-        # external request remains no larger than the named cap.
-        for asset_type, batch in pending.items():
-            if batch:
-                process_batch(asset_type, batch)
-
-        details = failures + degraded_details
+        result = refresh_price_cache(ctx, batch_size=batch_size)
         status = aggregate_status(
-            batches_attempted,
-            batches_failed,
-            degraded=missing_count > 0,
+            int(result["batches_attempted"] or 0),
+            int(result["batches_failed"] or 0),
+            degraded=int(result["quotes_missing"] or 0) > 0,
         )
-        message = None
-        if details:
-            message = error_summary(details)
+        counts = {k: v for k, v in result.items() if k != "message"}
         return persist(
             status=status,
-            message=message,
-            counts={
-                "symbols": len(seen),
-                "quotes": quotes_count,
-                "quotes_missing": missing_count,
-                "batches": batches_attempted,
-                "batches_attempted": batches_attempted,
-                "batches_succeeded": batches_succeeded,
-                "batches_failed": batches_failed,
-                "attempted": batches_attempted,
-                "succeeded": batches_succeeded,
-                "failed": batches_failed,
-            },
+            message=str(result["message"]) if result.get("message") else None,
+            counts=counts,
         )
 
     except Exception as exc:
@@ -260,4 +261,4 @@ def run_price_job(ctx: JobContext, *, batch_size: int = PRICE_BATCH_SIZE) -> Job
         )
 
 
-__all__ = ["PRICE_BATCH_SIZE", "run_price_job"]
+__all__ = ["PRICE_BATCH_SIZE", "refresh_price_cache", "run_price_job"]

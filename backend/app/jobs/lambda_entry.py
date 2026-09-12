@@ -1,7 +1,7 @@
 """AWS Lambda entrypoint for scheduled jobs.
 
-Event schema (locked S10/S12 + BL-030 manual override):
-  {"job": "news"} | {"job": "price"} | {"job": "snapshot"}
+Event schema (locked S10/S12 + BL-030 + BL-032):
+  {"job": "news"} | {"job": "price"} | {"job": "snapshot"} | {"job": "email"}
   {"job": "snapshot", "date": "YYYY-MM-DD"}  # manual backfill via console/CLI
 
 Wire AWS adapters via env (set on Lambda configuration):

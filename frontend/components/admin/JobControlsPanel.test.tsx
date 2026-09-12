@@ -35,6 +35,7 @@ const translate = (key: string) =>
     "admin.jobs.title": "Job controls",
     "admin.jobs.subtitle": "Enable jobs",
     "admin.jobs.news": "News ingest",
+    "admin.jobs.email": "Daily portfolio email",
     "admin.jobs.fetchNow": "Fetch news now",
     "admin.jobs.fetching": "Fetching news…",
     "admin.jobs.fetchDone": "News run {status} (written={written}). Duplicates upserted.",
@@ -115,5 +116,25 @@ describe("JobControlsPanel", () => {
     expect(onNewsFetched).toHaveBeenCalledWith(
       expect.objectContaining({ status: "success", counts: { written: 3 } }),
     );
+  });
+
+  it("toggles daily portfolio email with jobs.email and emailEnabled", async () => {
+    mocks.updateAdminSettings.mockResolvedValue({
+      ...settings,
+      version: 2,
+      emailEnabled: true,
+      jobs: { ...settings.jobs, email: true },
+    });
+    render(<JobControlsPanel token="admin-token" />);
+    await waitFor(() => expect(screen.getByLabelText("Daily portfolio email")).toBeInTheDocument());
+    expect(screen.getByLabelText("Daily portfolio email")).not.toBeChecked();
+    fireEvent.click(screen.getByLabelText("Daily portfolio email"));
+    await waitFor(() =>
+      expect(mocks.updateAdminSettings).toHaveBeenCalledWith("admin-token", 1, {
+        emailEnabled: true,
+        jobs: { email: true },
+      }),
+    );
+    await waitFor(() => expect(screen.getByLabelText("Daily portfolio email")).toBeChecked());
   });
 });

@@ -394,17 +394,15 @@ Normalize currency for display using **stored FX rates** from [ExchangeRate-API]
 ## 5. Scheduled pipelines (cloud-native story)
 
 ```
-EventBridge Scheduler (cron)
-   │  07:30 ICT  price warm-cache (top symbols)
-   │  08:00 ICT  portfolio snapshot + email
-   │  09:00 ICT  RSS news ingest
+EventBridge Scheduler (cron, UTC)
+   │  17:00 UTC  (00:00 ICT)  news + price warm + snapshot
+   │  17:15 UTC  (00:15 ICT)  SES daily email
    ▼
 Lambda
-   ├─ fetch CoinGecko batch + vnstock batch
-   ├─ update PriceCache (DynamoDB) + S3 history
-   ├─ for each user: compute snapshot → DynamoDB + S3
-   ├─ match news keywords → News table
-   └─ SES send daily summary (opt-in users)
+   ├─ fetch RSS → keyword/symbol match → DynamoDB News
+   ├─ CoinGecko + vnstock force refresh → PriceCache
+   ├─ snapshot (after its own price warm) → DynamoDB + S3
+   └─ SES send daily summary (opt-in users; PnL + holdings + related news)
 ```
 
 This proves: **event-driven compute**, **not only request/response**.

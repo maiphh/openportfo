@@ -38,8 +38,9 @@
 | BL-009 | Live SearchDialog | P1 | `done` | Eng | `features/BL-009-live-search-dialog.md` | Merged to integration |
 | BL-010 | BE: no markets catalog fixture fallback | P1 | `done` | Eng | `features/BL-010-no-markets-fixture.md` | Merged to integration |
 | BL-031 | Single-EB hosting (serve static frontend from Beanstalk API, no CloudFront) | P0 | `done` | Eng | `features/BL-031-single-eb-hosting.md` | SA design + implementor done, review `approve` 2026-09-04; branch `feat/BL-031-single-eb-hosting` — not merged |
-| BL-032 | Daily SES email: PnL + per-asset + holdings/watchlist news (00:00 ICT jobs, email +15 min) | P1 | `ready` | — | `features/BL-032-daily-ses-balance-email.md` | Plan updated 2026-09-12; design `docs/orchestration/designs/BL-032-daily-ses-balance-email-design.md` |
+| BL-032 | Daily SES email: PnL + per-asset + holdings/watchlist news (00:00 ICT jobs, email +15 min) | P1 | `done` | Eng | `features/BL-032-daily-ses-balance-email.md` | SA `approve` 2026-09-12; branch `feat/BL-032-daily-ses-email` — not merged |
 | BL-033 | Unified asset search + portfolio chart hover/overflow | P1 | `done` | Eng | `features/BL-033-unified-search-chart-hover.md` | SA review `approve` 2026-09-12; unified modals + chart hover |
+| BL-034 | Gmail SMTP demo email when Academy SES is blocked | P1 | `done` | Eng | `features/BL-034-gmail-smtp-demo-email.md` | SA `approve` 2026-09-13; App Password still required for a live send |
 
 ---
 

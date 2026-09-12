@@ -74,6 +74,21 @@ describe("settings tabs", () => {
     expect(screen.queryByRole("button", { name: /EUR/ })).not.toBeInTheDocument();
   });
 
+  it("saves daily portfolio email opt-in", async () => {
+    const controller = auth();
+    mocks.updateUserSettings.mockResolvedValue({ ...profile, emailOptIn: true });
+    render(<GeneralTab auth={controller} />);
+    fireEvent.click(screen.getByLabelText("Receive daily portfolio email"));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.updateUserSettings).toHaveBeenCalledWith("token", {
+        newsKeywords: ["BTC"],
+        emailOptIn: true,
+        preferredCurrency: "USD",
+      }),
+    );
+  });
+
   it("keeps avatar edits local until save and sends canonical reset/style fields", async () => {
     const controller = auth();
     render(<AvatarTab auth={controller} />);

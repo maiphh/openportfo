@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator
+from datetime import datetime, timezone
 from typing import TypeVar
+from zoneinfo import ZoneInfo
+
+ICT_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 
 # Keep both an individual provider message and the aggregate audit message
@@ -54,6 +58,14 @@ _SECRET_RE = re.compile(
 )
 
 T = TypeVar("T")
+
+
+def ict_today(now: datetime | None = None) -> str:
+    """Return today's calendar date in Asia/Ho_Chi_Minh (YYYY-MM-DD)."""
+    dt = now or datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(ICT_TZ).date().isoformat()
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -154,11 +166,13 @@ def chunks(items: Iterable[T], size: int) -> Iterator[list[T]]:
 
 
 __all__ = [
+    "ICT_TZ",
     "MAX_ERROR_DETAIL_LENGTH",
     "MAX_ERROR_SUMMARY_LENGTH",
     "MAX_ERROR_DETAILS",
     "aggregate_status",
     "chunks",
     "error_summary",
+    "ict_today",
     "sanitize_error",
 ]

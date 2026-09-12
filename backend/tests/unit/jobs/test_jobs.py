@@ -25,6 +25,7 @@ from tests.fakes.admin import (
     InMemoryRssSourcesRepo,
     InMemorySettingsRepo,
 )
+from tests.fakes.email import InMemoryEmailSender
 from tests.fakes.fx import FakeExchangeRateClient, InMemoryExchangeRateRepo
 from tests.fakes.holdings import InMemoryHoldingsRepo
 from tests.fakes.market import FixtureCryptoMarketClient, FixtureStockMarketClient
@@ -60,6 +61,7 @@ def _ctx(
     snaps = InMemorySnapshotRepo()
     storage = InMemoryObjectStorage()
     users = InMemoryUserProfileRepo()
+    email = InMemoryEmailSender()
 
     ctx = JobContext(
         settings_repo=settings_repo,
@@ -74,6 +76,7 @@ def _ctx(
         snapshot_repo=snaps,
         object_storage=storage,
         user_profile_repo=users,
+        email_sender=email,
         fx_repo=fx_repo,
     )
     bag = {
@@ -94,6 +97,7 @@ def _ctx(
         "snaps": snaps,
         "storage": storage,
         "users": users,
+        "email": email,
     }
     return ctx, bag
 
@@ -843,3 +847,27 @@ def test_snapshot_date_override_invalid_raises_and_writes_nothing() -> None:
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
         handler({"job": "snapshot", "date": "2026-13-40"}, ctx)
     assert bag["storage"].list_keys(prefix="snapshots/userId=u1/") == []
+
+
+def test_snapshot_omitted_date_uses_ict_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.jobs.snapshot_job.ict_today", lambda: "2026-09-13")
+    ctx, bag = _ctx()
+    _seed_snapshot_user(bag, "u1")
+    run = run_snapshot_job(ctx)
+    assert run.counts["date"] == "2026-09-13"
+    assert bag["snaps"].get("u1", "2026-09-13") is not None
+
+
+def test_snapshot_warms_prices_before_pnl() -> None:
+    """BL-032 AC10: stale cache is replaced by a force fetch before snapshot."""
+    ctx, bag = _ctx()
+    _seed_snapshot_user(bag, "u1")
+    run = run_snapshot_job(ctx)
+    assert run.status == "success"
+    assert bag["crypto"].price_calls >= 1
+    record = bag["snaps"].get("u1", run.counts["date"])
+    assert record is not None
+    btc = next(line for line in record.payload["lines"] if line["symbol"] == "BTC")
+    assert Decimal(str(btc["marketValue"])) == Decimal("65000")
+    assert Decimal(str(btc["pnl"])) == Decimal("35000")
+

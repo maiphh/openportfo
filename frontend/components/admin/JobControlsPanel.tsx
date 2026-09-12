@@ -74,6 +74,41 @@ export default function JobControlsPanel({ token, onNewsFetched }: Props) {
     }
   };
 
+  const toggleEmail = async () => {
+    if (!settings || busy || fetching) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const nextEnabled = !(Boolean(settings.jobs.email) && settings.emailEnabled);
+    const optimistic = {
+      ...settings,
+      emailEnabled: nextEnabled,
+      jobs: { ...settings.jobs, email: nextEnabled },
+    };
+    setSettings(optimistic);
+    try {
+      const updated = await updateAdminSettings(token, settings.version, {
+        emailEnabled: nextEnabled,
+        jobs: { email: nextEnabled },
+      });
+      setSettings(updated);
+    } catch (reason: unknown) {
+      if (reason instanceof AuthApiError && reason.status === 409) {
+        setNotice(t("admin.jobs.conflict"));
+        try {
+          setSettings(await fetchAdminSettings(token));
+        } catch {
+          setError(t("admin.jobs.loadError"));
+        }
+      } else {
+        setSettings(settings);
+        setError(t("admin.jobs.saveError"));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const fetchNewsNow = async () => {
     if (fetching || busy) return;
     setFetching(true);
@@ -128,6 +163,16 @@ export default function JobControlsPanel({ token, onNewsFetched }: Props) {
               onChange={() => void toggleNews()}
             />
             {t("admin.jobs.news")}
+          </label>
+          <label className="flex items-center gap-3 text-sm text-gray-100">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.jobs.email) && settings.emailEnabled}
+              disabled={busy || fetching}
+              aria-label={t("admin.jobs.email")}
+              onChange={() => void toggleEmail()}
+            />
+            {t("admin.jobs.email")}
           </label>
           <button
             type="button"

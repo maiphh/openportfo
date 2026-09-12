@@ -15,6 +15,7 @@ from fastapi import Depends, Header, HTTPException, status
 from app.core.config import Settings, get_settings
 from app.ports.auth import TokenVerifier, UnauthorizedError
 from app.ports.admin import JobRunsRepo, RssSourcesRepo, SettingsRepo
+from app.ports.email import EmailSender
 from app.ports.fx import ExchangeRateClient, ExchangeRateRepo
 from app.ports.holdings import HoldingsRepo
 from app.ports.market import CryptoMarketClient, StockMarketClient
@@ -64,6 +65,7 @@ _job_runs_repo: Optional[JobRunsRepo] = None
 _snapshot_repo: Optional[SnapshotRepo] = None
 _snapshot_service: Optional[SnapshotService] = None
 _rss_fetcher: Optional[RssFetcher] = None
+_email_sender: Optional[EmailSender] = None
 _llm_provider: Optional[LlmProvider] = None
 _tool_registry: Optional[ToolRegistry] = None
 _chat_idempotency_repo: Optional[ChatIdempotencyRepo] = None
@@ -784,6 +786,46 @@ def set_rss_fetcher(fetcher: Optional[RssFetcher]) -> None:
     _rss_fetcher = fetcher
 
 
+def build_email_sender(settings: Optional[Settings] = None) -> EmailSender:
+    """Pick SMTP (lab demo), SES, or in-memory from settings. No process cache."""
+    s = settings or get_settings()
+    smtp_user = (s.smtp_username or "").strip()
+    smtp_password = (s.smtp_password or "").strip()
+    if smtp_user and smtp_password:
+        from app.adapters.smtp.sender import SmtpEmailSender
+
+        from_address = (s.smtp_from or s.ses_from_email or smtp_user).strip()
+        return SmtpEmailSender(
+            host=s.smtp_host or "smtp.gmail.com",
+            port=int(s.smtp_port or 587),
+            username=smtp_user,
+            password=smtp_password,
+            from_address=from_address,
+        )
+    if _use_aws(s) or (s.app_env or "").lower() == "prod":
+        from app.adapters.ses.sender import SesEmailSender
+
+        return SesEmailSender(
+            from_address=s.ses_from_email,
+            region=_region(s),
+        )
+    from app.adapters.memory.email import InMemoryEmailSender
+
+    return InMemoryEmailSender()
+
+
+def get_email_sender() -> EmailSender:
+    global _email_sender
+    if _email_sender is None:
+        _email_sender = build_email_sender()
+    return _email_sender
+
+
+def set_email_sender(sender: Optional[EmailSender]) -> None:
+    global _email_sender
+    _email_sender = sender
+
+
 # ---------------------------------------------------------------------------
 # LLM / Chat
 # ---------------------------------------------------------------------------
@@ -926,5 +968,6 @@ def build_job_context(settings: Optional[Settings] = None):
         snapshot_repo=get_snapshot_repo(),
         object_storage=get_object_storage(),
         user_profile_repo=get_user_profile_repo(),
+        email_sender=get_email_sender(),
         fx_repo=get_exchange_rate_repo(),
     )

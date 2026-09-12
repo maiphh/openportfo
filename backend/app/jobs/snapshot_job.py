@@ -13,8 +13,10 @@ from app.jobs.job_utils import (
     MAX_ERROR_SUMMARY_LENGTH,
     aggregate_status,
     error_summary,
+    ict_today,
     sanitize_error,
 )
+from app.jobs.price_job import refresh_price_cache
 from app.ports.admin import JobRun
 from app.ports.snapshots import SnapshotRecord
 from app.services.portfolio_service import PortfolioView
@@ -68,16 +70,16 @@ def snapshot_storage_key(user_id: str, date: str) -> str:
 
 
 def _resolve_snapshot_date(date_override: Any = None) -> str:
-    """Validate manual date override or fall back to UTC today.
+    """Validate manual date override or fall back to ICT today.
 
-    Accepts ``None``/empty (→ today) or a strict ``YYYY-MM-DD`` string.
+    Accepts ``None``/empty (→ Asia/Ho_Chi_Minh today) or a strict ``YYYY-MM-DD`` string.
     Raises ``ValueError`` with a ``YYYY-MM-DD`` message on invalid input.
     """
     if date_override is None:
-        return datetime.now(timezone.utc).date().isoformat()
+        return ict_today()
     raw = str(date_override).strip() if isinstance(date_override, str) else str(date_override or "").strip()
     if not raw:
-        return datetime.now(timezone.utc).date().isoformat()
+        return ict_today()
     try:
         parsed = date.fromisoformat(raw)
     except (ValueError, TypeError) as exc:
@@ -105,7 +107,7 @@ def run_snapshot_job(ctx: JobContext, date_override: Optional[str] = None) -> Jo
     Args:
         ctx: Job ports.
         date_override: Optional manual ``YYYY-MM-DD`` (Lambda console/CLI).
-            ``None``/empty → UTC today. Invalid → ``ValueError`` before writes.
+            ``None``/empty → Asia/Ho_Chi_Minh today. Invalid → ``ValueError`` before writes.
     """
 
     started = datetime.now(timezone.utc)
@@ -158,6 +160,11 @@ def run_snapshot_job(ctx: JobContext, date_override: Optional[str] = None) -> Jo
         users_failed = 0
         users_skipped = 0
         failures: list[str] = []
+        price_warm: dict[str, object] = {}
+        try:
+            price_warm = refresh_price_cache(ctx)
+        except Exception as exc:  # noqa: BLE001 - snapshot still uses last-good cache
+            failures.append(f"price warm: {sanitize_error(exc)}")
 
         for profile in _iter_profiles(ctx):
             users_total += 1
@@ -232,6 +239,9 @@ def run_snapshot_job(ctx: JobContext, date_override: Optional[str] = None) -> Jo
                 "succeeded": users_snapshotted,
                 "failed": users_failed,
                 "date": date,
+                "price_warm_symbols": int(price_warm.get("symbols") or 0),
+                "price_warm_quotes": int(price_warm.get("quotes") or 0),
+                "price_warm_failed": int(price_warm.get("failed") or 0),
             },
         )
     except Exception as exc:

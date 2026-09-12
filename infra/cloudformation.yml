@@ -514,17 +514,23 @@ Resources:
                 Resource:
                   - !GetAtt DataBucket.Arn
                   - !Sub "${DataBucket.Arn}/*"
+              - Sid: SesSend
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: "*"
 
   # ---------------------------------------------------------------------------
-  # EventBridge — news / price / snapshot ONLY (no FX)
+  # EventBridge — news / price / snapshot at 00:00 ICT (17:00 UTC); email +15 min
   # ---------------------------------------------------------------------------
   NewsScheduleRule:
     Type: AWS::Events::Rule
     Condition: EnableSchedules
     Properties:
       Name: !Sub "${ProjectPrefix}-job-news"
-      Description: Daily news ingest (no FX)
-      ScheduleExpression: "cron(0 1 * * ? *)"
+      Description: Daily news ingest at 00:00 ICT (no FX)
+      ScheduleExpression: "cron(0 17 * * ? *)"
       State: ENABLED
       Targets:
         - Id: NewsJob
@@ -536,8 +542,8 @@ Resources:
     Condition: EnableSchedules
     Properties:
       Name: !Sub "${ProjectPrefix}-job-price"
-      Description: Price cache warm (no FX)
-      ScheduleExpression: "cron(15 1 * * ? *)"
+      Description: Price cache warm at 00:00 ICT (no FX)
+      ScheduleExpression: "cron(0 17 * * ? *)"
       State: ENABLED
       Targets:
         - Id: PriceJob
@@ -549,13 +555,26 @@ Resources:
     Condition: EnableSchedules
     Properties:
       Name: !Sub "${ProjectPrefix}-job-snapshot"
-      Description: Portfolio snapshot (no FX)
-      ScheduleExpression: "cron(30 1 * * ? *)"
+      Description: Portfolio snapshot at 00:00 ICT (no FX)
+      ScheduleExpression: "cron(0 17 * * ? *)"
       State: ENABLED
       Targets:
         - Id: SnapshotJob
           Arn: !Ref JobsLambdaArn
           Input: '{"job":"snapshot"}'
+
+  EmailScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: EnableSchedules
+    Properties:
+      Name: !Sub "${ProjectPrefix}-job-email"
+      Description: Daily portfolio email at 00:15 ICT (after snapshot)
+      ScheduleExpression: "cron(15 17 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Id: EmailJob
+          Arn: !Ref JobsLambdaArn
+          Input: '{"job":"email"}'
 
   LambdaInvokePermissionNews:
     Type: AWS::Lambda::Permission
@@ -583,6 +602,15 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt SnapshotScheduleRule.Arn
+
+  LambdaInvokePermissionEmail:
+    Type: AWS::Lambda::Permission
+    Condition: EnableSchedules
+    Properties:
+      FunctionName: !Ref JobsLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt EmailScheduleRule.Arn
 
 Outputs:
   DataBucketName:

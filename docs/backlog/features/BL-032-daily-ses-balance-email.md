@@ -5,14 +5,14 @@
 | **ID** | `BL-032` |
 | **Title** | User opt-in daily SES email: PnL, per-asset performance, holdings/watchlist news |
 | **Priority** | `P1` |
-| **Status** | `ready` |
+| **Status** | `done` |
 | **Owner (BA)** | Orchestrator |
-| **Owner (Eng)** | — |
+| **Owner (Eng)** | Eng |
 | **Requested by** | Stakeholder |
 | **Related PRD / sprint** | FR-J5, FR-J7, S1; sprint-13-stretch; snapshot job FR-J4 / BL-030 |
 | **Created** | 2026-09-12 |
 | **Ready date** | 2026-09-12 |
-| **Done date** | |
+| **Done date** | 2026-09-12 |
 
 ---
 
@@ -43,6 +43,7 @@ As a **signed-in investor**, I want **to turn daily portfolio emails on or off**
   - **Each holding** from today’s snapshot: PnL vs cost, day change vs yesterday’s matching line.
   - **News related to that user’s holdings and watchlist symbols** (not general market dump; not `newsKeywords`-only).
 - Snapshot **calendar date** for omitted `date` becomes **Asia/Ho_Chi_Minh today** (required at 17:00 UTC so we do not overwrite yesterday’s UTC-dated row).
+- Snapshot job **force-refreshes prices before** computing each day’s PnL (do not rely on a same-minute sibling price Lambda).
 - If today’s snapshot is missing, **skip that user** (second race guard after the 15-minute delay).
 - IAM `ses:SendEmail` on the jobs Lambda role (full CFN). Lab: document attach to LabRole.
 - Unit tests with a recording fake sender. Playwright: settings opt-in round-trip only.
@@ -110,6 +111,7 @@ As a **signed-in investor**, I want **to turn daily portfolio emails on or off**
 - [ ] **AC7** Email news section includes only items matching **that user’s holding or watchlist symbols** (max 5). Unrelated / keywords-only / general market fallback are excluded. Empty news still sends the email.
 - [ ] **AC8** Jobs stay ports-only (`boto3` only in SES adapter). Lambda IAM includes SES. Fake sender in unit tests.
 - [ ] **AC9** Focused pytest + full backend suite; frontend Vitest for copy/toggle; Playwright settings save; LocalStack probe **not** used as SES proof.
+- [ ] **AC10** Snapshot warms holding/watchlist prices (`get_quotes(..., force=True)`) **before** `get_portfolio`, so PnL uses fresh quotes even if the separate price job has not finished or is disabled.
 
 ---
 
@@ -169,6 +171,6 @@ As a **signed-in investor**, I want **to turn daily portfolio emails on or off**
 
 ## 11. Implementation notes (Eng fills after `ready`)
 
-- Approach: see `docs/orchestration/designs/BL-032-daily-ses-balance-email-design.md`
-- PR / branch:
-- Verification:
+- Approach: EventBridge 00:00 ICT news/price/snapshot; 00:15 email; snapshot `refresh_price_cache` then portfolio; SES via `EmailSender` port
+- PR / branch: `feat/BL-032-daily-ses-email`
+- Verification: `.workflows/verify.ps1 -Profile full` — see walkthrough; 4 pre-existing FX failures only

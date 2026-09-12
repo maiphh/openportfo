@@ -320,7 +320,7 @@ Totals in D:
 | FR-J4 | Snapshot job | If enabled: per-user portfolio snapshot → DynamoDB `PortfolioSnapshot` + S3 partition path |
 | FR-J5 | Email job | **Stretch (D5):** only if SES is implemented; respect `emailEnabled`, user `emailOptIn`, and **time window** (D4) |
 | FR-J6 | No public HTTP | Lambda is **not** user-facing API (no requirement for browser → Lambda) |
-| FR-J7 | Email time (D4) | EventBridge runs Lambda on a **fixed frequent schedule** (e.g. hourly). Lambda reads `emailTime` + `timezone` from SystemSettings and sends only when current local time falls in the configured window (and once per user per day) |
+| FR-J7 | Email time (BL-032) | EventBridge runs news/price/snapshot at **00:00 ICT** and email at **00:15 ICT** (fixed UTC crons). Lambda does not poll `emailTime`. |
 
 ### 8.10 Analytics (Athena)
 
@@ -590,7 +590,7 @@ FastAPI routers and domain services **must not** embed ad-hoc `boto3` calls outs
 | **D1** | Auth | **Amazon Cognito User Pool** — email/password + **Google federated IdP**; API auth via **Cognito JWT** (`Authorization: Bearer <id_token>`); FastAPI verifies JWKS. *(Revised from custom app JWT.)* |
 | **D2** | API Gateway | **Not used** — public FastAPI on Elastic Beanstalk |
 | **D3** | Multi-currency / FX | **ExchangeRate-API** for USD↔VND (and stored rate map). **Admin on-demand Refresh only** — no auto/scheduled FX requests. Portfolio uses **last good stored rate**; on refresh failure **keep old rate**. Native line currencies remain USD (crypto) / VND (stocks). |
-| **D4** | Email time enforcement | **Lambda on fixed schedule** (e.g. hourly) + match admin `emailTime`/`timezone` window |
+| **D4** | Email time enforcement | **Fixed EventBridge crons** — news/price/snapshot at **00:00 ICT** (`cron(0 17 * * ? *)`); email at **00:15 ICT** (`cron(15 17 * * ? *)`). Admin `emailTime` is unused for send. *(Revised from hourly Lambda + window match — BL-032.)* |
 | **D5** | SES daily email | **Stretch only** — MVP still ships snapshot + news jobs |
 
 ### 17.2 Defaults for remaining minor items (change if you disagree)

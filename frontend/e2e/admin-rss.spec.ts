@@ -134,7 +134,8 @@ async function stubAdminApis(page: Page) {
     if (request.method() === "PUT") {
       const body = request.postDataJSON() as {
         version?: number;
-        jobs?: { news?: boolean };
+        jobs?: { news?: boolean; email?: boolean };
+        emailEnabled?: boolean;
       };
       if (body.version !== settings.version) {
         await route.fulfill({
@@ -147,9 +148,11 @@ async function stubAdminApis(page: Page) {
       settings = {
         ...settings,
         version: settings.version + 1,
+        emailEnabled: body.emailEnabled ?? settings.emailEnabled,
         jobs: {
           ...settings.jobs,
           news: body.jobs?.news ?? settings.jobs.news,
+          email: body.jobs?.email ?? settings.jobs.email,
         },
       };
       await route.fulfill({
@@ -210,6 +213,9 @@ test("admin can manage RSS sources and toggle the news job", async ({ page }) =>
 
   await page.getByLabel("News ingest").click();
   await expect(page.getByLabel("News ingest")).toBeChecked();
+
+  await page.getByLabel("Daily portfolio email").click();
+  await expect(page.getByLabel("Daily portfolio email")).toBeChecked();
 
   await expect(page.getByRole("cell", { name: "success" })).toBeVisible();
 });

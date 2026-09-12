@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.ports.admin import JobRunsRepo, RssSourcesRepo, SettingsRepo
+from app.ports.email import EmailSender
 from app.ports.fx import ExchangeRateRepo
 from app.ports.holdings import HoldingsRepo
 from app.ports.news import NewsRepo
@@ -34,6 +35,7 @@ class JobContext:
     snapshot_repo: SnapshotRepo
     object_storage: ObjectStorage
     user_profile_repo: UserProfileRepo
+    email_sender: EmailSender
     fx_repo: Optional[ExchangeRateRepo] = None  # get only
 
 
