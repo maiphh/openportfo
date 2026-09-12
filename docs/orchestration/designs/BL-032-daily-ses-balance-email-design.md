@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **ID** | `BL-032` |
-| **Title** | User opt-in daily email of portfolio balance change |
+| **Title** | User opt-in daily SES email: PnL, per-asset performance, holdings/watchlist news |
 | **Status** | `ready_for_implementation` |
 | **Author (SA)** | SA |
 | **Date** | 2026-09-12 |
@@ -19,8 +19,9 @@
 Users already persist `emailOptIn` and admins already store `emailEnabled` / `jobs.email`, but Lambda only dispatches `news|price|snapshot`. Stakeholder wants:
 
 1. A **user switch** for receiving the daily update (reuse `emailOptIn`, default off).
-2. **Daily crons at 00:00 UTC+7** for the portfolio pipeline.
-3. **Email 15 minutes later** so it cannot run before snapshots exist.
+2. **Daily crons at 00:00 UTC+7** for **news, price, and snapshot**.
+3. **Email 15 minutes later** so it cannot run before snapshot **and** news writes exist.
+4. Email content: **portfolio PnL**, **each holding’s performance**, **news related to holdings and watchlists**.
 
 Locked stack constraints:
 
@@ -49,6 +50,7 @@ Locked stack constraints:
 | Adapters | `backend/app/adapters/ses/sender.py` **NEW**; tests/fakes recording sender | new |
 | Jobs | `backend/app/jobs/email_job.py` **NEW**; `handler.py`; `context.py`; `lambda_entry.py` | new/modify |
 | Jobs | `backend/app/jobs/snapshot_job.py` default date → ICT today | modify |
+| Jobs | `backend/app/jobs/news_job.py` | **reuse** (cron only; no ingest rewrite) |
 | Core | `backend/app/core/config.py` `SES_FROM_EMAIL`; `deps.py` `build_job_context` + `get_email_sender` | modify |
 | Infra | `infra/cloudformation.yml` EventBridge email rule, SES IAM, cron times | modify |
 | Infra | `infra/cloudformation-lab.yml` | **no IAM/EventBridge** (lab cannot CreateRole); runbook note only |
@@ -80,14 +82,16 @@ Vietnam (`Asia/Ho_Chi_Minh`) has **no DST**. 00:00 ICT = 17:00 UTC every day.
 
 | Job | ICT | UTC cron | Input |
 |-----|-----|----------|-------|
+| news | 00:00 | `cron(0 17 * * ? *)` | `{"job":"news"}` |
 | price | 00:00 | `cron(0 17 * * ? *)` | `{"job":"price"}` |
 | snapshot | 00:00 | `cron(0 17 * * ? *)` | `{"job":"snapshot"}` |
 | email | 00:15 | `cron(15 17 * * ? *)` | `{"job":"email"}` |
-| news | 08:00 (unchanged) | `cron(0 1 * * ? *)` | `{"job":"news"}` |
+
+Remove the current news rule `cron(0 1 * * ? *)` (08:00 ICT) from `infra/cloudformation.yml`. Do **not** leave two news schedules.
 
 Do **not** sleep 15 minutes inside Lambda. The delay is a **second rule**.
 
-Same-minute price vs snapshot may overlap (cache-first snapshot). That is accepted; the stakeholder race is **email vs snapshot**, not price vs snapshot.
+Same-minute news/price/snapshot may overlap. Accepted: email waits 15 minutes. Extra guard: skip user if today’s **snapshot** is missing. Missing news is **not** a skip — the news section is empty.
 
 ### 3.4 Config
 
@@ -100,11 +104,21 @@ Same-minute price vs snapshot may overlap (cache-first snapshot). That is accept
 
 ```
 Users: email, emailOptIn (existing)
-Snapshots: PK userId  SK SNAP#YYYY-MM-DD  payload.totalsByCurrency / lines (existing)
-JobRuns: job_type=email  counts={users_*, sent, skipped_opt_out, skipped_no_email, skipped_no_snapshot, first_snapshot, failed}
+Holdings / Watchlist: symbols for news needles (existing)
+Snapshots: PK userId  SK SNAP#YYYY-MM-DD
+  payload.totalsByCurrency.{ccy}.{marketValue,costBasis,pnl}
+  payload.lines[].{symbol,assetType,qty,currency,marketValue,costBasis,pnl,missingPrice}
+News: existing items with title, url, source, symbols[], date
+JobRuns: job_type=email  counts={users_*, sent, skipped_opt_out, skipped_no_email, skipped_no_snapshot, first_snapshot, news_attached, failed}
 ```
 
-Email **does not** write snapshots. It `get(userId, today)` and `get(userId, yesterday)`.
+Email **does not** write snapshots or news. It:
+
+1. `snapshot_repo.get(userId, today)` / `get(userId, yesterday)`
+2. `holdings_repo.list` + `watchlist_repo.list` → symbol needles
+3. `news_repo.list_recent` → filter to those needles → cap **5** newest
+
+Do **not** call `NewsService.list_for_user`: that falls back to the full market board when nothing matches, which would dump unrelated headlines into SES.
 
 ### 3.6 `EmailSender` port
 
@@ -130,6 +144,7 @@ Recording fake: append messages to `sent: list[EmailMessage]`; optional `fail_fo
 ## 4. Sequence (happy path)
 
 ```
+00:00 ICT  EventBridge ──► Lambda {"job":"news"}
 00:00 ICT  EventBridge ──► Lambda {"job":"price"}
 00:00 ICT  EventBridge ──► Lambda {"job":"snapshot"}
               snapshot date = ICT today
@@ -143,7 +158,9 @@ Recording fake: append messages to `sent: list[EmailMessage]`; optional `fail_fo
                 today = snapshot_repo.get(id, ict_today)
                 skip if today is None
                 yesterday = snapshot_repo.get(id, ict_today - 1 day)
-                EmailSender.send(...)
+                needles = holding symbols ∪ watchlist symbols
+                news = list_recent filtered by needles, max 5
+                EmailSender.send(totals + per-line PnL + news)
               JobRuns.put(email)
 ```
 
@@ -152,8 +169,8 @@ ASCII:
 ```
 1. User saves emailOptIn=true (Cognito email already on profile).
 2. Admin enables daily email (jobs.email + emailEnabled).
-3. Midnight ICT: price warm-cache + snapshot for ICT calendar date.
-4. 00:15 ICT: email job reads snapshots only; SES to opt-in users.
+3. Midnight ICT: news ingest + price warm-cache + snapshot for ICT calendar date.
+4. 00:15 ICT: email job reads snapshots + News table; SES to opt-in users.
 5. User sets emailOptIn=false → later crons skip (no SES).
 ```
 
@@ -166,13 +183,16 @@ ASCII:
 | D1 | Opt-in storage | Reuse `UserProfile.email_opt_in` / `emailOptIn`; default **false** | No schema change; Settings checkbox is the switch | New table / Cognito custom attr |
 | D2 | Clock | Fixed EventBridge crons in **UTC** for ICT midnight / +15 min | Simple, no hourly poll, matches stakeholder | PRD D4 hourly + `emailTime` window; `time.sleep(900)` in Lambda |
 | D3 | Snapshot date at 17:00 UTC | Default omitted date = **`Asia/Ho_Chi_Minh` today** (`zoneinfo`) | Avoids writing `SNAP#UTC-yesterday` and clobbering the previous ICT day. BL-030 literal `date` override unchanged | Keep UTC today (wrong at 00:00 ICT) |
-| D4 | Race | 15 min EventBridge gap **plus** skip if today’s snapshot missing | Email never live-recomputes portfolio | Wait/retry loop; email calling `get_portfolio` |
-| D5 | Delta | `today.totalsByCurrency[ccy].marketValue` − yesterday same key; `%` = delta/yesterday when yesterday ≠ 0 | “Balance change” without new math module | Athena query; 24h price API |
-| D6 | Currency | `profile.preferred_currency` or settings default or `USD`; if that key missing, first totals key | Matches dashboard preference | Always USD |
+| D4 | Race | 15 min EventBridge gap **plus** skip if today’s snapshot missing | Email never live-recomputes portfolio or re-fetches RSS | Wait/retry loop; email calling `get_portfolio` |
+| D5 | Totals delta | `today.totalsByCurrency[ccy].marketValue` − yesterday same key; `%` when yesterday ≠ 0. PnL = `totals.pnl` (vs cost) | Balance + PnL from stored snapshot | Athena; live quotes |
+| D6 | Currency | `profile.preferred_currency` or settings default or `USD`; if that key missing, first totals key. Per-line keep native `line.currency` | Totals in display ccy; lines stay as snapshotted | Convert every line in the job (needs FX) |
 | D7 | Admin flags | Send only if `jobs_email` **and** `email_enabled`; one checkbox sets both | Matches existing fields without two confusing switches | Ignore `emailEnabled` |
-| D8 | News cron | Leave 08:00 ICT | Smaller blast radius | Move all jobs to midnight |
-| D9 | Idempotency | Per-user isolate; do not add a new sent-log table. Document rare SES duplicate on Lambda retry | Fits student scale | Dynamo `EMAIL#{user}#{date}` conditional put (can add later) |
+| D8 | News cron | **Move news to 00:00 ICT** with price+snapshot; delete 08:00 ICT rule | Email at 00:15 can include tonight’s ingest | Keep 08:00 ICT (rejected by stakeholder) |
+| D9 | Idempotency | Per-user isolate; no sent-log table. Rare SES duplicate on retry OK for demo | Fits student scale | Dynamo `EMAIL#{user}#{date}` |
 | D10 | From address | `SES_FROM_EMAIL` env on Lambda | Fail email job if empty when flags are on | Hardcoded address in repo |
+| D11 | Per-asset performance | Every `payload.lines[]` row: PnL vs cost, PnL%, day Δ marketValue vs yesterday line keyed by `(assetType, symbol)` | Holdings only (snapshot scope) | Watchlist quotes from PriceCache |
+| D12 | Related news | Needles = holding symbols ∪ watchlist symbols. Match title or `item.symbols` (same `_matches` idea as news_service). Cap 5, newest first. **No** `newsKeywords`. **No** market-board fallback | Empty section if none | `NewsService.list_for_user` (dumps market news) |
+| D13 | Caps | Holdings: all lines up to **30**, then “and N more”. News: **5** | Keeps SES small | Full dump |
 
 ---
 
@@ -195,7 +215,7 @@ SES: [SendEmail](https://docs.aws.amazon.com/ses/latest/APIReference/API_SendEma
 
 **Allowed:** listed surfaces in §2; `docs/prd/OpenPortfo_PRD.md` D4 one-line update; `docs/architecture-design.md` §5 schedule times.
 
-**Must NOT:** API Gateway; FastAPI route that sends email; FX job; news ingest rewrite; commit secrets; deploy/mutate real AWS without a later explicit instruction.
+**Must NOT:** API Gateway; FastAPI route that sends email; FX job; RSS ingest/NLP rewrite; `NewsService.list_for_user` fallback in the email path; commit secrets; deploy/mutate real AWS without a later explicit instruction.
 
 ### Snapshot date helper
 
@@ -215,44 +235,68 @@ Portfolio ({ccy}) on {ict_today}
 
 Value: {today_value}
 Yesterday: {yesterday_value or "n/a"}
-Change: {delta} ({pct}%)   # or "n/a" on first day
-PnL vs cost: {pnl}
+Day change: {delta} ({pct}%)   # or "n/a" on first day
+PnL vs cost: {pnl} ({pnl_pct}%)
+
+Holdings
+SYMBOL  TYPE    VALUE     PnL vs cost      Day change
+BTC     crypto  12,000    +800 (+7.1%)     +120 (+1.0%)
+VNM     stock   5,000,000 -200,000 (-3.8%) n/a
+… up to 30 lines, then "and N more"
+
+Related news
+- {title} ({source}) — {url}
+  matched: BTC
+… up to 5 items, or "No related news today."
 
 Turn this off any time in Settings → Receive daily portfolio email.
 ```
 
-Keep HTML as a simple `<pre>`/`<p>` mirror of the same fields. No holdings dump (size / SES sandbox).
+HTML: simple tables for holdings + an `<ul>` of news links. Same fields. No CSV/PDF attachment.
+
+**Per-asset math (from snapshot lines only):**
+
+- Key: `(assetType, symbol)` case-insensitive.
+- PnL vs cost = `line.pnl`; `%` = `pnl / costBasis` when `costBasis != 0`.
+- Day change = today’s `marketValue` − yesterday’s same key; `%` vs yesterday value when ≠ 0.
+- `missingPrice=true` → show `n/a` for value/PnL/day change on that row.
+
+**News match:** `needle.casefold()` in `title.casefold()` **or** in `item.symbols` (casefold). Needles from current holdings ∪ watchlist, not from yesterday’s snapshot and not from `newsKeywords`.
 
 ### TDD order
 
-1. **Failing:** `handler({"job":"email"})` with `jobs.email=True`, `emailEnabled=True`, user `email_opt_in=True`, snapshots for today+yesterday → fake sender has 1 message with delta; opt-out user has 0.
+1. **Failing:** `handler({"job":"email"})` with flags on, opt-in user, today+yesterday snapshots → fake sender 1 message containing **portfolio PnL** and **each holding line**; opt-out user 0.
 2. Implement `EmailSender` fake + `run_email_job` + handler branch (no boto3).
 3. **Failing:** no today snapshot → 0 sends, `skipped_no_snapshot`.
 4. **Failing:** flags off → `status=skipped`, 0 sends.
-5. **Failing:** snapshot omitted date at 17:00 UTC is ICT tomorrow/today as §7 table (update existing UTC-today tests).
-6. SES adapter unit test with stubbed boto3 client (or botocore stub).
-7. CFN: crons + `EmailScheduleRule` + `ses:SendEmail` on `LambdaExecutionRole`.
-8. Frontend copy + admin toggle + Vitest; Playwright settings checkbox save.
-9. Docs: lambda README invoke `{"job":"email"}`; SES sandbox verify-from/to runbook note.
+5. **Failing:** snapshot omitted date at 17:00 UTC is ICT date per §7 table (update existing UTC-today tests).
+6. **Failing:** news item matching holding/watchlist symbol appears in body; market-only / keywords-only item does **not**; zero matches still sends with empty news line.
+7. SES adapter unit test with stubbed boto3 client (or botocore stub).
+8. CFN: news+price+snapshot `cron(0 17 * * ? *)`; email `cron(15 17 * * ? *)`; delete `cron(0 1 * * ? *)` news rule; `ses:SendEmail` on `LambdaExecutionRole`.
+9. Frontend copy + admin toggle + Vitest; Playwright settings checkbox save.
+10. Docs: lambda README invoke `{"job":"email"}`; SES sandbox verify-from/to runbook note.
 
 ### Out-of-scope guardrails
 
 - No `time.sleep` for the 15-minute gap.
-- No `get_portfolio` inside the email job.
+- No `get_portfolio` or RSS fetch inside the email job.
 - No SES in `validate_job_runtime`.
 - Do not use LocalStack as proof SES works.
+- Do not use `NewsService.list_for_user` (market fallback).
 
 ---
 
 ## 8. Acceptance criteria checklist (copy from feature file)
 
 - [ ] AC1: `emailOptIn` switch; default off; off users never sent.
-- [ ] AC2: price+snapshot `cron(0 17 * * ? *)`; email `cron(15 17 * * ? *)`; news unchanged.
+- [ ] AC2: news+price+snapshot `cron(0 17 * * ? *)`; email `cron(15 17 * * ? *)`; old 08:00 ICT news rule gone.
 - [ ] AC3: omitted snapshot date = ICT today.
-- [ ] AC4: email job uses snapshots for balance change; respects admin flags + opt-in.
+- [ ] AC4: email job uses snapshots; respects admin flags + opt-in.
 - [ ] AC5: missing today snapshot → skip user, no send.
-- [ ] AC6: ports isolation; SES IAM; fake in unit tests.
-- [ ] AC7: backend suite + frontend tests + Playwright settings; no LocalStack-as-SES.
+- [ ] AC6: body has portfolio PnL + per-holding performance.
+- [ ] AC7: news section = holdings/watchlist matches only, max 5; empty news still sends.
+- [ ] AC8: ports isolation; SES IAM; fake in unit tests.
+- [ ] AC9: backend suite + frontend tests + Playwright settings; no LocalStack-as-SES.
 
 ---
 
@@ -261,8 +305,10 @@ Keep HTML as a simple `<pre>`/`<p>` mirror of the same fields. No holdings dump 
 | Risk | Mitigation |
 |------|------------|
 | SES sandbox rejects unverified `To` | Runbook: verify `SES_FROM_EMAIL` and demo recipient; JobRun `failed` + message, other users continue |
-| 00:00 price/snapshot overlap → slightly stale print | Accepted; email still 15 min later |
+| 00:00 news/price/snapshot overlap | Accepted; email still 15 min later |
+| RSS slow → empty news section | Accepted; do not block send |
 | UTC snapshot date clobber | D3 ICT calendar date |
+| `list_for_user` dumping market news | D12 dedicated filter |
 | Lab CFN cannot create IAM/EventBridge | Document LabRole SES attach + console rules; full `cloudformation.yml` has the IaC |
 | Assignment marks | SES is 0 rubric marks; still a demo-strong stretch |
 | Lambda retry duplicate mail | D9; acceptable for demo volume |
@@ -275,4 +321,4 @@ Keep HTML as a simple `<pre>`/`<p>` mirror of the same fields. No holdings dump 
 
 ---
 
-**SA sign-off:** `_ready_for_implementation_` when Eng follows TDD order and AC1–AC7 have executable evidence. Do not implement until the stakeholder says to build it (this request was plan-only).
+**SA sign-off:** `_ready_for_implementation_` when Eng follows TDD order and AC1–AC9 have executable evidence. Do not implement until the stakeholder says to build it (this request was plan-only).

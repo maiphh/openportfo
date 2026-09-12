@@ -83,16 +83,18 @@ export default function PortfolioValueChart({ token }: { token: string | null })
   const axis = PERFORMANCE_RANGE_AXIS[range];
 
   return (
-    <section className="surface-card p-4">
+    <section className="surface-card min-w-0 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-sm font-medium text-gray-200">Portfolio value</h2>
           {last != null && !loading && !error && series.length >= 2 ? (
-            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-gray-100">
-              {formatPrice(last)}{" "}
-              <span className="text-sm font-medium text-gray-500">{currency}</span>
+            <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 break-words text-2xl font-semibold tracking-tight tabular-nums text-gray-100">
+              <span className="break-all">
+                {formatPrice(last)}{" "}
+                <span className="text-sm font-medium text-gray-500">{currency}</span>
+              </span>
               {change != null && (
-                <span className={cn("ml-2 text-sm font-medium", change > 0 && "text-teal-400", change < 0 && "text-red-400")}>
+                <span className={cn("text-sm font-medium break-words", change > 0 && "text-teal-400", change < 0 && "text-red-400")}>
                   {formatSignedMoney(change)}
                 </span>
               )}
@@ -133,67 +135,147 @@ export default function PortfolioValueChart({ token }: { token: string | null })
           {SNAPSHOTS_EMPTY_COPY}
         </div>
       ) : (
-        <ValueSvg data={series} labels={axis} currency={currency} last={last} range={range} />
+        <ValueSvg points={valued} labels={axis} currency={currency} last={last} range={range} />
       )}
     </section>
   );
 }
 
 function ValueSvg({
-  data,
+  points,
   labels,
   currency,
   last,
   range,
   height = 200,
 }: {
-  data: number[];
+  points: { date: string; marketValue: number }[];
   labels: [string, string];
   currency: string;
   last: number | null;
   range: PerformanceRange;
   height?: number;
 }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const data = points.map((point) => point.marketValue);
   const width = 640;
   const padX = 8;
   const padY = 12;
+  const bottomPad = 28;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const span = Math.max(max - min, 0.0001);
 
-  const points = data.map((value, i) => {
+  const coords = data.map((value, i) => {
     const x = padX + (i / Math.max(data.length - 1, 1)) * (width - padX * 2);
     const y = padY + (1 - (value - min) / span) * (height - padY * 2);
     return { x, y };
   });
 
-  const line = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
-  const area = `${line} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
+  const line = coords.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
+  const area = `${line} L ${coords[coords.length - 1].x} ${height} L ${coords[0].x} ${height} Z`;
   const lastLabel = last == null ? "" : `, last ${formatPrice(last)} ${currency}`;
 
+  const indexFromClientX = (clientX: number): number => {
+    const el = wrapRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const svgX = ratio * width;
+    const frac = (svgX - padX) / (width - padX * 2);
+    return Math.min(data.length - 1, Math.max(0, Math.round(frac * (data.length - 1))));
+  };
+
+  const hovered = hoverIndex != null ? points[hoverIndex] : null;
+  const hoverCoord = hoverIndex != null ? coords[hoverIndex] : null;
+  // Clamp tooltip so it never overflows the card on narrow widths.
+  const tooltipLeftPct =
+    hoverCoord != null ? Math.min(88, Math.max(12, (hoverCoord.x / width) * 100)) : 50;
+
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height + 22}`}
-      className="h-auto w-full"
-      role="img"
-      aria-label={`Portfolio value, ${range}${lastLabel}`}
-    >
-      <defs>
-        <linearGradient id="portfolio-value-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" style={{ stopColor: "var(--color-teal-400)" }} stopOpacity="0.22" />
-          <stop offset="100%" style={{ stopColor: "var(--color-teal-400)" }} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#portfolio-value-fill)" />
-      <path d={line} fill="none" style={{ stroke: "var(--color-teal-400)" }} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
-      {labels.map((label, i) => {
-        const x = padX + (i / Math.max(labels.length - 1, 1)) * (width - padX * 2);
-        return (
-          <text key={label} x={x} y={height + 16} textAnchor="middle" style={{ fill: "var(--color-gray-500)" }} fontSize="11">
-            {label}
-          </text>
-        );
-      })}
-    </svg>
+    <div ref={wrapRef} className="relative min-w-0">
+      <svg
+        viewBox={`0 0 ${width} ${height + bottomPad}`}
+        className="h-auto w-full"
+        role="img"
+        aria-label={`Portfolio value, ${range}${lastLabel}`}
+        tabIndex={0}
+        onMouseMove={(event) => setHoverIndex(indexFromClientX(event.clientX))}
+        onMouseLeave={() => setHoverIndex(null)}
+        onTouchStart={(event) => {
+          if (event.touches.length > 0) setHoverIndex(indexFromClientX(event.touches[0].clientX));
+        }}
+        onTouchMove={(event) => {
+          if (event.touches.length > 0) setHoverIndex(indexFromClientX(event.touches[0].clientX));
+        }}
+        onTouchEnd={() => setHoverIndex(null)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault();
+            setHoverIndex((prev) => {
+              const base = prev ?? data.length - 1;
+              const next = event.key === "ArrowLeft" ? base - 1 : base + 1;
+              return Math.min(data.length - 1, Math.max(0, next));
+            });
+          } else if (event.key === "Escape") {
+            setHoverIndex(null);
+          }
+        }}
+      >
+        <defs>
+          <linearGradient id="portfolio-value-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" style={{ stopColor: "var(--color-teal-400)" }} stopOpacity="0.22" />
+            <stop offset="100%" style={{ stopColor: "var(--color-teal-400)" }} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#portfolio-value-fill)" />
+        <path d={line} fill="none" style={{ stroke: "var(--color-teal-400)" }} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        {hoverCoord != null ? (
+          <g>
+            <line
+              x1={hoverCoord.x}
+              x2={hoverCoord.x}
+              y1={padY}
+              y2={height}
+              style={{ stroke: "var(--color-gray-500)" }}
+              strokeWidth="1"
+              strokeDasharray="3 3"
+              opacity="0.7"
+            />
+            <circle
+              cx={hoverCoord.x}
+              cy={hoverCoord.y}
+              r="4"
+              style={{ fill: "var(--color-teal-400)", stroke: "var(--color-gray-900)" }}
+              strokeWidth="1.5"
+            />
+          </g>
+        ) : null}
+        {labels.map((label, i) => {
+          const anchor = i === 0 ? "start" : "end";
+          const ax = i === 0 ? padX : width - padX;
+          return (
+            <text key={label} x={ax} y={height + 20} textAnchor={anchor} style={{ fill: "var(--color-gray-500)" }} fontSize="11">
+              {label}
+            </text>
+          );
+        })}
+      </svg>
+      {hovered && hoverCoord ? (
+        <div
+          role="status"
+          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-md border border-gray-600 bg-gray-900/95 px-2.5 py-1.5 text-center shadow-xl"
+          style={{ left: `${tooltipLeftPct}%` }}
+        >
+          <p className="text-[11px] whitespace-nowrap text-gray-400">{hovered.date}</p>
+          <p className="text-sm font-semibold whitespace-nowrap tabular-nums text-gray-100">
+            {formatPrice(hovered.marketValue)}{" "}
+            <span className="text-[11px] font-medium text-gray-500">{currency}</span>
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }

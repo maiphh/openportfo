@@ -7,7 +7,7 @@ import { WatchlistApiError, type WatchlistItem } from "@/lib/watchlist";
 const fetchWatchlist = vi.fn();
 const addWatchlist = vi.fn();
 const removeWatchlist = vi.fn();
-const searchAssets = vi.fn();
+const searchLiveCatalog = vi.fn();
 
 vi.mock("next/link", () => ({
   default({
@@ -49,11 +49,11 @@ vi.mock("@/lib/watchlist", async () => {
   };
 });
 
-vi.mock("@/lib/portfolio", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/portfolio")>("@/lib/portfolio");
+vi.mock("@/lib/asset-search", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/asset-search")>("@/lib/asset-search");
   return {
     ...actual,
-    searchAssets: (...args: unknown[]) => searchAssets(...args),
+    searchLiveCatalog: (...args: unknown[]) => searchLiveCatalog(...args),
   };
 });
 
@@ -77,10 +77,9 @@ const vnmHit = {
   assetType: "stock" as const,
 };
 
-async function typeAndPick(symbol: string, type: "stock" | "crypto" = "stock") {
+async function typeAndPick(symbol: string) {
   fireEvent.click(screen.getAllByRole("button", { name: "Add to watchlist" })[0]);
-  fireEvent.click(screen.getByRole("button", { name: type === "crypto" ? "Crypto" : "VN stock" }));
-  const input = screen.getByPlaceholderText(type === "crypto" ? /e\.g\. BTC/i : /e\.g\. VNM/i);
+  const input = screen.getByPlaceholderText(/e\.g\. VNM, FPT, BTC/i);
   fireEvent.change(input, { target: { value: symbol } });
   await waitFor(() => {
     expect(screen.getByRole("button", { name: new RegExp(symbol) })).toBeInTheDocument();
@@ -98,7 +97,8 @@ describe("WatchlistView", () => {
     fetchWatchlist.mockReset();
     addWatchlist.mockReset();
     removeWatchlist.mockReset();
-    searchAssets.mockReset();
+    searchLiveCatalog.mockReset();
+    searchLiveCatalog.mockResolvedValue({ hits: [], failedTypes: [], authRequired: false });
     window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
   });
 
@@ -140,7 +140,7 @@ describe("WatchlistView", () => {
         currency: "VND",
       }),
     ]);
-    searchAssets.mockResolvedValue([vnmHit]);
+    searchLiveCatalog.mockResolvedValue({ hits: [vnmHit], failedTypes: [], authRequired: false });
     addWatchlist.mockResolvedValue({
       userId: "alice",
       assetType: "stock",
@@ -155,7 +155,7 @@ describe("WatchlistView", () => {
       expect(screen.getByText(/No names on your watchlist yet/i)).toBeInTheDocument();
     });
 
-    await typeAndPick("VNM", "stock");
+    await typeAndPick("VNM");
     submitAdd();
 
     await waitFor(() => {
@@ -174,9 +174,11 @@ describe("WatchlistView", () => {
     window.sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "fake:alice");
     const existing = [item()];
     fetchWatchlist.mockResolvedValue(existing);
-    searchAssets.mockResolvedValue([
-      { symbol: "BTC", name: "Bitcoin", assetId: "bitcoin", assetType: "crypto" },
-    ]);
+    searchLiveCatalog.mockResolvedValue({
+      hits: [{ symbol: "BTC", name: "Bitcoin", assetId: "bitcoin", assetType: "crypto" }],
+      failedTypes: [],
+      authRequired: false,
+    });
     addWatchlist.mockRejectedValue(new WatchlistApiError(409, "Watchlist item already exists"));
 
     render(<WatchlistView />);
@@ -185,14 +187,14 @@ describe("WatchlistView", () => {
       expect(screen.getByRole("link", { name: /BTC/ })).toBeInTheDocument();
     });
 
-    await typeAndPick("BTC", "crypto");
+    await typeAndPick("BTC");
     submitAdd();
 
     await waitFor(() => {
       expect(screen.getByText("Watchlist item already exists")).toBeInTheDocument();
     });
     expect(screen.getByRole("link", { name: /BTC/ })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/e\.g\. BTC/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/e\.g\. VNM, FPT, BTC/i)).toBeInTheDocument();
     expect(fetchWatchlist).toHaveBeenCalledTimes(1);
   });
 

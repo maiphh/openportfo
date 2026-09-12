@@ -5,7 +5,11 @@ import CompanyLogo from "@/components/dashboard/CompanyLogo";
 import { Button } from "@/components/ui/button";
 import { holdingCostLabel, type DisplayCurrency } from "@/lib/currency";
 import {
-  searchAssets,
+  ASSET_SEARCH_DEBOUNCE_MS,
+  liveSearchQuery,
+  searchLiveCatalog,
+} from "@/lib/asset-search";
+import {
   type AssetSearchHit,
   type HoldingMutation,
   type PortfolioLine,
@@ -51,7 +55,6 @@ export default function HoldingFormModal({
   onClose: () => void;
   onSubmit: (payload: HoldingMutation) => Promise<void> | void;
 }) {
-  const [assetType, setAssetType] = useState<"crypto" | "stock">("stock");
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<AssetSearchHit[]>([]);
   const [selected, setSelected] = useState<AssetSearchHit | null>(null);
@@ -59,13 +62,13 @@ export default function HoldingFormModal({
   const [avgCost, setAvgCost] = useState("");
   const [note, setNote] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [softWarning, setSoftWarning] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const lockedPrefill = mode === "create" && Boolean(prefill);
 
   useEffect(() => {
     if (!open) return;
     if (mode === "edit" && initial) {
-      setAssetType(initial.assetType);
       setSelected({
         symbol: initial.symbol,
         name: initial.symbol,
@@ -78,10 +81,10 @@ export default function HoldingFormModal({
       setNote(initial.note || "");
       setHits([]);
       setSearchError(null);
+      setSoftWarning(null);
       return;
     }
     if (mode === "create" && prefill) {
-      setAssetType(prefill.assetType);
       setSelected(prefill);
       setQuery(prefill.symbol);
       setQty("");
@@ -89,9 +92,9 @@ export default function HoldingFormModal({
       setNote("");
       setHits([]);
       setSearchError(null);
+      setSoftWarning(null);
       return;
     }
-    setAssetType("stock");
     setQuery("");
     setHits([]);
     setSelected(null);
@@ -99,39 +102,55 @@ export default function HoldingFormModal({
     setAvgCost("");
     setNote("");
     setSearchError(null);
+    setSoftWarning(null);
   }, [open, mode, initial, prefill]);
 
   useEffect(() => {
     if (!open || mode === "edit" || lockedPrefill) return;
-    const q = query.trim();
-    if (q.length < 1) {
+    const q = liveSearchQuery(query);
+    if (!q) {
       setHits([]);
+      setSoftWarning(null);
       return;
     }
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setSearching(true);
       setSearchError(null);
+      setSoftWarning(null);
       try {
-        const results = await searchAssets({
+        const result = await searchLiveCatalog({
           q,
-          type: assetType,
           signal: controller.signal,
         });
-        if (!controller.signal.aborted) setHits(results);
+        if (controller.signal.aborted) return;
+        if (result.authRequired) {
+          setHits([]);
+          setSearchError("Sign in required to search.");
+          return;
+        }
+        setHits(result.hits);
+        if (result.failedTypes.length === 2) {
+          setSearchError("Search failed. Try again.");
+        } else if (result.failedTypes.length === 1) {
+          setSoftWarning(
+            `${result.failedTypes[0] === "stock" ? "Stock" : "Crypto"} search failed. Showing other results.`,
+          );
+        }
       } catch (err) {
         if (controller.signal.aborted) return;
         setHits([]);
+        setSoftWarning(null);
         setSearchError(err instanceof Error ? err.message : "Search failed");
       } finally {
         if (!controller.signal.aborted) setSearching(false);
       }
-    }, 250);
+    }, ASSET_SEARCH_DEBOUNCE_MS);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query, assetType, open, mode, lockedPrefill]);
+  }, [query, open, mode, lockedPrefill]);
 
   const canSubmit = useMemo(() => holdingFormCanSubmit(selected, qty, avgCost), [selected, qty, avgCost]);
 
@@ -153,26 +172,6 @@ export default function HoldingFormModal({
         </div>
 
         <div className="space-y-4 px-5 py-4">
-          {mode === "create" && !lockedPrefill && (
-            <div className="flex gap-2">
-              {(["stock", "crypto"] as const).map((t) => (
-                <Button
-                  key={t}
-                  type="button"
-                  size="sm"
-                  variant={assetType === t ? "default" : "outline"}
-                  onClick={() => {
-                    setAssetType(t);
-                    setSelected(null);
-                    setHits([]);
-                  }}
-                >
-                  {t === "stock" ? "VN stock" : "Crypto"}
-                </Button>
-              ))}
-            </div>
-          )}
-
           {mode === "create" && lockedPrefill && selected ? (
             <p className="flex items-center gap-2 text-sm text-gray-300">
               <CompanyLogo symbol={selected.symbol} size={20} assetType={selected.assetType} />
@@ -188,15 +187,16 @@ export default function HoldingFormModal({
                   setQuery(e.target.value);
                   setSelected(null);
                 }}
-                placeholder={assetType === "stock" ? "e.g. VNM, FPT" : "e.g. BTC, ethereum"}
+                placeholder="e.g. VNM, FPT, BTC, ethereum"
                 className="h-10 w-full rounded-md border border-gray-600 bg-gray-900 px-3 text-sm text-gray-200 outline-none focus:border-teal-500"
               />
               {searching && <p className="mt-1 text-xs text-gray-500">Searching…</p>}
               {searchError && <p className="mt-1 text-xs text-red-400">{searchError}</p>}
+              {!searchError && softWarning && <p className="mt-1 text-xs text-amber-400">{softWarning}</p>}
               {hits.length > 0 && !selected && (
                 <ul className="mt-2 max-h-40 overflow-y-auto rounded-md border border-gray-600">
                   {hits.slice(0, 12).map((hit) => (
-                    <li key={`${hit.assetType}:${hit.assetId}`}>
+                    <li key={`${hit.assetType}:${hit.assetId || hit.symbol}`}>
                       <button
                         type="button"
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-700/70"
@@ -204,11 +204,15 @@ export default function HoldingFormModal({
                           setSelected(hit);
                           setQuery(hit.symbol);
                           setHits([]);
+                          setSoftWarning(null);
                         }}
                       >
                         <CompanyLogo symbol={hit.symbol} size={18} assetType={hit.assetType} />
                         <span className="font-medium text-gray-100">{hit.symbol}</span>
                         <span className="min-w-0 flex-1 truncate text-xs text-gray-500">{hit.name}</span>
+                        <span className="rounded bg-gray-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          {hit.assetType === "crypto" ? "Crypto" : "Stock"}
+                        </span>
                       </button>
                     </li>
                   ))}

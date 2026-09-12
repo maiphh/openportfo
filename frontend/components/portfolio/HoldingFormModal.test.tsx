@@ -1,8 +1,18 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HoldingFormModal, { holdingFormCanSubmit } from "@/components/portfolio/HoldingFormModal";
 import { toPrefillHit } from "@/lib/asset";
 import type { AssetSearchHit } from "@/lib/portfolio";
+
+const searchLiveCatalog = vi.fn();
+
+vi.mock("@/lib/asset-search", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/asset-search")>("@/lib/asset-search");
+  return {
+    ...actual,
+    searchLiveCatalog: (...args: unknown[]) => searchLiveCatalog(...args),
+  };
+});
 
 const prefill: AssetSearchHit = {
   symbol: "BTC",
@@ -13,6 +23,11 @@ const prefill: AssetSearchHit = {
 
 afterEach(() => {
   cleanup();
+});
+
+beforeEach(() => {
+  searchLiveCatalog.mockReset();
+  searchLiveCatalog.mockResolvedValue({ hits: [], failedTypes: [], authRequired: false });
 });
 
 describe("holdingFormCanSubmit / toPrefillHit", () => {
@@ -44,6 +59,39 @@ describe("holdingFormCanSubmit / toPrefillHit", () => {
       assetType: "crypto",
       currency: "USD",
     });
+  });
+});
+
+describe("HoldingFormModal unified search (BL-033)", () => {
+  it("create mode has no type toggle and searches both types at once", async () => {
+    searchLiveCatalog.mockResolvedValue({
+      hits: [
+        { symbol: "VNM", name: "Vinamilk", assetId: "VNM", assetType: "stock" },
+        { symbol: "BTC", name: "Bitcoin", assetId: "bitcoin", assetType: "crypto" },
+      ],
+      failedTypes: [],
+      authRequired: false,
+    });
+    render(
+      <HoldingFormModal
+        open
+        mode="create"
+        displayCurrency="USD"
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+      />,
+    );
+
+    expect(screen.getByPlaceholderText(/e\.g\. VNM, FPT, BTC/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "VN stock" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Crypto" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. VNM, FPT, BTC/i), { target: { value: "v" } });
+
+    await waitFor(() => expect(searchLiveCatalog).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Vinamilk")).toBeInTheDocument();
+    expect(screen.getByText("Stock")).toBeInTheDocument();
+    expect(screen.getByText("Crypto")).toBeInTheDocument();
   });
 });
 
