@@ -1,4 +1,4 @@
-import { apiBase } from "@/lib/api";
+import { chatApiBase } from "@/lib/api";
 import { bearerHeader } from "@/lib/auth";
 import type { ChatSessionMessage } from "@/lib/chat-session";
 import {
@@ -236,7 +236,7 @@ export async function sendChatMessage(options: SendChatOptions): Promise<ChatRes
     ...bearerHeader(options.token),
   };
   const body = JSON.stringify(requestBody(options));
-  let response = await fetchImpl(`${apiBase()}/api/chat/stream`, {
+  let response = await fetchImpl(`${chatApiBase()}/api/chat/stream`, {
     method: "POST",
     headers,
     body,
@@ -247,7 +247,7 @@ export async function sendChatMessage(options: SendChatOptions): Promise<ChatRes
   // Older deployments retain POST /api/chat; keep the widget usable during a
   // rolling deploy while the new route is introduced.
   if (response.status === 404 || response.status === 405) {
-    response = await fetchImpl(`${apiBase()}/api/chat`, {
+    response = await fetchImpl(`${chatApiBase()}/api/chat`, {
       method: "POST",
       headers: { ...headers, Accept: "application/json" },
       body,

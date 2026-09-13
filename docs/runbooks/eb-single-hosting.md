@@ -57,16 +57,25 @@ registered. Order matters:
 ## 3. Build / package / deploy
 
 ```powershell
-# From the repo root, on the feat/BL-031-* worktree:
+# Same-origin REST (BL-031 default):
 .\scripts\package-eb.ps1 -AppUrl https://<eb-env>.elasticbeanstalk.com
+
+# REST via HTTP API Gateway (BL-035), after HttpApiUrl exists:
+.\scripts\package-eb.ps1 `
+  -AppUrl https://<eb-env>.elasticbeanstalk.com `
+  -ApiUrl https://<api-id>.execute-api.us-east-1.amazonaws.com
+```
 
 # Inspect: eb-bundle.zip at repo root (size + contents check printed).
 # Deploy via EB console (upload eb-bundle.zip) or EB CLI:
 #   cd backend && eb deploy
 ```
 
-What the script does: `npm run build` with `NEXT_PUBLIC_API_URL=""`
-(same-origin `/api/*`), leak-guard for baked absolute localhost API URLs,
+What the script does: `npm run build` with `NEXT_PUBLIC_API_URL=""` by
+default (same-origin `/api/*`), or the Gateway origin when `-ApiUrl` is set.
+Chat SSE always uses same-origin on the public EB host (`chatApiBase()`).
+Leak-guard rejects baked `127.0.0.1:8000/api`. See
+`docs/runbooks/http-api-gateway.md`.
 clean-copy `frontend/out/` → `backend/static_web/`, zip allow-list
 (`app/`, `Procfile`, `requirements.txt`, `.ebextensions/`, `static_web/`
 — `.venv`/`__pycache__`/`node_modules`/`.next` excluded by construction).
@@ -82,8 +91,9 @@ Linux/CI equivalent: `./scripts/package-eb.sh <app-url> [output-zip]`.
 2. `GET https://<eb-env>.elasticbeanstalk.com/health` → `{"status":"ok"}`.
 3. Deep link `GET .../portfolio/` and `.../auth/callback/` → HTML 200
    (refresh on any route still renders).
-4. Browser network tab: API calls go to same-origin `/api/*` (no CORS
-   failure, no `127.0.0.1:8000`).
+4. Browser network tab: without `-ApiUrl`, API calls go to same-origin
+   `/api/*`. With BL-035 `-ApiUrl`, REST goes to `execute-api` and chat
+   stays on the EB origin. No `127.0.0.1:8000`.
 5. Login via Cognito Hosted UI returns to `.../auth/callback/` → dashboard.
 
 ---
@@ -110,6 +120,5 @@ No redeploy of code needed for diagnostics:
 > evidence remains via the **data** bucket: price-history JSON, daily
 > portfolio snapshots, and the Athena query over `snapshots/` partitions."
 
-Marks mapping is unchanged except the CDN row: Beanstalk + Lambda
-(compute), DynamoDB (database), S3 **data** + Athena (storage/analytics)
-are all still exercised live.
+Marks mapping: Beanstalk + Lambda (compute), HTTP API Gateway (networking,
+when enabled), DynamoDB (database), S3 **data** + Athena (storage/analytics).

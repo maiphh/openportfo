@@ -50,12 +50,37 @@ Parameters:
       Google OAuth client secret. Never commit a real value; pass via
       --parameter-overrides at deploy time.
 
+  CreateHttpApi:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When true, create an HTTP API that proxies ANY /api/{proxy+} to
+      ApiBackendUrl (Beanstalk origin, no trailing slash).
+
+  ApiBackendUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Beanstalk origin for HTTP_PROXY, e.g.
+      https://env.eba-xxxx.elasticbeanstalk.com — no trailing slash.
+
+  HttpApiCorsOrigins:
+    Type: CommaDelimitedList
+    Default: "http://localhost:3000,http://localhost:5173"
+    Description: >
+      Browser origins allowed to call the HTTP API (include the EB https origin).
+
 Conditions:
   HasJobsLambda: !Not [!Equals [!Ref JobsLambdaArn, ""]]
   HasGoogleIdP: !Not [!Equals [!Ref GoogleClientId, ""]]
   EnableSchedules: !And
     - !Equals [!Ref CreateEventBridgeRules, "true"]
     - !Condition HasJobsLambda
+  HasApiBackend: !Not [!Equals [!Ref ApiBackendUrl, ""]]
+  EnableHttpApi: !And
+    - !Equals [!Ref CreateHttpApi, "true"]
+    - !Condition HasApiBackend
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -612,6 +637,63 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt EmailScheduleRule.Arn
 
+  # BL-035 — HTTP API in front of FastAPI REST only (not UI, not /health,
+  # not Lambda jobs). Chat SSE stays same-origin on Beanstalk.
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Condition: EnableHttpApi
+    Properties:
+      Name: !Sub "${ProjectPrefix}-http-api"
+      Description: Proxy /api/* REST to Elastic Beanstalk FastAPI
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: !Ref HttpApiCorsOrigins
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - authorization
+          - content-type
+          - accept
+        ExposeHeaders:
+          - content-disposition
+          - content-type
+          - x-fx-status
+        MaxAge: 86400
+        AllowCredentials: false
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      Description: HTTP_PROXY to Beanstalk /api/{proxy}
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      PayloadFormatVersion: "1.0"
+      TimeoutInMillis: 30000
+      IntegrationUri: !Sub "${ApiBackendUrl}/api/{proxy}"
+
+  HttpApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "ANY /api/{proxy+}"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
 Outputs:
   DataBucketName:
     Description: S3 data bucket for history/ and snapshots/
@@ -664,6 +746,11 @@ Outputs:
   LambdaExecutionRoleArn:
     Description: Use when creating the jobs Lambda function
     Value: !GetAtt LambdaExecutionRole.Arn
+
+  HttpApiUrl:
+    Condition: EnableHttpApi
+    Description: Bake as NEXT_PUBLIC_API_URL (no trailing slash). Chat stays on EB.
+    Value: !GetAtt HttpApi.ApiEndpoint
 
   Region:
     Value: !Ref AWS::Region

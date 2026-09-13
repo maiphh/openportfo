@@ -445,6 +445,7 @@ s3://{frontend-bucket}/   # Next.js export (index.html, _next/, …)
 |-------|--------|----------------|
 | Frontend | Next.js CSR / static export (**no SSR**) | S3 + CloudFront |
 | Backend API | FastAPI (Python 3.11+) | Elastic Beanstalk |
+| REST front door | HTTP API (`HTTP_PROXY`) | API Gateway → Beanstalk `/api/*` (chat SSE same-origin) |
 | Scheduled jobs | Python handlers | EventBridge → **Lambda only** |
 | Database | DynamoDB | Users, holdings, cache, news, settings |
 | Object storage | S3 | Frontend + history + snapshots |
@@ -457,17 +458,18 @@ s3://{frontend-bucket}/   # Next.js export (index.html, _next/, …)
 
 **Not used (locked):** Next.js SSR; dual Next+FastAPI processes on one Beanstalk as the primary pattern; browser-direct market APIs.
 
-**API Gateway (locked — D2):** **not used** for user APIs. Browser calls **Elastic Beanstalk (FastAPI)** directly. Document in architecture report that API Gateway is intentionally omitted to reduce cost/complexity; marks narrative emphasizes Beanstalk + Lambda as high-value compute.
+**API Gateway (D2 revised — BL-035):** HTTP API **proxies** browser REST `/api/*` to Elastic Beanstalk FastAPI (`HTTP_PROXY`). FastAPI remains the only business API (Cognito JWKS, portfolio, markets). Chat SSE stays on the Beanstalk origin (Gateway 30s timeout). Lambda stays EventBridge-only — Gateway does **not** invoke jobs. Enable with CloudFormation `CreateHttpApi=true` after the EB URL exists. See `docs/runbooks/http-api-gateway.md`.
 
 ### 12.1 Path A — user request
 
 ```
-User → CloudFront → S3 (UI)
-User → Beanstalk FastAPI
+User → Beanstalk (UI static export; lab)
+User REST → API Gateway HTTP API → Beanstalk FastAPI
          → DynamoDB (auth, holdings, watchlist, settings, news read)
          → PriceCache; on miss or Refresh → CoinGecko / vnstock
          → S3 history cache for charts
          → JSON → browser charts/tables
+User chat SSE → Beanstalk FastAPI (same-origin)
 ```
 
 ### 12.2 Path B — schedule
@@ -588,7 +590,7 @@ FastAPI routers and domain services **must not** embed ad-hoc `boto3` calls outs
 | ID | Decision | Choice |
 |----|----------|--------|
 | **D1** | Auth | **Amazon Cognito User Pool** — email/password + **Google federated IdP**; API auth via **Cognito JWT** (`Authorization: Bearer <id_token>`); FastAPI verifies JWKS. *(Revised from custom app JWT.)* |
-| **D2** | API Gateway | **Not used** — public FastAPI on Elastic Beanstalk |
+| **D2** | API Gateway | **HTTP API proxy** for FastAPI REST (BL-035); Lambda not behind Gateway |
 | **D3** | Multi-currency / FX | **ExchangeRate-API** for USD↔VND (and stored rate map). **Admin on-demand Refresh only** — no auto/scheduled FX requests. Portfolio uses **last good stored rate**; on refresh failure **keep old rate**. Native line currencies remain USD (crypto) / VND (stocks). |
 | **D4** | Email time enforcement | **Fixed EventBridge crons** — news/price/snapshot at **00:00 ICT** (`cron(0 17 * * ? *)`); email at **00:15 ICT** (`cron(15 17 * * ? *)`). Admin `emailTime` is unused for send. *(Revised from hourly Lambda + window match — BL-032.)* |
 | **D5** | SES daily email | **Stretch only** — MVP still ships snapshot + news jobs |

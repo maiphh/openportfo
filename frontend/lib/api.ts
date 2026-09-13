@@ -28,6 +28,29 @@ export function apiBase(): string {
   return trimmed.replace(/\/+$/, "");
 }
 
+/**
+ * Chat SSE stays on Beanstalk (BL-035). HTTP API Gateway times out at 30s
+ * and is a poor fit for `/api/chat/stream`.
+ *
+ * - Public hosts: same-origin `""` even when REST `apiBase()` is execute-api.
+ * - Localhost / tests: follow REST `apiBase()` so `next dev` still hits :8000.
+ * - `NEXT_PUBLIC_CHAT_API_URL` overrides when set (empty = force same-origin
+ *   on public hosts, local default on localhost).
+ */
+export function chatApiBase(): string {
+  const raw = process.env.NEXT_PUBLIC_CHAT_API_URL;
+  if (raw !== undefined && raw !== null) {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      if (typeof window !== "undefined" && !isLocalBrowserHost()) return "";
+      return DEFAULT_API;
+    }
+    return trimmed.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined" && !isLocalBrowserHost()) return "";
+  return apiBase();
+}
+
 /** Query value for portfolio `displayCurrency` / asset `currency` (BL-001/002). */
 export function displayCurrencyQuery(currency: DisplayCurrency): string {
   return currency;

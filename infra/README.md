@@ -14,6 +14,7 @@ Deployable data plane + IAM for **us-east-1** (Learner Lab default).
 | EB instance role + profile | DynamoDB RW + S3 data RW + logs (no Cognito Admin APIs; JWT verify uses public JWKS) |
 | Lambda jobs role | Same data plane + CloudWatch Logs |
 | Optional EventBridge rules | `news`, `price`, `snapshot` only — **no FX schedule** |
+| Optional HTTP API (BL-035) | `CreateHttpApi=true` + `ApiBackendUrl` — proxies `/api/*` REST to Beanstalk |
 
 Does **not** create the Elastic Beanstalk environment or upload Lambda zip (see RUNBOOK).
 
@@ -108,6 +109,7 @@ s3://{DATA_BUCKET}/snapshots/userId={id}/dt={YYYY-MM-DD}/part.json
 ## Next steps
 
 1. Deploy EB API — `deploy/eb-deploy.md`
-2. Package Lambda — `infra/lambda/`
-3. Athena sample — `docs/implementation/sprints/sprint-12-aws-deploy/athena-sample.sql`
-4. Full runbook — `docs/implementation/sprints/sprint-12-aws-deploy/RUNBOOK.md`
+2. Optional HTTP API in front of REST — `docs/runbooks/http-api-gateway.md`
+3. Package Lambda — `infra/lambda/`
+4. Athena sample — `docs/implementation/sprints/sprint-12-aws-deploy/athena-sample.sql`
+5. Full runbook — `docs/implementation/sprints/sprint-12-aws-deploy/RUNBOOK.md`

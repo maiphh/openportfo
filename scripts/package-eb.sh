@@ -10,12 +10,17 @@
 # Usage:
 #   ./scripts/package-eb.sh [APP_URL] [OUTPUT_ZIP]
 #   APP_URL defaults to $APP_URL or https://EB_PLACEHOLDER.
+#   API_URL (optional env) bakes NEXT_PUBLIC_API_URL for HTTP API Gateway (BL-035).
+#   Empty API_URL keeps same-origin /api/* (BL-031).
 #   Example:
 #     ./scripts/package-eb.sh https://my-env.elasticbeanstalk.com eb-bundle.zip
+#     API_URL=https://abc123.execute-api.us-east-1.amazonaws.com ./scripts/package-eb.sh https://my-env.elasticbeanstalk.com
 set -euo pipefail
 
 APP_URL="${1:-${APP_URL:-https://EB_PLACEHOLDER}}"
 OUTPUT_ZIP="${2:-eb-bundle.zip}"
+API_URL="${API_URL:-}"
+API_URL="${API_URL%/}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND_DIR="$REPO_ROOT/frontend"
@@ -30,11 +35,17 @@ esac
 
 echo "[package-eb] repo: $REPO_ROOT"
 echo "[package-eb] app-url: $APP_URL"
+if [ -n "$API_URL" ]; then
+  echo "[package-eb] api-url: $API_URL"
+else
+  echo "[package-eb] api-url: (same-origin /api/*)"
+fi
 
-# 1. Build frontend with same-origin API base (BL-031 D3).
+# 1. Build frontend. Empty NEXT_PUBLIC_API_URL = same-origin (BL-031).
+# Non-empty = HTTP API Gateway origin (BL-035). Chat uses chatApiBase() on public hosts.
 (
   cd "$FRONTEND_DIR"
-  NEXT_PUBLIC_API_URL="" NEXT_PUBLIC_APP_URL="$APP_URL" npm run build
+  NEXT_PUBLIC_API_URL="$API_URL" NEXT_PUBLIC_APP_URL="$APP_URL" npm run build
 )
 
 # 2. Assert export output exists.
@@ -59,6 +70,13 @@ if grep -rE -q --include='*.js' --include='*.html' --include='*.json' \
 fi
 INERT_COUNT=$(grep -rE --include='*.js' -c '127\.0\.0\.1:8000' "$OUT_DIR" 2>/dev/null | wc -l | tr -d ' ')
 echo "[package-eb] leak guard OK (files mentioning inert DEFAULT_API literal: $INERT_COUNT)"
+if [ -n "$API_URL" ]; then
+  if ! grep -rF -q --include='*.js' --include='*.html' --include='*.json' -- "$API_URL" "$OUT_DIR"; then
+    echo "API_URL guard: expected baked NEXT_PUBLIC_API_URL=$API_URL in frontend/out" >&2
+    exit 1
+  fi
+  echo "[package-eb] API_URL bake OK: $API_URL"
+fi
 
 # 4. Clean + copy out/ -> backend/static_web/.
 rm -rf "$STATIC_WEB_DIR"

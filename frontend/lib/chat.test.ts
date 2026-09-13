@@ -102,4 +102,26 @@ describe("chat transport", () => {
     expect(result.toolCalls).toEqual([{ name: "get_quote", label: "Checking a quote", status: "completed" }]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
+
+  it("posts SSE to same-origin when REST apiBase is API Gateway (BL-035)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://abc123.execute-api.us-east-1.amazonaws.com");
+    vi.stubGlobal("window", {
+      location: { hostname: "openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com" },
+    });
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      expect(String(url)).toBe("/api/chat/stream");
+      return new Response(
+        "event: message\ndata: {\"content\":\"ok\",\"done\":true}\n\n" +
+          "event: done\ndata: {\"ok\":true}\n\n",
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      );
+    });
+    try {
+      await sendChatMessage({ token: "secret", message: "hello", fetchImpl });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
+  });
 });

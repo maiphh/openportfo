@@ -15,11 +15,19 @@
   Pass the real origin at deploy time, e.g.:
     .\scripts\package-eb.ps1 -AppUrl https://my-env.elasticbeanstalk.com
 
+.PARAMETER ApiUrl
+  Optional HTTP API Gateway origin baked as NEXT_PUBLIC_API_URL (BL-035).
+  Empty (default) keeps same-origin `/api/*` (BL-031).
+  Example:
+    .\scripts\package-eb.ps1 -AppUrl https://my-env.elasticbeanstalk.com `
+      -ApiUrl https://abc123.execute-api.us-east-1.amazonaws.com
+
 .PARAMETER OutputZip
   Destination zip path (default: <repo>/eb-bundle.zip).
 #>
 param(
   [string]$AppUrl = $(if ($env:APP_URL) { $env:APP_URL } else { "https://EB_PLACEHOLDER" }),
+  [string]$ApiUrl = $(if ($env:API_URL) { $env:API_URL } else { "" }),
   [string]$OutputZip = ""
 )
 
@@ -36,8 +44,12 @@ if ([string]::IsNullOrWhiteSpace($OutputZip)) {
 
 Write-Host "[package-eb] repo: $RepoRoot"
 Write-Host "[package-eb] app-url: $AppUrl"
+$apiUrlBake = if ([string]::IsNullOrWhiteSpace($ApiUrl)) { "" } else { $ApiUrl.Trim().TrimEnd('/') }
+Write-Host "[package-eb] api-url: $(if ($apiUrlBake) { $apiUrlBake } else { '(same-origin /api/*)' })"
 
-# 1. Build frontend with same-origin API base (BL-031 D3).
+# 1. Build frontend. Empty NEXT_PUBLIC_API_URL = same-origin (BL-031).
+# Non-empty = HTTP API Gateway origin (BL-035). Chat SSE uses chatApiBase()
+# same-origin on public hosts, so we do not bake NEXT_PUBLIC_CHAT_API_URL.
 # IMPORTANT: PowerShell `$env:VAR = ""` *removes* the variable, so Next never
 # sees an empty string and leaves a runtime env lookup that falls back to
 # 127.0.0.1:8000 in the browser. Bake via .env.production.local instead.
@@ -48,12 +60,16 @@ if ($hadProdEnvLocal) {
   Copy-Item -LiteralPath $prodEnvLocal -Destination $prodEnvBackup -Force
 }
 @(
-  "NEXT_PUBLIC_API_URL="
+  "NEXT_PUBLIC_API_URL=$apiUrlBake"
   "NEXT_PUBLIC_APP_URL=$AppUrl"
 ) | Set-Content -LiteralPath $prodEnvLocal -Encoding utf8
 # process.env wins over dotenv files. A stale shell NEXT_PUBLIC_APP_URL from a
 # prior package (e.g. http:// EB) would otherwise override .env.production.local.
-Remove-Item Env:NEXT_PUBLIC_API_URL -ErrorAction SilentlyContinue
+if ($apiUrlBake) {
+  $env:NEXT_PUBLIC_API_URL = $apiUrlBake
+} else {
+  Remove-Item Env:NEXT_PUBLIC_API_URL -ErrorAction SilentlyContinue
+}
 $env:NEXT_PUBLIC_APP_URL = $AppUrl
 # Drop turbopack/.next caches so a prior http:// APP_URL bake cannot stick.
 foreach ($stale in @(".next", "out")) {
@@ -64,7 +80,8 @@ foreach ($stale in @(".next", "out")) {
 }
 Push-Location $FrontendDir
 try {
-  Write-Host "[package-eb] npm run build (NEXT_PUBLIC_API_URL baked empty via .env.production.local)"
+  Write-Host "[package-eb] npm run build (NEXT_PUBLIC_API_URL baked via .env.production.local)"
+  Write-Host "[package-eb] NEXT_PUBLIC_API_URL=$(if ($apiUrlBake) { $apiUrlBake } else { '(empty same-origin)' })"
   Write-Host "[package-eb] NEXT_PUBLIC_APP_URL=$AppUrl (process env + .env.production.local)"
   npm run build
   if ($LASTEXITCODE -ne 0) { throw "frontend build failed (exit $LASTEXITCODE)" }
@@ -105,6 +122,13 @@ if ($runtimeEnv) {
 }
 $inert = ($outJs | Select-String -Pattern "127\.0\.0\.1:8000" | Measure-Object).Count
 Write-Host "[package-eb] leak guard OK (inert DEFAULT_API literal occurrences: $inert)"
+if ($apiUrlBake) {
+  $bakedApi = $outJs | Select-String -SimpleMatch $apiUrlBake
+  if (-not $bakedApi) {
+    throw "API_URL guard: expected baked NEXT_PUBLIC_API_URL=$apiUrlBake in frontend/out"
+  }
+  Write-Host "[package-eb] API_URL bake OK: $apiUrlBake"
+}
 if ($AppUrl -match '^https://') {
   $httpBake = $outJs | Select-String -Pattern ('NEXT_PUBLIC_APP_URL:"' + ($AppUrl -replace '^https://','http://') + '"')
   if ($httpBake) {

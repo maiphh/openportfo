@@ -1,6 +1,6 @@
 # Backlog board
 
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-13
 **How to use:** see `docs/backlog/README.md`
 
 **Orchestration:** PLAN `6cc30007` complete on `integration/backlog-batch-6cc30007` (**not merged to main**).  
@@ -41,6 +41,7 @@
 | BL-032 | Daily SES email: PnL + per-asset + holdings/watchlist news (00:00 ICT jobs, email +15 min) | P1 | `done` | Eng | `features/BL-032-daily-ses-balance-email.md` | SA `approve` 2026-09-12; branch `feat/BL-032-daily-ses-email` — not merged |
 | BL-033 | Unified asset search + portfolio chart hover/overflow | P1 | `done` | Eng | `features/BL-033-unified-search-chart-hover.md` | SA review `approve` 2026-09-12; unified modals + chart hover |
 | BL-034 | Gmail SMTP demo email when Academy SES is blocked | P1 | `done` | Eng | `features/BL-034-gmail-smtp-demo-email.md` | SA `approve` 2026-09-13; App Password still required for a live send |
+| BL-035 | HTTP API Gateway proxy for Beanstalk `/api/*` REST (chat SSE stays on EB) | P0 | `done` | Eng | `features/BL-035-api-gateway.md` | SA `approve` 2026-09-13; worktree `a3-wt-bl035`; **not deployed to AWS** |
 
 ---
 
@@ -56,6 +57,7 @@
 
 | ID | Title | Done date | Feature file |
 |----|-------|-----------|--------------|
+| BL-035 | HTTP API Gateway proxy (REST only) | 2026-09-13 | `features/BL-035-api-gateway.md` |
 | BL-028 | RSS source news completion | 2026-08-28 | `features/BL-028-rss-news.md` |
 | BL-027 | Portfolio CSV export | 2026-08-24 | `features/BL-027-portfolio-csv-export.md` |
 | BL-019 | Rebrand OpenPortfo | 2026-08-23 | `features/BL-019-rebrand-openportfo.md` |

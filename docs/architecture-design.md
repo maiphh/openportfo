@@ -14,7 +14,7 @@
 | **Frontend** | Next.js **without SSR** (CSR / static export) | **S3 + CloudFront** |
 | **Backend API** | **FastAPI** | **Elastic Beanstalk** |
 | **Scheduled jobs** | Daily RSS, portfolio snapshot, optional email | **EventBridge → Lambda only** (not user-facing API) |
-| **API Gateway** | — | **Not required** (main API is Beanstalk FastAPI) |
+| **API Gateway** | HTTP API (`HTTP_PROXY`) | **`/api/*` REST only** → Beanstalk FastAPI |
 | **Database** | Users, holdings, watchlist, price cache, news | **DynamoDB** |
 | **Object storage** | Price history, daily snapshots (Athena) | **S3** |
 | **Analytics** | Query portfolio history | **Athena** |
@@ -26,9 +26,11 @@
 ```
 Browser (Next.js CSR)
   │
-  ├─ GET UI  ──► CloudFront ──► S3 (static export)
+  ├─ GET UI  ──► Elastic Beanstalk (static export)   [lab; CloudFront blocked]
   │
-  └─ API     ──► Elastic Beanstalk (FastAPI)
+  ├─ REST /api/*  ──► API Gateway (HTTP API) ──► Elastic Beanstalk (FastAPI)
+  │
+  └─ Chat SSE /api/chat/stream  ──► Elastic Beanstalk (same-origin; not Gateway)
                       │
                       ├─ DynamoDB (users, holdings, watchlist, settings, news, price cache)
                       ├─ S3 data (history / snapshots) ──► Athena
@@ -57,7 +59,7 @@ EventBridge Scheduler (cron; reads Admin settings: email time, RSS list)
 | End-to-end cloud app on AWS | Web app + APIs + scheduled jobs | ✅ |
 | Services across **Compute, Storage, Networking/CDN, Database, Analytics** | Designed below | ✅ |
 | Fully **implemented & automated** (not console-only) | UI/API/cron invoke services | ✅ |
-| High-value services (6 pts each): Beanstalk / Lambda / API GW / ECS / EMR | Beanstalk + Lambda + API GW | ✅ |
+| High-value services (6 pts each): Beanstalk / Lambda / API GW / ECS / EMR | Beanstalk + Lambda + HTTP API Gateway (REST proxy) | ✅ |
 | Other AWS services (3 pts each) | DynamoDB, S3, CloudFront, Athena | ✅ |
 | Third-party APIs (2 pts each, **max 2 graded**) | CoinGecko + vnstock (or RSS) | ✅ |
 | Client UI with tables/charts | Portfolio + history charts | ✅ |
@@ -214,13 +216,14 @@ Pipeline: EventBridge → Lambda → parse RSS → keyword match (user symbols +
 **Path A — User request (portfolio render / refresh)**
 
 ```
-User → CloudFront/S3 (UI)
-User → FastAPI (Beanstalk)
+User → Beanstalk (UI static export; lab)
+User REST → API Gateway HTTP API → FastAPI (Beanstalk)
          → DynamoDB holdings
          → PriceCache; if miss or Refresh:
               → CoinGecko (crypto)
               → vnstock (VN stocks)
          → compute PnL → JSON → charts/tables
+User chat SSE → FastAPI on Beanstalk (same-origin; not Gateway)
 ```
 
 **Path B — EventBridge scheduled jobs**
@@ -238,26 +241,22 @@ EventBridge (cron from Admin: e.g. 08:00 ICT)
 
 | Request | Served by |
 |---|---|
-| `/`, dashboard, admin UI, JS/CSS | **CloudFront → S3** |
-| `/api/*` (auth, holdings, portfolio, news, admin) | **Beanstalk → FastAPI** |
-| Daily RSS / snapshot / email | **EventBridge → Lambda** (not browser) |
+| `/`, dashboard, admin UI, JS/CSS | **Beanstalk static export** (lab; design target remains CloudFront → S3) |
+| REST `/api/*` (auth, holdings, portfolio, news, admin) | **API Gateway HTTP API → Beanstalk FastAPI** |
+| `POST /api/chat/stream` | **Beanstalk FastAPI** (same-origin; Gateway 30s timeout is a poor fit for SSE) |
+| Daily RSS / snapshot / email | **EventBridge → Lambda** (not browser, not Gateway) |
 
-CORS: FastAPI allows CloudFront origin only.  
-**Locked:** Lambda = schedule only; no API Gateway for user APIs.
+CORS: HTTP API allows the Beanstalk UI origin. FastAPI CORS remains for local `next dev`.  
+**Locked:** Lambda = schedule only. Gateway does **not** invoke Lambda for user APIs. FastAPI still verifies Cognito JWTs.
 
-> **Lab variance (BL-031):** the Academy lab blocks CloudFront, so the lab
-> deployment serves the same Next.js static export from the Beanstalk API
-> process itself (single `uvicorn`, `StaticFiles` + SPA fallback, same-origin
-> `/api/*`). This is a hosting-only variance: no SSR, no `next start` second
-> server, no API Gateway, no browser-direct market APIs. S3 stays in the
-> rubric via the **data** bucket (price history / snapshots) queried by
-> Athena. See `docs/runbooks/eb-single-hosting.md`.
+> **Lab variance (BL-031 + BL-035):** Academy blocks CloudFront, so the UI is served from Beanstalk. REST is optionally fronted by an HTTP API (`CreateHttpApi=true`) so the browser Network tab shows `execute-api`. Chat SSE stays on the EB origin. S3 remains the **data** bucket (history / snapshots) for Athena. See `docs/runbooks/eb-single-hosting.md` and `docs/runbooks/http-api-gateway.md`.
 
 ### 3.3 Why this shape (marks + $50)
 
 | Service | Category | Marks | Role | Cost control |
 |---|---|---|---|---|
-| **Elastic Beanstalk** | Compute | **6** | FastAPI (user APIs + admin) | 1× `t3.micro` |
+| **Elastic Beanstalk** | Compute | **6** | FastAPI (user APIs + admin) + lab UI host | 1× `t3.micro` |
+| **API Gateway** | Networking | **6** | HTTP API proxy for FastAPI REST | HTTP API cheap at demo scale |
 | **Lambda** | Compute | **6** | Scheduled RSS / prices / snapshot / email | Free tier |
 | **DynamoDB** | Database | **3** | Users, holdings, settings, cache, news | On-demand |
 | **S3** | Storage | **3** | Frontend + history/snapshots | Few GB |
@@ -266,7 +265,7 @@ CORS: FastAPI allows CloudFront origin only.
 | **EventBridge** | Orchestration | — | Cron for Lambda | Free tier |
 | **SES** | Email | **0 marks** | Daily summary | Sandbox OK |
 
-Avoid: API Gateway (not needed), RDS, EMR, dual Next+FastAPI servers.
+Avoid: REST API (v1) extra stage prefix, Gateway→Lambda user APIs, RDS, EMR, dual Next+FastAPI servers.
 
 ---
 
@@ -475,7 +474,7 @@ Assumptions: ≤ 20 users, demo traffic, 1× t3.micro Beanstalk, on-demand Dynam
 | Week 7 | Beanstalk skeleton + DynamoDB tables + auth |
 | Week 8 | Holdings/watchlist CRUD + CoinGecko integration + cache |
 | Week 9 | vnstock adapter + portfolio math + charts |
-| Week 10 | API Gateway expose REST; Lambda split; CloudFront |
+| Week 10 | HTTP API Gateway in front of Beanstalk REST; Lambda split; CloudFront if lab allows |
 | Week 11 | News RSS job + snapshot → S3 + Athena query UI |
 | Week 12 | Email job polish, architecture doc, demo script |
 
@@ -554,7 +553,7 @@ Also integrated (document as data source; marks cap may still be “max 2” gra
 6. Open asset chart (historical from S3/cache)  
 7. Show news matched to “BTC”, “VNM”  
 8. Trigger or show evidence of daily Lambda (CloudWatch log / last snapshot)  
-9. Walk architecture diagram: Beanstalk → API GW → Lambda → DynamoDB/S3/Athena  
+9. Walk architecture diagram: UI(EB) → API Gateway → FastAPI(Beanstalk) → DynamoDB/S3; EventBridge → Lambda; Athena on snapshots  
 10. Cost slide: why under $50  
 
 ---

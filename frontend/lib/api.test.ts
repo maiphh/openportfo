@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiBase, fetchMarketHeatmap, fetchMarketQuotes } from "@/lib/api";
+import { apiBase, chatApiBase, fetchMarketHeatmap, fetchMarketQuotes } from "@/lib/api";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -186,6 +186,11 @@ describe("apiBase same-origin behaviour (BL-031)", () => {
     expect(apiBase()).toBe("http://127.0.0.1:8000");
   });
 
+  it("keeps an explicit execute-api Gateway URL (BL-035)", () => {
+    vi.stubEnv(ENV_KEY, "https://abc123.execute-api.us-east-1.amazonaws.com/");
+    expect(apiBase()).toBe("https://abc123.execute-api.us-east-1.amazonaws.com");
+  });
+
   it("builds relative /api/* URLs when same-origin", async () => {
     vi.stubEnv(ENV_KEY, "");
     vi.stubGlobal(
@@ -200,5 +205,38 @@ describe("apiBase same-origin behaviour (BL-031)", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("chatApiBase vs apiBase (BL-035)", () => {
+  const REST_KEY = "NEXT_PUBLIC_API_URL";
+  const CHAT_KEY = "NEXT_PUBLIC_CHAT_API_URL";
+  const gateway = "https://abc123.execute-api.us-east-1.amazonaws.com";
+  const ebHost = "openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com";
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("follows REST apiBase on localhost so next dev still hits FastAPI", () => {
+    vi.stubEnv(REST_KEY, gateway);
+    vi.stubGlobal("window", { location: { hostname: "localhost" } });
+    expect(apiBase()).toBe(gateway);
+    expect(chatApiBase()).toBe(gateway);
+  });
+
+  it("stays same-origin on a public host even when REST uses Gateway", () => {
+    vi.stubEnv(REST_KEY, gateway);
+    vi.stubGlobal("window", { location: { hostname: ebHost } });
+    expect(apiBase()).toBe(gateway);
+    expect(chatApiBase()).toBe("");
+  });
+
+  it("honours an explicit chat override", () => {
+    vi.stubEnv(REST_KEY, gateway);
+    vi.stubEnv(CHAT_KEY, "https://chat.example.com/");
+    vi.stubGlobal("window", { location: { hostname: ebHost } });
+    expect(chatApiBase()).toBe("https://chat.example.com");
   });
 });
