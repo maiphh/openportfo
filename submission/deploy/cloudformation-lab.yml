@@ -1,0 +1,478 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  OpenPortfo data plane for AWS Academy Learner Lab (us-east-1).
+  DynamoDB + S3 + Cognito ONLY — no IAM roles (voclabs cannot iam:CreateRole).
+  Use existing LabInstanceProfile (EB) and LabRole (Lambda).
+
+Parameters:
+  ProjectPrefix:
+    Type: String
+    Default: openportfo
+    Description: Prefix for DynamoDB table names (match backend Settings defaults).
+
+  # BL-031 single-EB hosting: pass the real EB origin via --parameter-overrides,
+  # e.g. CognitoCallbackUrls="...,https://<env>.elasticbeanstalk.com/auth/callback/"
+  # (trailing slash required: frontend callbackRedirectUri ends with /auth/callback/).
+  # EB_PLACEHOLDER entries below are inert documentation defaults - replace them,
+  # never commit a real EB URL in this file.
+  CognitoCallbackUrls:
+    Type: CommaDelimitedList
+    Description: OAuth redirect_uris (local dev + CloudFront placeholder + EB placeholder).
+    Default: "http://localhost:3000/auth/callback,http://localhost:5173/auth/callback,https://placeholder.cloudfront.net/auth/callback,https://EB_PLACEHOLDER/auth/callback/"
+
+  CognitoLogoutUrls:
+    Type: CommaDelimitedList
+    Description: OAuth post-logout redirect URIs (local dev + CloudFront placeholder + EB placeholder).
+    Default: "http://localhost:3000/,http://localhost:5173/,https://placeholder.cloudfront.net/,https://EB_PLACEHOLDER/"
+
+  GoogleClientId:
+    Type: String
+    Default: ""
+    Description: >
+      Google OAuth client ID for Cognito federated sign-in. Leave empty to skip
+      creating the Google identity provider (email-only login).
+
+  GoogleClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >
+      Google OAuth client secret. Never commit a real value; pass via
+      --parameter-overrides at deploy time.
+
+  # BL-035: HTTP API proxy for FastAPI REST. Off by default so the data
+  # plane still deploys before an Elastic Beanstalk URL exists.
+  CreateHttpApi:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When true, create an HTTP API that proxies ANY /api/{proxy+} to
+      ApiBackendUrl (Beanstalk origin, no trailing slash).
+
+  ApiBackendUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Beanstalk origin for HTTP_PROXY, e.g.
+      https://env.eba-xxxx.elasticbeanstalk.com — no trailing slash.
+
+  HttpApiCorsOrigins:
+    Type: CommaDelimitedList
+    Default: "http://localhost:3000,http://localhost:5173"
+    Description: >
+      Browser origins allowed to call the HTTP API. After EB exists, include
+      the https://<eb-env>.elasticbeanstalk.com origin.
+
+Conditions:
+  HasGoogleIdP: !Not [!Equals [!Ref GoogleClientId, ""]]
+  HasApiBackend: !Not [!Equals [!Ref ApiBackendUrl, ""]]
+  EnableHttpApi: !And
+    - !Equals [!Ref CreateHttpApi, "true"]
+    - !Condition HasApiBackend
+
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-users"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  HoldingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-holdings"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  WatchlistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-watchlist"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  PriceCacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-price-cache"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  NewsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-news"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        # Live Learner Lab table (and DynamoNewsRepo) use HASH `date`, not `pk`.
+        # Changing this named table's key requires replacement and rolls the stack back.
+        - AttributeName: date
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: date
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  SettingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-settings"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  FxTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-fx"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  RssTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-rss"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  JobRunsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-job-runs"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  SnapshotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-snapshots"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  ChatIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-chat-idempotency"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: requestId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectPrefix}-users"
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+        - Name: name
+          Required: false
+          Mutable: true
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub
+        - "openportfo-${Suffix}"
+        - Suffix: !Select [2, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]]]
+      UserPoolId: !Ref UserPool
+
+  # Optional Google federated sign-in. Created only when GoogleClientId is
+  # supplied (secret passed via --parameter-overrides, never committed).
+  # Mirrors the live pool wiring: authorize_scopes openid/email/profile and
+  # attribute mapping email->email, username->sub.
+  UserPoolGoogleIdP:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogleIdP
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
+        username: sub
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    # Ignored when HasGoogleIdP is false (condition-excluded resource).
+    DependsOn: UserPoolGoogleIdP
+    Properties:
+      ClientName: openportfo-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      SupportedIdentityProviders: !If [HasGoogleIdP, [COGNITO, Google], [COGNITO]]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs: !Ref CognitoCallbackUrls
+      LogoutURLs: !Ref CognitoLogoutUrls
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: days
+        IdToken: days
+        RefreshToken: days
+
+  # BL-035 — HTTP API in front of FastAPI REST only (not UI, not /health,
+  # not Lambda jobs). Chat SSE stays same-origin on Beanstalk.
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Condition: EnableHttpApi
+    Properties:
+      Name: !Sub "${ProjectPrefix}-http-api"
+      Description: Proxy /api/* REST to Elastic Beanstalk FastAPI
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: !Ref HttpApiCorsOrigins
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - authorization
+          - content-type
+          - accept
+        ExposeHeaders:
+          - content-disposition
+          - content-type
+          - x-fx-status
+        MaxAge: 86400
+        AllowCredentials: false
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      Description: HTTP_PROXY to Beanstalk /api/{proxy}
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      PayloadFormatVersion: "1.0"
+      TimeoutInMillis: 30000
+      IntegrationUri: !Sub "${ApiBackendUrl}/api/{proxy}"
+
+  HttpApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "ANY /api/{proxy+}"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+Outputs:
+  DataBucketName:
+    Description: Set as DATA_BUCKET
+    Value: !Ref DataBucket
+  ChatIdempotencyTableName:
+    Description: Set as CHAT_IDEMPOTENCY_TABLE for the EB API
+    Value: !Ref ChatIdempotencyTable
+  CognitoUserPoolId:
+    Description: Set as COGNITO_USER_POOL_ID
+    Value: !Ref UserPool
+  CognitoAppClientId:
+    Description: Set as COGNITO_APP_CLIENT_ID
+    Value: !Ref UserPoolClient
+  CognitoRegion:
+    Value: !Ref AWS::Region
+  CognitoHostedUIDomain:
+    Value: !Sub
+      - "https://${Domain}.auth.${Region}.amazoncognito.com"
+      - Domain: !Ref UserPoolDomain
+        Region: !Ref AWS::Region
+  # Pre-existing Academy resources (not created by this stack)
+  LabInstanceProfileName:
+    Description: Use for Elastic Beanstalk EC2 instance profile
+    Value: LabInstanceProfile
+  LabRoleArn:
+    Description: Use for Lambda execution role
+    Value: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+  HttpApiUrl:
+    Condition: EnableHttpApi
+    Description: Bake as NEXT_PUBLIC_API_URL (no trailing slash). Chat stays on EB.
+    Value: !GetAtt HttpApi.ApiEndpoint
+  Region:
+    Value: !Ref AWS::Region

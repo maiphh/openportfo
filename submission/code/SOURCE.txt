@@ -1,0 +1,9 @@
+OpenPortfo source
+
+GitHub: https://github.com/maiphh/openportfo.git
+
+This folder is the application source (backend FastAPI, frontend Next.js CSR,
+infra, and scripts). node_modules, .next, .venv, and .env files are not included.
+
+Local run: see README.md in this folder. Copy backend/.env.example to backend/.env
+and fill values yourself. Do not put AWS credentials in Git.

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Figure 4 — scheduled jobs</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #111111; font-family: Arial, Helvetica, sans-serif; }
+  .page { position: relative; width: 1400px; height: 760px; background: #111111; overflow: hidden; }
+  h1 { position: absolute; left: 0; right: 0; top: 14px; margin: 0; text-align: center; font-size: 24px; font-weight: 700; color: #fff; }
+  .sec { position: absolute; font-size: 14px; font-weight: 700; }
+  .node { position: absolute; width: 150px; text-align: center; }
+  .node img { width: 72px; height: 72px; display: block; margin: 0 auto 6px auto; }
+  .node .name { font-size: 12px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .node .hint { font-size: 10px; color: #b5b5b5; line-height: 1.25; margin-top: 2px; }
+  .job { position: absolute; width: 168px; text-align: center; color: #fff; }
+  .job .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 4px; margin-bottom: 4px; }
+  .job .hint { font-size: 10px; color: #b5b5b5; line-height: 1.25; }
+  svg.wires { position: absolute; left: 0; top: 0; width: 1400px; height: 760px; pointer-events: none; }
+  .caption { position: absolute; left: 24px; right: 24px; bottom: 12px; text-align: center; font-size: 11px; color: #9a9a9a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>OpenPortfo — Scheduled jobs (no browser traffic)</h1>
+  <div class="sec" style="left:180px;top:56px;color:#E7157B;">Application Integration</div>
+  <div class="sec" style="left:620px;top:56px;color:#ED7100;">Compute</div>
+  <div class="sec" style="left:1080px;top:56px;color:#C925D1;">Data &amp; Analytics</div>
+  <div class="sec" style="left:80px;top:430px;color:#2E7D32;">External</div>
+
+  <div class="node" style="left:160px;top:100px;">
+    <img src="eventbridge.svg" alt="EventBridge" />
+    <div class="name">Amazon EventBridge</div>
+    <div class="hint">cron(0 17 * * ? *) news / price / snapshot<br/>cron(15 17 * * ? *) email</div>
+  </div>
+
+  <div class="node" style="left:620px;top:100px;">
+    <img src="lambda.svg" alt="Lambda" />
+    <div class="name">AWS Lambda</div>
+    <div class="hint">openportfo-jobs<br/>branches on event.job</div>
+  </div>
+
+  <div class="job" style="left:70px;top:310px;">
+    <div class="tag" style="background:#2E75B6;">news</div>
+    <div class="hint">Fetch RSS · match symbols<br/>write News + JobRuns</div>
+  </div>
+  <div class="job" style="left:340px;top:310px;">
+    <div class="tag" style="background:#ED7100;">price</div>
+    <div class="hint">Batch quotes · PriceCache<br/>history JSON to S3</div>
+  </div>
+  <div class="job" style="left:610px;top:310px;">
+    <div class="tag" style="background:#C925D1;">snapshot</div>
+    <div class="hint">Per-user valuation<br/>DynamoDB SNAP#date + S3</div>
+  </div>
+  <div class="job" style="left:880px;top:310px;">
+    <div class="tag" style="background:#7AA116;">email</div>
+    <div class="hint">Opt-in users only<br/>PnL + holdings + news</div>
+  </div>
+
+  <div class="node" style="left:70px;top:500px;">
+    <img src="rss.svg" alt="RSS" />
+    <div class="name">RSS feeds</div>
+    <div class="hint">Admin-configured URLs</div>
+  </div>
+  <div class="node" style="left:250px;top:500px;">
+    <img src="coingecko.png" alt="CoinGecko" />
+    <div class="name">Coingecko</div>
+    <div class="hint">Crypto quotes</div>
+  </div>
+  <div class="node" style="left:400px;top:500px;">
+    <img src="vnstock.png" alt="vnstock" />
+    <div class="name">Vnstock</div>
+    <div class="hint">VN stock quotes</div>
+  </div>
+  <div class="node" style="left:600px;top:500px;">
+    <img src="dynamodb.svg" alt="DynamoDB" />
+    <div class="name">Amazon DynamoDB</div>
+    <div class="hint">News, cache, snapshots,<br/>job-runs, users</div>
+  </div>
+  <div class="node" style="left:780px;top:500px;">
+    <img src="s3.svg" alt="S3" />
+    <div class="name">Amazon S3</div>
+    <div class="hint">History + snapshots/</div>
+  </div>
+  <div class="node" style="left:960px;top:500px;">
+    <img src="athena.svg" alt="Athena" />
+    <div class="name">Amazon Athena</div>
+    <div class="hint">SQL later on snapshot files<br/>(not a job step)</div>
+  </div>
+  <div class="node" style="left:1160px;top:500px;">
+    <img src="gmail.svg" alt="Gmail" />
+    <div class="name">Gmail SMTP</div>
+    <div class="hint">smtp.gmail.com:587<br/>STARTTLS</div>
+  </div>
+
+  <svg class="wires" viewBox="0 0 1400 760">
+    <defs>
+      <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#dedede"/>
+      </marker>
+      <marker id="p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#E7157B"/>
+      </marker>
+      <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#7AA116"/>
+      </marker>
+    </defs>
+    <line x1="310" y1="136" x2="620" y2="136" stroke="#E7157B" stroke-width="1.6" marker-end="url(#p)"/>
+    <text x="390" y="126" fill="#E7157B" font-size="12" font-family="Arial">Triggers on schedule</text>
+
+    <path d="M 695 196 V 250 H 154 V 310" fill="none" stroke="#dedede" stroke-width="1.5" marker-end="url(#w)"/>
+    <path d="M 695 250 H 424 V 310" fill="none" stroke="#dedede" stroke-width="1.5" marker-end="url(#w)"/>
+    <path d="M 695 250 H 694 V 310" fill="none" stroke="#dedede" stroke-width="1.5" marker-end="url(#w)"/>
+    <path d="M 695 250 H 964 V 310" fill="none" stroke="#dedede" stroke-width="1.5" marker-end="url(#w)"/>
+
+    <line x1="154" y1="370" x2="145" y2="500" stroke="#7AA116" stroke-width="1.5" marker-end="url(#g)"/>
+    <path d="M 424 370 V 430 H 325 V 500" fill="none" stroke="#7AA116" stroke-width="1.5" marker-end="url(#g)"/>
+    <path d="M 424 430 H 475 V 500" fill="none" stroke="#7AA116" stroke-width="1.5" marker-end="url(#g)"/>
+    <path d="M 694 370 V 430 H 675 V 500" fill="none" stroke="#dedede" stroke-width="1.5" marker-end="url(#w)"/>
+    <path d="M 694 430 H 855 V 500" fill="none" stroke="#dedede" stroke-width="1.5" marker-end="url(#w)"/>
+    <line x1="964" y1="370" x2="1235" y2="500" stroke="#7AA116" stroke-width="1.5" marker-end="url(#g)"/>
+    <line x1="855" y1="536" x2="960" y2="536" stroke="#8C4FFF" stroke-width="1.5" marker-end="url(#w)"/>
+    <text x="868" y="526" fill="#8C4FFF" font-size="11" font-family="Arial">query later</text>
+  </svg>
+
+  <div class="caption">Figure 4 · EventBridge invokes Lambda only. Athena is not a job; it reads snapshot files after they land in S3. Admin can also run the news job from FastAPI. Email uses Gmail SMTP, not Amazon SES.</div>
+</div>
+</body>
+</html>

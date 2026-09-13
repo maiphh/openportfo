@@ -1,0 +1,68 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DynamoDBRW",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-users",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-holdings",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-watchlist",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-price-cache",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-news",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-settings",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-fx",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-rss",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-job-runs",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-snapshots",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-chat-idempotency"
+      ]
+    },
+    {
+      "Sid": "AdminRoleTransactions",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:TransactWriteItems"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-users",
+        "arn:aws:dynamodb:us-east-1:*:table/openportfo-settings"
+      ]
+    },
+    {
+      "Sid": "S3DataRW",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::REPLACE_WITH_DATA_BUCKET",
+        "arn:aws:s3:::REPLACE_WITH_DATA_BUCKET/*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

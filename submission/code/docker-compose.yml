@@ -1,0 +1,42 @@
+# OpenPortfo — LocalStack for local AWS (DynamoDB + S3)
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f localstack
+#   docker compose down
+#
+# Backend (see infra/localstack/README.md):
+#   STORAGE_BACKEND=aws
+#   USE_AWS_ADAPTERS=true
+#   DYNAMODB_ENDPOINT_URL=http://localhost:4566
+#   S3_ENDPOINT_URL=http://localhost:4566
+#   DATA_BUCKET=openportfo-data-local
+#   AWS_ACCESS_KEY_ID=test
+#   AWS_SECRET_ACCESS_KEY=test
+#   AWS_DEFAULT_REGION=us-east-1
+
+services:
+  localstack:
+    container_name: openportfo-localstack
+    image: localstack/localstack:4.3
+    ports:
+      - "4566:4566" # LocalStack Gateway (all services)
+    environment:
+      # Community image: DynamoDB + S3 (Cognito is Pro — keep AUTH_MODE=fake locally)
+      - SERVICES=dynamodb,s3
+      - DEBUG=0
+      - PERSISTENCE=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - "./infra/localstack/init-aws.sh:/etc/localstack/init/ready.d/01-init-aws.sh"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  localstack-data:

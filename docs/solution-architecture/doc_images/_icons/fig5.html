@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Figure 5 — data model</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #111111; font-family: Arial, Helvetica, sans-serif; }
+  .page { position: relative; width: 1400px; height: 820px; background: #111111; overflow: hidden; }
+  h1 { position: absolute; left: 0; right: 0; top: 14px; margin: 0; text-align: center; font-size: 24px; font-weight: 700; color: #fff; }
+  .sec { position: absolute; font-size: 14px; font-weight: 700; }
+  .hero { position: absolute; width: 160px; text-align: center; }
+  .hero img { width: 72px; height: 72px; display: block; margin: 0 auto 6px auto; }
+  .hero .name { font-size: 13px; font-weight: 700; color: #fff; }
+  .hero .hint { font-size: 10px; color: #b5b5b5; margin-top: 2px; line-height: 1.25; }
+  .card { position: absolute; width: 210px; min-height: 86px; background: #1a1a1a; border: 1px solid #3a3a3a; border-left: 4px solid #C925D1; border-radius: 6px; padding: 8px 10px; box-sizing: border-box; }
+  .card .t { font-size: 12px; font-weight: 700; color: #fff; }
+  .card .k { font-size: 10px; color: #b5b5b5; margin-top: 4px; line-height: 1.3; white-space: pre-line; }
+  .s3card { position: absolute; width: 1180px; background: #1a1a1a; border: 1px solid #3a3a3a; border-left: 4px solid #7AA116; border-radius: 6px; padding: 14px 16px; box-sizing: border-box; color: #ddd; font-size: 12px; line-height: 1.55; }
+  .s3card b { color: #fff; }
+  .mono { font-family: Consolas, "Courier New", monospace; color: #cde4b8; font-size: 12px; }
+  svg.wires { position: absolute; left: 0; top: 0; width: 1400px; height: 820px; pointer-events: none; }
+  .caption { position: absolute; left: 24px; right: 24px; bottom: 12px; text-align: center; font-size: 11px; color: #9a9a9a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>OpenPortfo — Data stores</h1>
+  <div class="sec" style="left:80px;top:52px;color:#C925D1;">Database</div>
+  <div class="sec" style="left:80px;top:548px;color:#7AA116;">Storage</div>
+  <div class="sec" style="left:1180px;top:548px;color:#8C4FFF;">Analytics</div>
+
+  <div class="hero" style="left:40px;top:88px;">
+    <img src="dynamodb.svg" alt="DynamoDB" />
+    <div class="name">Amazon DynamoDB</div>
+    <div class="hint">On-demand tables<br/>prefix openportfo-<br/>userId = Cognito sub</div>
+  </div>
+
+  <div class="card" style="left:230px;top:80px;"><div class="t">users</div><div class="k">PK userId
+email, role, keywords, emailOptIn, currency</div></div>
+  <div class="card" style="left:460px;top:80px;"><div class="t">holdings</div><div class="k">PK userId  SK HOLD#type#symbol
+qty, avgCost, currency</div></div>
+  <div class="card" style="left:690px;top:80px;"><div class="t">watchlist</div><div class="k">PK userId  SK WATCH#type#symbol
+addedAt</div></div>
+  <div class="card" style="left:920px;top:80px;"><div class="t">price-cache</div><div class="k">PK type#symbol
+price, asOf, ttl</div></div>
+  <div class="card" style="left:1150px;top:80px;"><div class="t">news</div><div class="k">PK date  SK source#hash
+title, url, symbols</div></div>
+
+  <div class="card" style="left:230px;top:190px;"><div class="t">snapshots</div><div class="k">PK userId  SK SNAP#date
+totals, lines, fx</div></div>
+  <div class="card" style="left:460px;top:190px;"><div class="t">settings</div><div class="k">PK SETTINGS  SK GLOBAL
+jobs, cache TTL, chat</div></div>
+  <div class="card" style="left:690px;top:190px;"><div class="t">fx</div><div class="k">PK FX  SK LATEST
+rates, asOf, status</div></div>
+  <div class="card" style="left:920px;top:190px;"><div class="t">rss</div><div class="k">PK RSS  SK sourceId
+name, url, enabled</div></div>
+  <div class="card" style="left:1150px;top:190px;"><div class="t">job-runs</div><div class="k">PK JOB#type  SK runAt
+status, counts</div></div>
+
+  <div class="card" style="left:230px;top:300px;"><div class="t">chat-idempotency</div><div class="k">PK userId  SK requestId
+TTL expiresAt  ·  no chat log store</div></div>
+
+  <div class="hero" style="left:40px;top:590px;">
+    <img src="s3.svg" alt="S3" />
+    <div class="name">Amazon S3</div>
+    <div class="hint">Data bucket only<br/>(not a website bucket)</div>
+  </div>
+  <div class="s3card" style="left:210px;top:590px;width:780px;">
+    <b>Object layout</b><br/>
+    <span class="mono">snapshots/userId={id}/dt={YYYY-MM-DD}/part.json</span><br/>
+    <span class="mono">history/{crypto|stock}/{id}/{range}.json</span><br/>
+    <span class="mono">athena-results/</span>  (query output only)
+  </div>
+
+  <div class="hero" style="left:1040px;top:590px;">
+    <img src="athena.svg" alt="Athena" />
+    <div class="name">Amazon Athena</div>
+    <div class="hint">openportfo.portfolio_snapshots_raw<br/>JSON SerDe on snapshots/</div>
+  </div>
+
+  <svg class="wires" viewBox="0 0 1400 820">
+    <defs>
+      <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#8C4FFF"/>
+      </marker>
+    </defs>
+    <line x1="990" y1="640" x2="1040" y2="640" stroke="#8C4FFF" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="992" y="628" fill="#8C4FFF" font-size="11" font-family="Arial">SQL on files</text>
+  </svg>
+
+  <div class="caption">Figure 5 · DynamoDB is the operational store. S3 holds snapshot and history files. Athena queries those files later; it is not on the dashboard hot path.</div>
+</div>
+</body>
+</html>

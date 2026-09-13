@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Figure 6 — login and chat</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #111111; font-family: Arial, Helvetica, sans-serif; }
+  .page { position: relative; width: 1400px; height: 760px; background: #111111; overflow: hidden; }
+  h1 { position: absolute; left: 0; right: 0; top: 14px; margin: 0; text-align: center; font-size: 24px; font-weight: 700; color: #fff; }
+  .band { position: absolute; left: 24px; right: 24px; border: 1px solid #2a2a2a; border-radius: 10px; }
+  .sec { position: absolute; font-size: 14px; font-weight: 700; }
+  .node { position: absolute; width: 150px; text-align: center; }
+  .node img { width: 72px; height: 72px; display: block; margin: 0 auto 6px auto; }
+  .node .name { font-size: 12px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .node .hint { font-size: 10px; color: #b5b5b5; line-height: 1.25; margin-top: 2px; }
+  svg.wires { position: absolute; left: 0; top: 0; width: 1400px; height: 760px; pointer-events: none; }
+  .caption { position: absolute; left: 24px; right: 24px; bottom: 12px; text-align: center; font-size: 11px; color: #9a9a9a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>OpenPortfo — Login and chat (two different front doors)</h1>
+
+  <div class="band" style="top:58px;height:320px;"></div>
+  <div class="sec" style="left:44px;top:68px;color:#8C4FFF;">A. Sign in  ·  Security, Identity, and Compliance + Networking</div>
+
+  <div class="node" style="left:50px;top:150px;">
+    <img src="user.png" alt="User" />
+    <div class="name">User</div>
+    <div class="hint">Clicks Sign in</div>
+  </div>
+  <div class="node" style="left:250px;top:140px;">
+    <img src="cognito.svg" alt="Cognito" />
+    <div class="name">Amazon Cognito</div>
+    <div class="hint">Hosted UI<br/>email / Google · JWT</div>
+  </div>
+  <div class="node" style="left:470px;top:140px;">
+    <img src="user.png" alt="Callback" />
+    <div class="name">Browser callback</div>
+    <div class="hint">Stores ID token<br/>/auth/callback/</div>
+  </div>
+  <div class="node" style="left:690px;top:140px;">
+    <img src="apigateway.svg" alt="API Gateway" />
+    <div class="name">Amazon API Gateway</div>
+    <div class="hint">GET /api/auth/me<br/>HTTP_PROXY</div>
+  </div>
+  <div class="node" style="left:910px;top:140px;">
+    <img src="eb.svg" alt="Beanstalk" />
+    <div class="name">Elastic Beanstalk</div>
+    <div class="hint">FastAPI JWKS verify<br/>Cognito sub = userId</div>
+  </div>
+  <div class="node" style="left:1130px;top:140px;">
+    <img src="dynamodb.svg" alt="DynamoDB" />
+    <div class="name">Amazon DynamoDB</div>
+    <div class="hint">users profile upsert<br/>no passwords stored</div>
+  </div>
+
+  <div class="band" style="top:400px;height:300px;"></div>
+  <div class="sec" style="left:44px;top:410px;color:#ED7100;">B. Chat  ·  same-origin SSE (not API Gateway — 30 s timeout is too short)</div>
+
+  <div class="node" style="left:50px;top:500px;">
+    <img src="user.png" alt="User" />
+    <div class="name">User</div>
+    <div class="hint">Chat bubble<br/>POST /api/chat/stream</div>
+  </div>
+  <div class="node" style="left:320px;top:490px;">
+    <img src="eb.svg" alt="Beanstalk" />
+    <div class="name">Elastic Beanstalk</div>
+    <div class="hint">Auth + session cap<br/>idempotency check</div>
+  </div>
+  <div class="node" style="left:620px;top:490px;">
+    <img src="openrouter.svg" alt="OpenRouter" />
+    <div class="name">OpenRouter</div>
+    <div class="hint">Free LLM models<br/>server-side only</div>
+  </div>
+  <div class="node" style="left:920px;top:490px;">
+    <img src="dynamodb.svg" alt="DynamoDB" />
+    <div class="name">Amazon DynamoDB</div>
+    <div class="hint">chat-idempotency TTL<br/>no chat transcript store</div>
+  </div>
+
+  <svg class="wires" viewBox="0 0 1400 760">
+    <defs>
+      <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#dedede"/>
+      </marker>
+      <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ED7100"/>
+      </marker>
+      <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#7AA116"/>
+      </marker>
+      <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#C925D1"/>
+      </marker>
+    </defs>
+    <line x1="200" y1="186" x2="250" y2="186" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="205" y="176" fill="#dedede" font-size="11" font-family="Arial">redirect</text>
+    <line x1="400" y1="186" x2="470" y2="186" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="410" y="176" fill="#dedede" font-size="11" font-family="Arial">code</text>
+    <line x1="620" y1="186" x2="690" y2="186" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="628" y="176" fill="#dedede" font-size="11" font-family="Arial">Bearer</text>
+    <line x1="840" y1="186" x2="910" y2="186" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="848" y="176" fill="#dedede" font-size="11" font-family="Arial">HTTP_PROXY</text>
+    <line x1="1060" y1="186" x2="1130" y2="186" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="1070" y="176" fill="#dedede" font-size="11" font-family="Arial">upsert</text>
+
+    <line x1="200" y1="536" x2="320" y2="536" stroke="#ED7100" stroke-width="1.6" marker-end="url(#o)"/>
+    <text x="230" y="526" fill="#ED7100" font-size="11" font-family="Arial">SSE same origin</text>
+    <line x1="470" y1="536" x2="620" y2="536" stroke="#7AA116" stroke-width="1.6" marker-end="url(#g)"/>
+    <text x="510" y="526" fill="#7AA116" font-size="11" font-family="Arial">prompt + holdings</text>
+    <path d="M 395 560 H 920" fill="none" stroke="#C925D1" stroke-width="1.6" marker-end="url(#m)"/>
+    <text x="560" y="578" fill="#C925D1" font-size="11" font-family="Arial">requestId</text>
+  </svg>
+
+  <div class="caption">Figure 5 · Login uses Cognito Hosted UI, then REST through API Gateway. Chat streaming stays on Elastic Beanstalk and never enters API Gateway.</div>
+</div>
+</body>
+</html>

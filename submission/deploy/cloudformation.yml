@@ -1,0 +1,756 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  OpenPortfo data plane for AWS Academy Learner Lab (us-east-1).
+  DynamoDB tables, S3 data bucket, Cognito User Pool + public app client,
+  IAM roles for Elastic Beanstalk instance profile and Lambda jobs.
+  Does NOT create Elastic Beanstalk application or Lambda code deploy
+  (see infra/README.md and deploy runbook).
+
+Parameters:
+  ProjectPrefix:
+    Type: String
+    Default: openportfo
+    Description: Prefix for resource names (must match backend Settings table defaults).
+
+  CognitoCallbackUrls:
+    Type: CommaDelimitedList
+    Default: "http://localhost:3000/auth/callback,http://localhost:5173/auth/callback,https://placeholder.cloudfront.net/auth/callback"
+    Description: Hosted UI callback URLs (SPA).
+
+  CognitoLogoutUrls:
+    Type: CommaDelimitedList
+    Default: "http://localhost:3000/,http://localhost:5173/,https://placeholder.cloudfront.net/"
+    Description: Hosted UI logout URLs.
+
+  CreateEventBridgeRules:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When true, create EventBridge schedule rules targeting an existing Lambda
+      (provide JobsLambdaArn). Default false so stack deploys without code first.
+
+  JobsLambdaArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of packaged jobs Lambda (required if CreateEventBridgeRules=true).
+
+  GoogleClientId:
+    Type: String
+    Default: ""
+    Description: >
+      Google OAuth client ID for Cognito federated sign-in. Leave empty to skip
+      creating the Google identity provider (email-only login).
+
+  GoogleClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >
+      Google OAuth client secret. Never commit a real value; pass via
+      --parameter-overrides at deploy time.
+
+  CreateHttpApi:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      When true, create an HTTP API that proxies ANY /api/{proxy+} to
+      ApiBackendUrl (Beanstalk origin, no trailing slash).
+
+  ApiBackendUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Beanstalk origin for HTTP_PROXY, e.g.
+      https://env.eba-xxxx.elasticbeanstalk.com — no trailing slash.
+
+  HttpApiCorsOrigins:
+    Type: CommaDelimitedList
+    Default: "http://localhost:3000,http://localhost:5173"
+    Description: >
+      Browser origins allowed to call the HTTP API (include the EB https origin).
+
+Conditions:
+  HasJobsLambda: !Not [!Equals [!Ref JobsLambdaArn, ""]]
+  HasGoogleIdP: !Not [!Equals [!Ref GoogleClientId, ""]]
+  EnableSchedules: !And
+    - !Equals [!Ref CreateEventBridgeRules, "true"]
+    - !Condition HasJobsLambda
+  HasApiBackend: !Not [!Equals [!Ref ApiBackendUrl, ""]]
+  EnableHttpApi: !And
+    - !Equals [!Ref CreateHttpApi, "true"]
+    - !Condition HasApiBackend
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # S3 — data bucket (history/ + snapshots/ prefixes used by app)
+  # ---------------------------------------------------------------------------
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ---------------------------------------------------------------------------
+  # DynamoDB — multi-table (names align with backend Settings defaults)
+  # ---------------------------------------------------------------------------
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-users"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  HoldingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-holdings"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  WatchlistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-watchlist"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  PriceCacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-price-cache"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  NewsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-news"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  SettingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-settings"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  FxTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-fx"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  RssTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-rss"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  JobRunsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-job-runs"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  SnapshotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-snapshots"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  ChatIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectPrefix}-chat-idempotency"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: requestId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: OpenPortfo
+
+  # ---------------------------------------------------------------------------
+  # Cognito — email sign-in + public SPA client
+  # ---------------------------------------------------------------------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectPrefix}-users"
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+        - Name: name
+          Required: false
+          Mutable: true
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub
+        - "openportfo-${Suffix}"
+        - Suffix: !Select [2, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]]]
+      UserPoolId: !Ref UserPool
+
+  # Optional Google federated sign-in. Created only when GoogleClientId is
+  # supplied (secret passed via --parameter-overrides, never committed).
+  # Mirrors the live pool wiring: authorize_scopes openid/email/profile and
+  # attribute mapping email->email, username->sub.
+  UserPoolGoogleIdP:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogleIdP
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
+        username: sub
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    # Ignored when HasGoogleIdP is false (condition-excluded resource).
+    DependsOn: UserPoolGoogleIdP
+    Properties:
+      ClientName: openportfo-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+      SupportedIdentityProviders: !If [HasGoogleIdP, [COGNITO, Google], [COGNITO]]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs: !Ref CognitoCallbackUrls
+      LogoutURLs: !Ref CognitoLogoutUrls
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: days
+        IdToken: days
+        RefreshToken: days
+
+  # ---------------------------------------------------------------------------
+  # IAM — EB instance profile
+  # ---------------------------------------------------------------------------
+  EBInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectPrefix}-eb-instance-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+      Policies:
+        - PolicyName: OpenPortfoDataPlane
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDBRW
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt HoldingsTable.Arn
+                  - !GetAtt WatchlistTable.Arn
+                  - !GetAtt PriceCacheTable.Arn
+                  - !GetAtt NewsTable.Arn
+                  - !GetAtt SettingsTable.Arn
+                  - !GetAtt FxTable.Arn
+                  - !GetAtt RssTable.Arn
+                  - !GetAtt JobRunsTable.Arn
+                  - !GetAtt SnapshotsTable.Arn
+                  - !GetAtt ChatIdempotencyTable.Arn
+              - Sid: AdminRoleTransactions
+                Effect: Allow
+                Action:
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt SettingsTable.Arn
+              - Sid: S3DataRW
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt DataBucket.Arn
+                  - !Sub "${DataBucket.Arn}/*"
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  EBInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${ProjectPrefix}-eb-instance-profile"
+      Roles:
+        - !Ref EBInstanceRole
+
+  # ---------------------------------------------------------------------------
+  # IAM — Lambda execution role (jobs)
+  # ---------------------------------------------------------------------------
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectPrefix}-lambda-jobs-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: OpenPortfoJobsDataPlane
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DynamoDBRW
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !GetAtt UsersTable.Arn
+                  - !GetAtt HoldingsTable.Arn
+                  - !GetAtt WatchlistTable.Arn
+                  - !GetAtt PriceCacheTable.Arn
+                  - !GetAtt NewsTable.Arn
+                  - !GetAtt SettingsTable.Arn
+                  - !GetAtt FxTable.Arn
+                  - !GetAtt RssTable.Arn
+                  - !GetAtt JobRunsTable.Arn
+                  - !GetAtt SnapshotsTable.Arn
+              - Sid: S3DataRW
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt DataBucket.Arn
+                  - !Sub "${DataBucket.Arn}/*"
+              - Sid: SesSend
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: "*"
+
+  # ---------------------------------------------------------------------------
+  # EventBridge — news / price / snapshot at 00:00 ICT (17:00 UTC); email +15 min
+  # ---------------------------------------------------------------------------
+  NewsScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: EnableSchedules
+    Properties:
+      Name: !Sub "${ProjectPrefix}-job-news"
+      Description: Daily news ingest at 00:00 ICT (no FX)
+      ScheduleExpression: "cron(0 17 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Id: NewsJob
+          Arn: !Ref JobsLambdaArn
+          Input: '{"job":"news"}'
+
+  PriceScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: EnableSchedules
+    Properties:
+      Name: !Sub "${ProjectPrefix}-job-price"
+      Description: Price cache warm at 00:00 ICT (no FX)
+      ScheduleExpression: "cron(0 17 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Id: PriceJob
+          Arn: !Ref JobsLambdaArn
+          Input: '{"job":"price"}'
+
+  SnapshotScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: EnableSchedules
+    Properties:
+      Name: !Sub "${ProjectPrefix}-job-snapshot"
+      Description: Portfolio snapshot at 00:00 ICT (no FX)
+      ScheduleExpression: "cron(0 17 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Id: SnapshotJob
+          Arn: !Ref JobsLambdaArn
+          Input: '{"job":"snapshot"}'
+
+  EmailScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: EnableSchedules
+    Properties:
+      Name: !Sub "${ProjectPrefix}-job-email"
+      Description: Daily portfolio email at 00:15 ICT (after snapshot)
+      ScheduleExpression: "cron(15 17 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Id: EmailJob
+          Arn: !Ref JobsLambdaArn
+          Input: '{"job":"email"}'
+
+  LambdaInvokePermissionNews:
+    Type: AWS::Lambda::Permission
+    Condition: EnableSchedules
+    Properties:
+      FunctionName: !Ref JobsLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NewsScheduleRule.Arn
+
+  LambdaInvokePermissionPrice:
+    Type: AWS::Lambda::Permission
+    Condition: EnableSchedules
+    Properties:
+      FunctionName: !Ref JobsLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PriceScheduleRule.Arn
+
+  LambdaInvokePermissionSnapshot:
+    Type: AWS::Lambda::Permission
+    Condition: EnableSchedules
+    Properties:
+      FunctionName: !Ref JobsLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SnapshotScheduleRule.Arn
+
+  LambdaInvokePermissionEmail:
+    Type: AWS::Lambda::Permission
+    Condition: EnableSchedules
+    Properties:
+      FunctionName: !Ref JobsLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt EmailScheduleRule.Arn
+
+  # BL-035 — HTTP API in front of FastAPI REST only (not UI, not /health,
+  # not Lambda jobs). Chat SSE stays same-origin on Beanstalk.
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Condition: EnableHttpApi
+    Properties:
+      Name: !Sub "${ProjectPrefix}-http-api"
+      Description: Proxy /api/* REST to Elastic Beanstalk FastAPI
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: !Ref HttpApiCorsOrigins
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - authorization
+          - content-type
+          - accept
+        ExposeHeaders:
+          - content-disposition
+          - content-type
+          - x-fx-status
+        MaxAge: 86400
+        AllowCredentials: false
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      Description: HTTP_PROXY to Beanstalk /api/{proxy}
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      PayloadFormatVersion: "1.0"
+      TimeoutInMillis: 30000
+      IntegrationUri: !Sub "${ApiBackendUrl}/api/{proxy}"
+
+  HttpApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "ANY /api/{proxy+}"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: EnableHttpApi
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+Outputs:
+  DataBucketName:
+    Description: S3 data bucket for history/ and snapshots/
+    Value: !Ref DataBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-DataBucket"
+
+  UsersTableName:
+    Value: !Ref UsersTable
+  HoldingsTableName:
+    Value: !Ref HoldingsTable
+  WatchlistTableName:
+    Value: !Ref WatchlistTable
+  PriceCacheTableName:
+    Value: !Ref PriceCacheTable
+  NewsTableName:
+    Value: !Ref NewsTable
+  SettingsTableName:
+    Value: !Ref SettingsTable
+  FxTableName:
+    Value: !Ref FxTable
+  RssTableName:
+    Value: !Ref RssTable
+  JobRunsTableName:
+    Value: !Ref JobRunsTable
+  SnapshotsTableName:
+    Value: !Ref SnapshotsTable
+  ChatIdempotencyTableName:
+    Description: Set as CHAT_IDEMPOTENCY_TABLE for the EB API
+    Value: !Ref ChatIdempotencyTable
+
+  CognitoUserPoolId:
+    Description: Set as COGNITO_USER_POOL_ID
+    Value: !Ref UserPool
+  CognitoAppClientId:
+    Description: Set as COGNITO_APP_CLIENT_ID
+    Value: !Ref UserPoolClient
+  CognitoRegion:
+    Value: !Ref AWS::Region
+  CognitoHostedUIDomain:
+    Description: Hosted UI domain prefix host
+    Value: !Sub
+      - "https://${Domain}.auth.${Region}.amazoncognito.com"
+      - Domain: !Ref UserPoolDomain
+        Region: !Ref AWS::Region
+
+  EBInstanceProfileName:
+    Description: Attach as Elastic Beanstalk EC2 instance profile
+    Value: !Ref EBInstanceProfile
+  LambdaExecutionRoleArn:
+    Description: Use when creating the jobs Lambda function
+    Value: !GetAtt LambdaExecutionRole.Arn
+
+  HttpApiUrl:
+    Condition: EnableHttpApi
+    Description: Bake as NEXT_PUBLIC_API_URL (no trailing slash). Chat stays on EB.
+    Value: !GetAtt HttpApi.ApiEndpoint
+
+  Region:
+    Value: !Ref AWS::Region

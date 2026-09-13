@@ -1,0 +1,31 @@
+export type QuoteRow = {
+  symbol: string;
+  name: string;
+  value: number;
+  change: number;
+  changePct: number;
+  open: number;
+  high: number;
+  low: number;
+  prev: number;
+  /** Optional for AssetLink; search defaults to stock when omitted. */
+  assetType?: "crypto" | "stock";
+};
+
+export type QuoteGroup = {
+  name: string;
+  rows: QuoteRow[];
+};
+
+export type HeatmapStock = {
+  symbol: string;
+  name: string;
+  changePct: number;
+  marketCap: number;
+  imageUrl?: string | null;
+};
+
+export type HeatmapSector = {
+  name: string;
+  stocks: HeatmapStock[];
+};

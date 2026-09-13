@@ -1,0 +1,5 @@
+Source code for this project is in the code/ folder (under 5 MB without
+node_modules / .next / .venv).
+
+A Git copy of the same tree (no AWS credentials):
+https://github.com/maiphh/openportfo.git
