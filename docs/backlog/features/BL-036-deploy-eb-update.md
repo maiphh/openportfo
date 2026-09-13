@@ -125,3 +125,4 @@ As a **lab operator**, I want **one PowerShell command after a code change**, so
 - Approach: thin wrapper over `package-eb` + AWS EB version roll
 - PR / branch: `main` (uncommitted)
 - Verification: `pytest tests/unit/infra/test_deploy_eb_script.py` (3 passed). Live AWS not mutated in this cycle.
+- **Live addendum 2026-09-13 (BL-038): script executed — EB `openportfo-api-env` on `v-20260913-http-api`, `Ready/Green`, `DateUpdated 2026-09-13T09:20:25Z`, `GET /health → {"status":"ok"}`; frontend baked with `-ApiUrl https://7duvngr98b.execute-api.us-east-1.amazonaws.com` (REST via Gateway, chat same-origin).**

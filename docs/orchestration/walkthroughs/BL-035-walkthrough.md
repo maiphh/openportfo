@@ -14,7 +14,7 @@
 
 ## 1. Summary (what was built)
 
-HTTP API (API Gateway v2) is now described in both CloudFormation templates as a **conditional** `HTTP_PROXY` for `ANY /api/{proxy+}` → Beanstalk FastAPI. Default is off. The frontend can bake `NEXT_PUBLIC_API_URL` to the Gateway origin; **chat SSE stays same-origin** on public hosts via `chatApiBase()`. No live AWS resources were created.
+HTTP API (API Gateway v2) is now described in both CloudFormation templates as a **conditional** `HTTP_PROXY` for `ANY /api/{proxy+}` → Beanstalk FastAPI. Default is off. The frontend can bake `NEXT_PUBLIC_API_URL` to the Gateway origin; **chat SSE stays same-origin** on public hosts via `chatApiBase()`. **Live addendum 2026-09-13 (BL-038, read-only): Gateway `7duvngr98b` exists with route `ANY /api/{proxy+}` (`anmha94`) → integration `745svs2` `HTTP_PROXY ANY → http://openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com/api/{proxy}` (`Payload 1.0`, `Timeout 30000`), stage `$default` `AutoDeploy`; EB `openportfo-api-env` is `Ready/Green` on `v-20260913-http-api`; smoke `GET /health → {"status":"ok"}`, `GET .../api/auth/me` via Gateway → `401 {"detail":"Missing authorization header"}`. No live resources were created in the BL-035 cycle itself; the live wiring above was verified later via `describe/get/curl` only.
 
 ## 2. Files changed (path:line)
 
@@ -75,7 +75,7 @@ LocalStack probe: **pass** (`http://localhost:4566`, existing `openportfo-locals
 - Local default: REST and chat still use `http://127.0.0.1:8000` on localhost.
 - Unit: public host + `NEXT_PUBLIC_API_URL=https://abc123.execute-api.us-east-1.amazonaws.com` → `apiBase()` Gateway, `sendChatMessage` → `/api/chat/stream`.
 - Browser: smoke e2e still loads markets nav (same-origin local).
-- Live `execute-api` Network tab: **not verified** (no AWS deploy).
+- Live `execute-api` Network tab: **verified 2026-09-13 (BL-038, read-only)** — `GET https://7duvngr98b.execute-api.us-east-1.amazonaws.com/api/auth/me → 401 {"detail":"Missing authorization header"}` (FastAPI through Gateway); `GET http://...EB.../health → {"status":"ok"}`. BL-035 cycle itself did no AWS deploy.
 
 ## 7. Ports isolation check
 
@@ -83,7 +83,7 @@ No new SDK imports in `services/` / `api/` / `domain/` / `jobs`. Gateway is Clou
 
 ## 8. Known limitations / follow-ons
 
-- HTTP API is **not created** until someone deploys with `CreateHttpApi=true` and an EB URL.
+- HTTP API is **live as `7duvngr98b` since 2026-09-13** (created via `apigatewayv2` + EB `-ApiUrl` bundle per `docs/runbooks/http-api-gateway.md`; full CFN `CreateHttpApi=true` not used because `openportfo-data` is `UPDATE_ROLLBACK_COMPLETE`). Lab recycle will require re-creation + EB repack — see BL-038/DEPLOY_STATUS 2026-09-13 section.
 - Academy may deny `apigateway:*` (same class as CloudFront).
 - Chicken-egg: create Gateway after EB exists, then repackage with `-ApiUrl`.
 - Pre-existing FX freshness test failures are out of scope.

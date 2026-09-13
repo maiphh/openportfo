@@ -52,3 +52,9 @@ As a **lab operator**, I want **one command to ship jobs code**, so that **daily
 - [x] AC2 Scripts use `update-function-code`, not `aws lambda create-function` / `cloudformation deploy`
 - [x] AC3 EventBridge: news/price/snapshot `cron(0 17 * * ? *)`; email `cron(15 17 * * ? *)`
 - [x] AC4 Runbook one-liner; package uses Docker linux/amd64
+
+---
+
+## 11. Implementation notes (Eng fills after `ready`)
+
+- **Live addendum 2026-09-13 (BL-038): script executed — Lambda `openportfo-jobs` `Active`, `LastModified 2026-09-13T10:05:38Z`, `CodeSize 20469631`; EventBridge 4x `ENABLED` (news/price/snapshot `cron(0 17 * * ? *)`, email `cron(15 17 * * ? *)`); `openportfo-job-news` target `NewsJob → openportfo-jobs Input {"job":"news"}`. Live env still `MARKET_CLIENT_MODE=fixture`.**

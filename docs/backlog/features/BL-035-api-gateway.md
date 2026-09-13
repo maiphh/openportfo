@@ -114,7 +114,7 @@ As a **demo examiner**, I want **REST calls in the Network tab to hit `execute-a
 ## 8. Dependencies & risks
 
 - Depends on: existing EB environment URL at **deploy** time (chicken-egg: create/update Gateway after EB exists, then repackage frontend).
-- Risks: Academy may block API Gateway (same class of risk as CloudFront). CORS misconfig. SSE through Gateway if AC3 is missed. Duplicate CORS headers (AWS HTTP API **ignores** backend CORS when CorsConfiguration is set).
+- Risks: Academy may block API Gateway (same class of risk as CloudFront) — **cleared 2026-09-13**: `7duvngr98b` live. Remaining risks: CORS misconfig. SSE through Gateway if AC3 is missed (chat stays same-origin). Duplicate CORS headers (AWS HTTP API **ignores** backend CORS when CorsConfiguration is set). Lab recycle requires re-creation + EB repack.
 
 ---
 
@@ -124,7 +124,7 @@ As a **demo examiner**, I want **REST calls in the Network tab to hit `execute-a
 |---|----------|--------|--------|
 | 1 | HTTP API vs REST API? | resolved | HTTP API (`HTTP_PROXY`) — cheaper, enough for a catch-all proxy |
 | 2 | Chat through Gateway? | resolved | No — same-origin Beanstalk (30s timeout + SSE) |
-| 3 | Deploy live now? | resolved | No — repo + IaC only unless the user later authorizes AWS |
+| 3 | Deploy live now? | resolved 2026-09-13 | Yes — Gateway `7duvngr98b` live, EB `v-20260913-http-api` repacked with `-ApiUrl`; see BL-038 + DEPLOY_STATUS 2026-09-13 |
 
 ---
 
@@ -141,4 +141,4 @@ As a **demo examiner**, I want **REST calls in the Network tab to hit `execute-a
 
 - Approach: conditional HTTP API in lab + full CFN; `chatApiBase()`; `package-eb -ApiUrl`.
 - PR / branch: `feat/BL-035-api-gateway` worktree `D:\rmit\cloud\a3-wt-bl035`
-- Verification: see `docs/orchestration/walkthroughs/BL-035-walkthrough.md`. SA review `approve`. Live AWS not created.
+- Verification: see `docs/orchestration/walkthroughs/BL-035-walkthrough.md`. SA review `approve`. **Live addendum 2026-09-13 (BL-038): Gateway `7duvngr98b` + EB `v-20260913-http-api` wired and smoked (route/integration/stage + `401` via Gateway, `/health ok`); full-CFN path not used (`openportfo-data UPDATE_ROLLBACK_COMPLETE`).**
