@@ -56,6 +56,17 @@ registered. Order matters:
 
 ## 3. Build / package / deploy
 
+Update the **existing** environment (no new env, no CloudFormation):
+
+```powershell
+# From repo root, Academy lab session started:
+.\scripts\deploy-eb.ps1
+```
+
+That packages, uploads a new application version, and runs `update-environment` on `openportfo-api-env`. Linux: `./scripts/deploy-eb.sh`.
+
+Manual package-only (if you will upload the zip yourself):
+
 ```powershell
 # Same-origin REST (BL-031 default):
 .\scripts\package-eb.ps1 -AppUrl https://<eb-env>.elasticbeanstalk.com
@@ -66,10 +77,7 @@ registered. Order matters:
   -ApiUrl https://<api-id>.execute-api.us-east-1.amazonaws.com
 ```
 
-# Inspect: eb-bundle.zip at repo root (size + contents check printed).
-# Deploy via EB console (upload eb-bundle.zip) or EB CLI:
-#   cd backend && eb deploy
-```
+`eb-bundle.zip` lands at the repo root. Prefer `.\scripts\deploy-eb.ps1` over `eb create` / a new environment.
 
 What the script does: `npm run build` with `NEXT_PUBLIC_API_URL=""` by
 default (same-origin `/api/*`), or the Gateway origin when `-ApiUrl` is set.

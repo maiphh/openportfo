@@ -8,7 +8,23 @@
 - Manual backfill (BL-030): `{"job":"snapshot","date":"YYYY-MM-DD"}` (also `snapshot_date` alias)
 - **No FX job / schedule**
 
-## Build zip (from repo root, Linux/WSL preferred for manylinux wheels)
+## Update existing function (Learner Lab)
+
+```powershell
+# From repo root: Docker + Academy lab session. Updates openportfo-jobs in place
+# (email job + EventBridge 00:00 / 00:15 ICT). Does not create a new function.
+.\scripts\deploy-lambda.ps1
+```
+
+Linux: `./scripts/deploy-lambda.sh`
+
+## Build zip only (from repo root, Docker linux/amd64)
+
+```powershell
+.\scripts\package-lambda.ps1
+```
+
+Manual Linux/WSL:
 
 ```bash
 rm -rf /tmp/openportfo-lambda && mkdir -p /tmp/openportfo-lambda
@@ -19,19 +35,9 @@ cp backend/lambda_handler.py /tmp/openportfo-lambda/
 cd /tmp/openportfo-lambda && zip -r9 ../openportfo-jobs.zip . && cd -
 ```
 
-On Windows PowerShell (simplified):
+Prefer `.\scripts\package-lambda.ps1` on Windows. Direct `pip install -t` on Windows produces the wrong architecture and Lambda will fail at import.
 
-```powershell
-$dest = "$env:TEMP\openportfo-lambda"
-Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path $dest | Out-Null
-pip install -r infra\lambda\requirements-lambda.txt -t $dest
-Copy-Item -Recurse backend\app $dest\app
-Copy-Item backend\lambda_handler.py $dest\
-Compress-Archive -Path "$dest\*" -DestinationPath openportfo-jobs.zip -Force
-```
-
-## Create function
+## Create function (first time only — this lab already has `openportfo-jobs`)
 
 ```bash
 aws lambda create-function \
@@ -104,8 +110,8 @@ SES sandbox: verify `SES_FROM_EMAIL` and each recipient. Set that env on the job
 
 ## EventBridge
 
-Enable schedules by updating CFN with `CreateEventBridgeRules=true` and `JobsLambdaArn`,  
-or create rules manually:
+Enable schedules with `.\scripts\deploy-lambda.ps1` (updates existing rules + adds email).
+Do **not** `cloudformation deploy` onto `openportfo-data` to enable schedules.
 
 | Job | ICT | UTC cron | Input |
 |-----|-----|----------|-------|

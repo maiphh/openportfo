@@ -18,6 +18,8 @@ Deployable data plane + IAM for **us-east-1** (Learner Lab default).
 
 Does **not** create the Elastic Beanstalk environment or upload Lambda zip (see RUNBOOK).
 
+**Existing `openportfo-data` stack (Learner Lab):** status may be `UPDATE_ROLLBACK_COMPLETE`. Do **not** redeploy this template over it without a change-set review. The live `openportfo-news` HASH is `date` (not `pk`); `openportfo-chat-idempotency` and the Google IdP exist **outside** the stack. A naive update tries to replace the news table and/or create a duplicate chat table / Google provider. Add HTTP API with `CreateHttpApi` only on a **new** stack, or create the HTTP API with the CLI against the existing EB URL (see `docs/runbooks/http-api-gateway.md`).
+
 ## Prerequisites
 
 1. Start **AWS Academy Learner Lab** and open AWS console / CLI credentials.

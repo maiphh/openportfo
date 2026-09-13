@@ -51,9 +51,31 @@ If the deploy fails with an authorization error, the Learner Lab may block
 API Gateway (same class of issue as CloudFront). The templates still document
 the intended architecture.
 
+**Existing `openportfo-data` stack:** if status is `UPDATE_ROLLBACK_COMPLETE`,
+do not `cloudformation deploy` the full lab template to “enable” Gateway.
+That stack’s news table HASH is `date`; the previous failed update tried to
+replace it. Google IdP and `openportfo-chat-idempotency` are also outside the
+stack. Create the HTTP API with `apigatewayv2` against the **current** EB
+origin instead (HTTP, not HTTPS — single-instance EB has no trusted cert):
+
+```powershell
+$eb = "http://<eb-env>.eba-xxxx.us-east-1.elasticbeanstalk.com"
+aws apigatewayv2 create-api --region us-east-1 --name openportfo-http-api `
+  --protocol-type HTTP `
+  --cors-configuration AllowOrigins="$eb,http://localhost:3000,http://localhost:5173",AllowMethods="GET,POST,PUT,PATCH,DELETE,OPTIONS",AllowHeaders="authorization,content-type,accept",ExposeHeaders="content-disposition,content-type,x-fx-status",MaxAge=86400
+```
+
 ---
 
 ## 3. Package frontend for Gateway REST
+
+Current lab (existing env + HTTP API `7duvngr98b`):
+
+```powershell
+.\scripts\deploy-eb.ps1
+```
+
+Package only:
 
 ```powershell
 .\scripts\package-eb.ps1 `
