@@ -24,10 +24,13 @@ Lambda jobs (news, price, snapshot, email)
   deploy-lambda.ps1 / .sh   Updates existing function openportfo-jobs
   iam/*.json                Policy documents (no access keys)
 
-How to build zips (from the repo, not from this pack alone):
+Runnable bundles (Assessment 3 deploy folder)
+  eb-bundle.zip           Elastic Beanstalk source bundle (FastAPI + Next.js static UI)
+  openportfo-jobs.zip     AWS Lambda deployment package for openportfo-jobs
+
+Rebuild from source if needed (from the repo, not from this pack alone):
   .\scripts\package-eb.ps1
   .\scripts\package-lambda.ps1
-The built .zip files are local artefacts and are not stored in Git.
 
 Set Elastic Beanstalk and Lambda environment properties in the AWS console.
 Do not write SMTP_PASSWORD, API keys, or AWS secret keys into these files.

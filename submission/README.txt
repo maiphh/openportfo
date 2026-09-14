@@ -19,8 +19,9 @@ This folder is the Canvas zip layout from the Assessment 3 specification.
 
 4. deploy/
    CloudFormation templates, Elastic Beanstalk Procfile / .ebextensions,
-   and the packaging / deploy scripts. Runnable .zip bundles are built locally
-   with package-eb.ps1 and package-lambda.ps1 (see deploy/README.txt).
+   packaging / deploy scripts, and runnable bundles:
+     eb-bundle.zip          Elastic Beanstalk (FastAPI + static UI)
+     openportfo-jobs.zip    Lambda function openportfo-jobs
    Do not put AWS keys in these files.
 
 5. data/
