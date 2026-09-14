@@ -57,7 +57,7 @@ LOCATION 's3://openportfo-data-databucket-bnfamm6trgmo/snapshots/';
 
 -- Latest snapshot rows (saved in Athena as openportfo-latest-snapshots)
 SELECT userId, date, fx.status AS fxStatus,
-       totalsByCurrency['USD'].marketValue AS usd_value
+       totalsByCurrency['usd'].marketValue AS usd_value
 FROM openportfo.portfolio_snapshots_raw
 ORDER BY date DESC
 LIMIT 20;
