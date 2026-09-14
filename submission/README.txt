@@ -27,4 +27,4 @@ This folder is the Canvas zip layout from the Assessment 3 specification.
    Athena SQL used on S3 snapshot files (under 5 MB).
 
 Live URL (Learner Lab, us-east-1, as of 13 September 2026):
-http://openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com
+https://openportfo-api-env.eba-yrwmppgu.us-east-1.elasticbeanstalk.com

@@ -5,108 +5,93 @@
 <title>OpenPortfo architecture</title>
 <style>
   html, body { margin: 0; padding: 0; background: #111111; font-family: Arial, Helvetica, sans-serif; }
-  .page { position: relative; width: 1400px; height: 720px; background: #111111; overflow: hidden; }
-  h1 { position: absolute; left: 0; right: 0; top: 14px; margin: 0; text-align: center; font-size: 26px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+  .page { position: relative; width: 1400px; height: 740px; background: #111111; overflow: hidden; }
+  h1 { position: absolute; left: 0; right: 0; top: 12px; margin: 0; text-align: center; font-size: 26px; font-weight: 700; color: #fff; }
   .sec { position: absolute; font-size: 14px; font-weight: 700; }
   .node { position: absolute; width: 140px; text-align: center; }
   .node img { width: 72px; height: 72px; display: block; margin: 0 auto 6px auto; }
   .node .name { font-size: 12px; font-weight: 700; color: #fff; line-height: 1.2; }
   .node .hint { font-size: 10px; color: #b5b5b5; line-height: 1.25; margin-top: 2px; }
-  svg.wires { position: absolute; left: 0; top: 0; width: 1400px; height: 720px; pointer-events: none; }
-  .caption { position: absolute; left: 24px; right: 24px; bottom: 12px; text-align: center; font-size: 11px; color: #9a9a9a; }
+  svg.wires { position: absolute; left: 0; top: 0; width: 1400px; height: 740px; pointer-events: none; }
+  .caption { position: absolute; left: 24px; right: 24px; bottom: 10px; text-align: center; font-size: 11px; color: #9a9a9a; }
 </style>
 </head>
 <body>
 <div class="page" id="page">
   <h1>OpenPortfo — System Architecture</h1>
-  <div class="sec" style="left:210px;top:56px;color:#8C4FFF;">Frontend</div>
-  <div class="sec" style="left:560px;top:56px;color:#ED7100;">Backend</div>
-  <div class="sec" style="left:1000px;top:56px;color:#C925D1;">Data &amp; Jobs</div>
-  <div class="sec" style="left:470px;top:430px;color:#2E7D32;">External APIs</div>
+  <div class="sec" style="left:220px;top:52px;color:#8C4FFF;">Frontend</div>
+  <div class="sec" style="left:560px;top:52px;color:#ED7100;">Backend</div>
+  <div class="sec" style="left:1000px;top:52px;color:#C925D1;">Data &amp; Jobs</div>
+  <div class="sec" style="left:220px;top:488px;color:#2E7D32;">External APIs</div>
 
-  <!-- User -->
-  <div class="node" style="left:40px;top:330px;">
+  <div class="node" style="left:40px;top:340px;">
     <img src="user.png" alt="User" />
     <div class="name">User</div>
     <div class="hint">Loads OpenPortfo<br/>in the browser</div>
   </div>
-
-  <!-- Cognito (replaces CloudFront in the live lab) -->
-  <div class="node" style="left:40px;top:118px;">
+  <div class="node" style="left:40px;top:112px;">
     <img src="cognito.svg" alt="Cognito" />
     <div class="name">Amazon Cognito</div>
     <div class="hint">Hosted UI · JWT<br/>email / Google</div>
   </div>
-
-  <!-- API Gateway (replaces S3 website in the live lab) -->
-  <div class="node" style="left:210px;top:118px;">
+  <div class="node" style="left:220px;top:112px;">
     <img src="apigateway.svg" alt="API Gateway" />
     <div class="name">Amazon API Gateway</div>
     <div class="hint">HTTP API<br/>REST /api/*</div>
   </div>
-
-  <!-- Elastic Beanstalk -->
-  <div class="node" style="left:430px;top:118px;">
+  <div class="node" style="left:440px;top:112px;">
     <img src="eb.svg" alt="Elastic Beanstalk" />
     <div class="name">Elastic Beanstalk</div>
     <div class="hint">Next.js UI + FastAPI<br/>auth, portfolio, admin,<br/>watchlist, holdings, chat</div>
   </div>
-
-  <!-- DynamoDB -->
-  <div class="node" style="left:680px;top:100px;">
+  <div class="node" style="left:690px;top:96px;">
     <img src="dynamodb.svg" alt="DynamoDB" />
     <div class="name">Amazon DynamoDB</div>
     <div class="hint">Users, holdings,<br/>watchlist, news, cache</div>
   </div>
-
-  <!-- Lambda -->
-  <div class="node" style="left:980px;top:100px;">
+  <div class="node" style="left:980px;top:96px;">
     <img src="lambda.svg" alt="Lambda" />
     <div class="name">AWS Lambda</div>
     <div class="hint">Scheduled jobs:<br/>RSS, prices, snapshot, email</div>
   </div>
-
-  <!-- SES -->
-  <div class="node" style="left:1180px;top:100px;">
+  <div class="node" style="left:1180px;top:96px;">
     <img src="gmail.svg" alt="Gmail SMTP" />
     <div class="name">Gmail SMTP</div>
     <div class="hint">Daily portfolio<br/>email summary</div>
   </div>
-
-  <!-- S3 data -->
-  <div class="node" style="left:680px;top:280px;">
+  <div class="node" style="left:690px;top:286px;">
     <img src="s3.svg" alt="S3" />
     <div class="name">Amazon S3</div>
     <div class="hint">History + snapshots</div>
   </div>
-
-  <!-- Athena -->
-  <div class="node" style="left:850px;top:280px;">
+  <div class="node" style="left:860px;top:286px;">
     <img src="athena.svg" alt="Athena" />
     <div class="name">Amazon Athena</div>
     <div class="hint">SQL analytics on<br/>portfolio snapshots</div>
   </div>
-
-  <!-- EventBridge -->
-  <div class="node" style="left:980px;top:320px;">
+  <div class="node" style="left:980px;top:330px;">
     <img src="eventbridge.svg" alt="EventBridge" />
     <div class="name">Amazon EventBridge</div>
     <div class="hint">Cron schedule<br/>(email time from Admin)</div>
   </div>
 
-  <!-- External -->
-  <div class="node" style="left:370px;top:500px;">
+  <div class="node" style="left:280px;top:530px;">
     <img src="coingecko.png" alt="CoinGecko" />
     <div class="name">Coingecko</div>
     <div class="hint">Crypto prices<br/>&amp; history</div>
   </div>
-  <div class="node" style="left:540px;top:500px;">
+  <div class="node" style="left:450px;top:530px;">
     <img src="vnstock.png" alt="vnstock" />
     <div class="name">Vnstock</div>
     <div class="hint">VN stock prices<br/>&amp; history</div>
   </div>
+  <div class="node" style="left:620px;top:530px;">
+    <img src="openrouter.png" alt="OpenRouter" />
+    <div class="name">OpenRouter</div>
+    <div class="hint">Chat LLM<br/>server-side only</div>
+  </div>
 
-  <svg class="wires" viewBox="0 0 1400 720">
+  <svg class="wires" viewBox="0 0 1400 740">
     <defs>
       <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="#dedede"/>
@@ -119,53 +104,57 @@
       </marker>
     </defs>
 
-    <!-- User → Cognito -->
-    <line x1="110" y1="330" x2="110" y2="210" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="118" y="278" fill="#dedede" font-size="11" font-family="Arial">Sign in</text>
+    <!-- User → Cognito: stop at Cognito name -->
+    <line x1="110" y1="340" x2="110" y2="214" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="122" y="284" fill="#dedede" font-size="11" font-family="Arial">Sign in</text>
 
-    <!-- User → API Gateway REST -->
-    <path d="M 180 366 H 280 V 210" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="188" y="358" fill="#dedede" font-size="11" font-family="Arial">REST /api/*</text>
+    <!-- User → Gateway: stop at Gateway hint -->
+    <path d="M 180 372 H 290 V 214" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="188" y="364" fill="#dedede" font-size="11" font-family="Arial">REST /api/*</text>
 
-    <!-- User → Beanstalk UI + SSE -->
-    <path d="M 180 390 H 500 V 210" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="310" y="382" fill="#dedede" font-size="11" font-family="Arial">Loads UI · SSE chat</text>
+    <!-- User → Beanstalk UI/SSE: stop at Beanstalk hint -->
+    <path d="M 180 404 H 510 V 218" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="300" y="396" fill="#dedede" font-size="11" font-family="Arial">Loads UI · SSE chat</text>
 
     <!-- Gateway → Beanstalk -->
-    <line x1="350" y1="154" x2="430" y2="154" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="352" y="144" fill="#dedede" font-size="11" font-family="Arial">HTTP_PROXY</text>
+    <line x1="360" y1="148" x2="440" y2="148" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="364" y="138" fill="#dedede" font-size="11" font-family="Arial">HTTP_PROXY</text>
 
     <!-- Beanstalk → DynamoDB -->
-    <line x1="570" y1="140" x2="680" y2="136" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="575" y="126" fill="#dedede" font-size="11" font-family="Arial">Read / write app data</text>
+    <line x1="580" y1="132" x2="690" y2="132" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="586" y="122" fill="#dedede" font-size="11" font-family="Arial">Read / write app data</text>
 
-    <!-- Beanstalk → S3 -->
-    <path d="M 560 210 H 620 V 316 H 680" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="628" y="270" fill="#dedede" font-size="11" font-family="Arial">Read / write</text>
+    <!-- Beanstalk → S3: vertical sits right of the label -->
+    <path d="M 560 218 H 640 V 322 H 690" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="648" y="276" fill="#dedede" font-size="11" font-family="Arial">Read / write</text>
 
     <!-- S3 → Athena -->
-    <line x1="820" y1="316" x2="850" y2="316" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <line x1="830" y1="322" x2="860" y2="322" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
 
-    <!-- EventBridge → Lambda -->
-    <line x1="1050" y1="320" x2="1050" y2="192" stroke="#E7157B" stroke-width="1.6" marker-end="url(#p)"/>
-    <text x="1060" y="264" fill="#E7157B" font-size="11" font-family="Arial">Triggers on schedule</text>
+    <!-- EventBridge → Lambda: label to the right of the stroke -->
+    <line x1="1050" y1="330" x2="1050" y2="198" stroke="#E7157B" stroke-width="1.6" marker-end="url(#p)"/>
+    <text x="1064" y="272" fill="#E7157B" font-size="11" font-family="Arial">Triggers on schedule</text>
 
     <!-- Lambda → DynamoDB -->
-    <path d="M 980 136 H 820" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="830" y="90" fill="#dedede" font-size="11" font-family="Arial">Writes news / snapshots / cache</text>
+    <path d="M 980 128 H 830" fill="none" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="838" y="86" fill="#dedede" font-size="11" font-family="Arial">Writes news / snapshots / cache</text>
 
-    <!-- Lambda → SES -->
-    <line x1="1120" y1="136" x2="1180" y2="136" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
-    <text x="1124" y="126" fill="#dedede" font-size="11" font-family="Arial">SMTP send</text>
+    <!-- Lambda → Gmail -->
+    <line x1="1120" y1="132" x2="1180" y2="132" stroke="#dedede" stroke-width="1.6" marker-end="url(#w)"/>
+    <text x="1124" y="122" fill="#dedede" font-size="11" font-family="Arial">SMTP send</text>
 
-    <!-- Beanstalk → market APIs -->
-    <path d="M 500 210 V 536" fill="none" stroke="#7AA116" stroke-width="1.6"/>
-    <line x1="500" y1="536" x2="440" y2="536" stroke="#7AA116" stroke-width="1.6" marker-end="url(#g)"/>
-    <line x1="500" y1="536" x2="610" y2="536" stroke="#7AA116" stroke-width="1.6" marker-end="url(#g)"/>
-    <text x="510" y="400" fill="#7AA116" font-size="12" font-family="Arial">On demand / refresh</text>
+    <!-- Beanstalk → external APIs. Stem stays clear of labels; arrows stop above the logos. -->
+    <path d="M 510 218 V 510" fill="none" stroke="#7AA116" stroke-width="1.6"/>
+    <line x1="510" y1="510" x2="350" y2="510" stroke="#7AA116" stroke-width="1.6"/>
+    <line x1="510" y1="510" x2="690" y2="510" stroke="#7AA116" stroke-width="1.6"/>
+    <line x1="350" y1="510" x2="350" y2="526" stroke="#7AA116" stroke-width="1.6" marker-end="url(#g)"/>
+    <line x1="520" y1="510" x2="520" y2="526" stroke="#7AA116" stroke-width="1.6" marker-end="url(#g)"/>
+    <line x1="690" y1="510" x2="690" y2="526" stroke="#7AA116" stroke-width="1.6" marker-end="url(#g)"/>
+    <text x="370" y="450" fill="#7AA116" font-size="12" font-family="Arial">On demand / refresh</text>
+    <text x="534" y="450" fill="#7AA116" font-size="12" font-family="Arial">Chat SSE</text>
   </svg>
 
-  <div class="caption">OpenPortfo · User → Cognito (login) · UI from Elastic Beanstalk · REST /api/* → API Gateway → FastAPI → DynamoDB / S3 / Athena · Backend → CoinGecko + vnstock · EventBridge → Lambda → Gmail SMTP</div>
+  <div class="caption">OpenPortfo · User → Cognito (login) · UI from Elastic Beanstalk · REST /api/* → API Gateway → FastAPI → DynamoDB / S3 / Athena · Backend → CoinGecko + vnstock + OpenRouter · EventBridge → Lambda → Gmail SMTP</div>
 </div>
 </body>
 </html>
